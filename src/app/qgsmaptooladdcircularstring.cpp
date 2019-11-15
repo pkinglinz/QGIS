@@ -23,16 +23,14 @@
 #include "qgsmapcanvas.h"
 #include "qgspoint.h"
 #include "qgisapp.h"
+#include "qgssnapindicator.h"
 
 QgsMapToolAddCircularString::QgsMapToolAddCircularString( QgsMapToolCapture *parentTool, QgsMapCanvas *canvas, CaptureMode mode )
   : QgsMapToolCapture( canvas, QgisApp::instance()->cadDockWidget(), mode )
   , mParentTool( parentTool )
   , mShowCenterPointRubberBand( false )
+  , mSnapIndicator( qgis::make_unique< QgsSnapIndicator>( canvas ) )
 {
-  if ( mCanvas )
-  {
-    connect( mCanvas, &QgsMapCanvas::mapToolSet, this, &QgsMapToolAddCircularString::setParentTool );
-  }
   connect( QgisApp::instance(), &QgisApp::newProject, this, &QgsMapToolAddCircularString::stopCapturing );
   connect( QgisApp::instance(), &QgisApp::projectRead, this, &QgsMapToolAddCircularString::stopCapturing );
 }
@@ -42,20 +40,6 @@ QgsMapToolAddCircularString::~QgsMapToolAddCircularString()
   delete mRubberBand;
   delete mTempRubberBand;
   removeCenterPointRubberBand();
-}
-
-void QgsMapToolAddCircularString::setParentTool( QgsMapTool *newTool, QgsMapTool *oldTool )
-{
-  QgsMapToolCapture *tool = dynamic_cast<QgsMapToolCapture *>( oldTool );
-  QgsMapToolAddCircularString *csTool = dynamic_cast<QgsMapToolAddCircularString *>( oldTool );
-  if ( csTool && newTool == this )
-  {
-    mParentTool = csTool->mParentTool;
-  }
-  else if ( tool && newTool == this )
-  {
-    mParentTool = tool;
-  }
 }
 
 void QgsMapToolAddCircularString::keyPressEvent( QKeyEvent *e )
@@ -124,6 +108,10 @@ void QgsMapToolAddCircularString::deactivate()
 
 void QgsMapToolAddCircularString::activate()
 {
+
+  QgsVectorLayer *vLayer = static_cast<QgsVectorLayer *>( QgisApp::instance()->activeLayer() );
+  if ( vLayer )
+    mLayerType = vLayer->geometryType();
   if ( mParentTool )
   {
     mParentTool->deleteTempRubberBand();
@@ -142,7 +130,7 @@ void QgsMapToolAddCircularString::activate()
           mPoints.append( QgsPoint( mapPoint ) );
           if ( !mTempRubberBand )
           {
-            mTempRubberBand = createGeometryRubberBand( ( mode() == CapturePolygon ) ? QgsWkbTypes::PolygonGeometry : QgsWkbTypes::LineGeometry, true );
+            mTempRubberBand = createGeometryRubberBand( mLayerType, true );
             mTempRubberBand->show();
           }
           QgsCircularString *c = new QgsCircularString();

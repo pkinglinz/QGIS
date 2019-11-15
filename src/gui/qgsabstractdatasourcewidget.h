@@ -20,9 +20,9 @@
 #define QGSABSTRACTDATASOURCEWIDGET_H
 
 #include "qgis_sip.h"
-#include "qgis.h"
 #include "qgis_gui.h"
 
+#include "qgsproviderguimetadata.h"
 #include "qgsproviderregistry.h"
 #include "qgsguiutils.h"
 #include <QDialog>
@@ -30,7 +30,9 @@
 
 class QgsMapCanvas;
 
-/** \ingroup gui
+
+/**
+ * \ingroup gui
  * \brief  Abstract base Data Source Widget to create connections and add layers
  * This class provides common functionality and the interface for all
  * source select dialogs used by data providers to configure data sources
@@ -43,10 +45,8 @@ class GUI_EXPORT QgsAbstractDataSourceWidget : public QDialog
 
   public:
 
-    //! Destructor
-    ~QgsAbstractDataSourceWidget() = default;
-
-    /** Store a pointer to the map canvas to retrieve extent and CRS
+    /**
+     * Store a pointer to the map canvas to retrieve extent and CRS
      * Used to select an appropriate CRS and possibly to retrieve data only in the current extent
      */
     void setMapCanvas( const QgsMapCanvas *mapCanvas );
@@ -54,25 +54,34 @@ class GUI_EXPORT QgsAbstractDataSourceWidget : public QDialog
 
   public slots:
 
-    /** Triggered when the provider's connections need to be refreshed
+    /**
+     * Triggered when the provider's connections need to be refreshed
      * The default implementation does nothing
      */
     virtual void refresh() {}
 
-    /** Triggered when the add button is clicked, the add layer signal is emitted
+    /**
+     * Triggered when the add button is clicked, the add layer signal is emitted
      * Concrete classes should implement the right behavior depending on the layer
      * being added.
      */
-    virtual void addButtonClicked() { }
+    virtual void addButtonClicked();
 
-    /** Triggered when the dialog is accepted, call addButtonClicked() and
-     * emit the accepted() signal
+    /**
+     * Called when this source select widget is being shown in a "new and clean" dialog.
+     *
+     * The data source manager recycles existing source select widgets but will call
+     * this method on every reopening.
+     * This should clear any selection that has previously been done.
+     *
+     * \since QGIS 3.10
      */
-    virtual void okButtonClicked();
+    virtual void reset();
 
   signals:
 
-    /** Emitted when the provider's connections have changed
+    /**
+     * Emitted when the provider's connections have changed
      * This signal is normally forwarded the app and used to refresh browser items
      */
     void connectionsChanged();
@@ -91,14 +100,22 @@ class GUI_EXPORT QgsAbstractDataSourceWidget : public QDialog
      */
     void addVectorLayer( const QString &uri, const QString &layerName, const QString &providerKey = QString() );
 
-    /** Emitted when one or more OGR supported layers are selected for addition
+    /**
+     * Emitted when a mesh layer has been selected for addition.
+     * \since QGIS 3.4
+     */
+    void addMeshLayer( const QString &url, const QString &baseName, const QString &providerKey );
+
+    /**
+     * Emitted when one or more OGR supported layers are selected for addition
      * \param layerList list of layers protocol URIs
      * \param encoding encoding
      * \param dataSourceType string (can be "file" or "database")
      */
     void addVectorLayers( const QStringList &layerList, const QString &encoding, const QString &dataSourceType );
 
-    /** Emitted when a layer needs to be replaced
+    /**
+     * Emitted when a layer needs to be replaced
      * \param oldId old layer ID
      * \param source URI of the layer
      * \param name of the layer
@@ -106,9 +123,12 @@ class GUI_EXPORT QgsAbstractDataSourceWidget : public QDialog
      */
     void replaceVectorLayer( const QString &oldId, const QString &source, const QString &name, const QString &provider );
 
-
-    //! Emitted when a progress dialog is shown by the provider dialog
-    void progress( int, int );
+    /**
+     * Emitted when a progress dialog is shown by the provider dialog.
+     *
+     * \deprecated Since QGIS 3.4 this signal is no longer used. Use QgsProxyProgressTask instead to show progress reports.
+     */
+    Q_DECL_DEPRECATED void progress( int, int ) SIP_DEPRECATED;
 
     //! Emitted when a progress dialog is shown by the provider dialog
     void progressMessage( QString message );
@@ -122,16 +142,16 @@ class GUI_EXPORT QgsAbstractDataSourceWidget : public QDialog
     //! Constructor
     QgsAbstractDataSourceWidget( QWidget *parent SIP_TRANSFERTHIS = nullptr, Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags, QgsProviderRegistry::WidgetMode widgetMode = QgsProviderRegistry::WidgetMode::None );
 
-    //! Return the widget mode
+    //! Returns the widget mode
     QgsProviderRegistry::WidgetMode widgetMode() const;
 
-    //! Return the map canvas (can be null)
+    //! Returns the map canvas (can be NULLPTR)
     const QgsMapCanvas *mapCanvas() const;
 
     //! Connect the ok and apply/add buttons to the slots
     void setupButtons( QDialogButtonBox *buttonBox );
 
-    //! Return the add Button
+    //! Returns the add Button
     QPushButton *addButton( ) const { return mAddButton; }
 
   private:

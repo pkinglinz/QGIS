@@ -18,7 +18,7 @@
 #define QGSSYMBOLLAYERWIDGET_H
 
 #include "qgspropertyoverridebutton.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgssymbolwidgetcontext.h"
 #include "qgssymbollayer.h"
 #include <QWidget>
@@ -27,7 +27,8 @@
 class QgsVectorLayer;
 class QgsMapCanvas;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsSymbolLayerWidget
  */
 class GUI_EXPORT QgsSymbolLayerWidget : public QWidget, protected QgsExpressionContextGenerator
@@ -35,29 +36,37 @@ class GUI_EXPORT QgsSymbolLayerWidget : public QWidget, protected QgsExpressionC
     Q_OBJECT
 
   public:
-    QgsSymbolLayerWidget( QWidget *parent SIP_TRANSFERTHIS, const QgsVectorLayer *vl = nullptr )
+
+    /**
+     * Constructor for QgsSymbolLayerWidget.
+     * \param vl associated vector layer
+     * \param parent parent widget
+     */
+    QgsSymbolLayerWidget( QWidget *parent SIP_TRANSFERTHIS, QgsVectorLayer *vl = nullptr )
       : QWidget( parent )
       , mVectorLayer( vl )
-      , mMapCanvas( nullptr )
     {}
 
     virtual void setSymbolLayer( QgsSymbolLayer *layer ) = 0;
     virtual QgsSymbolLayer *symbolLayer() = 0;
 
-    /** Sets the context in which the symbol widget is shown, e.g., the associated map canvas and expression contexts.
+    /**
+     * Sets the context in which the symbol widget is shown, e.g., the associated map canvas and expression contexts.
      * \param context symbol widget context
      * \see context()
      * \since QGIS 3.0
      */
-    void setContext( const QgsSymbolWidgetContext &context );
+    virtual void setContext( const QgsSymbolWidgetContext &context );
 
-    /** Returns the context in which the symbol widget is shown, e.g., the associated map canvas and expression contexts.
+    /**
+     * Returns the context in which the symbol widget is shown, e.g., the associated map canvas and expression contexts.
      * \see setContext()
      * \since QGIS 3.0
      */
     QgsSymbolWidgetContext context() const;
 
-    /** Returns the vector layer associated with the widget.
+    /**
+     * Returns the vector layer associated with the widget.
      * \since QGIS 2.12
      */
     const QgsVectorLayer *vectorLayer() const { return mVectorLayer; }
@@ -75,7 +84,7 @@ class GUI_EXPORT QgsSymbolLayerWidget : public QWidget, protected QgsExpressionC
     QgsExpressionContext createExpressionContext() const override;
 
   private:
-    const QgsVectorLayer *mVectorLayer = nullptr;
+    QgsVectorLayer *mVectorLayer = nullptr;
 
     QgsMapCanvas *mMapCanvas = nullptr;
 
@@ -98,6 +107,9 @@ class GUI_EXPORT QgsSymbolLayerWidget : public QWidget, protected QgsExpressionC
   protected slots:
     void updateDataDefinedProperty();
 
+  private slots:
+    void createAuxiliaryField();
+
   private:
     QgsSymbolWidgetContext mContext;
 };
@@ -108,7 +120,8 @@ class GUI_EXPORT QgsSymbolLayerWidget : public QWidget, protected QgsExpressionC
 
 class QgsSimpleLineSymbolLayer;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsSimpleLineSymbolLayerWidget
  */
 class GUI_EXPORT QgsSimpleLineSymbolLayerWidget : public QgsSymbolLayerWidget, private Ui::WidgetSimpleLine
@@ -116,25 +129,23 @@ class GUI_EXPORT QgsSimpleLineSymbolLayerWidget : public QgsSymbolLayerWidget, p
     Q_OBJECT
 
   public:
-    QgsSimpleLineSymbolLayerWidget( const QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
-    static QgsSymbolLayerWidget *create( const QgsVectorLayer *vl ) SIP_FACTORY { return new QgsSimpleLineSymbolLayerWidget( vl ); }
+    /**
+     * Constructor for QgsSimpleLineSymbolLayerWidget.
+     * \param vl associated vector layer
+     * \param parent parent widget
+     */
+    QgsSimpleLineSymbolLayerWidget( QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
+
+    /**
+     * Creates a new QgsSimpleLineSymbolLayerWidget.
+     * \param vl associated vector layer
+     */
+    static QgsSymbolLayerWidget *create( QgsVectorLayer *vl ) SIP_FACTORY { return new QgsSimpleLineSymbolLayerWidget( vl ); }
 
     // from base class
-    virtual void setSymbolLayer( QgsSymbolLayer *layer ) override;
-    virtual QgsSymbolLayer *symbolLayer() override;
-
-  public slots:
-    void penWidthChanged();
-    void colorChanged( const QColor &color );
-    void penStyleChanged();
-    void offsetChanged();
-    void on_mCustomCheckBox_stateChanged( int state );
-    void on_mChangePatternButton_clicked();
-    void on_mPenWidthUnitWidget_changed();
-    void on_mOffsetUnitWidget_changed();
-    void on_mDashPatternUnitWidget_changed();
-    void on_mDrawInsideCheckBox_stateChanged( int state );
+    void setSymbolLayer( QgsSymbolLayer *layer ) override;
+    QgsSymbolLayer *symbolLayer() override;
 
   protected:
     QgsSimpleLineSymbolLayer *mLayer = nullptr;
@@ -142,9 +153,21 @@ class GUI_EXPORT QgsSimpleLineSymbolLayerWidget : public QgsSymbolLayerWidget, p
     //creates a new icon for the 'change pattern' button
     void updatePatternIcon();
 
+    void resizeEvent( QResizeEvent *event ) override;
+
   private slots:
 
     void updateAssistantSymbol();
+    void penWidthChanged();
+    void colorChanged( const QColor &color );
+    void penStyleChanged();
+    void offsetChanged();
+    void mCustomCheckBox_stateChanged( int state );
+    void mChangePatternButton_clicked();
+    void mPenWidthUnitWidget_changed();
+    void mOffsetUnitWidget_changed();
+    void mDashPatternUnitWidget_changed();
+    void mDrawInsideCheckBox_stateChanged( int state );
 
   private:
 
@@ -158,7 +181,8 @@ class GUI_EXPORT QgsSimpleLineSymbolLayerWidget : public QgsSymbolLayerWidget, p
 
 class QgsSimpleMarkerSymbolLayer;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsSimpleMarkerSymbolLayerWidget
  */
 class GUI_EXPORT QgsSimpleMarkerSymbolLayerWidget : public QgsSymbolLayerWidget, private Ui::WidgetSimpleMarker
@@ -166,33 +190,43 @@ class GUI_EXPORT QgsSimpleMarkerSymbolLayerWidget : public QgsSymbolLayerWidget,
     Q_OBJECT
 
   public:
-    QgsSimpleMarkerSymbolLayerWidget( const QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
-    static QgsSymbolLayerWidget *create( const QgsVectorLayer *vl ) SIP_FACTORY { return new QgsSimpleMarkerSymbolLayerWidget( vl ); }
+    /**
+     * Constructor for QgsSimpleMarkerSymbolLayerWidget.
+     * \param vl associated vector layer
+     * \param parent parent widget
+     */
+    QgsSimpleMarkerSymbolLayerWidget( QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
+
+    /**
+     * Creates a new QgsSimpleMarkerSymbolLayerWidget.
+     * \param vl associated vector layer
+     */
+    static QgsSymbolLayerWidget *create( QgsVectorLayer *vl ) SIP_FACTORY { return new QgsSimpleMarkerSymbolLayerWidget( vl ); }
 
     // from base class
-    virtual void setSymbolLayer( QgsSymbolLayer *layer ) override;
-    virtual QgsSymbolLayer *symbolLayer() override;
+    void setSymbolLayer( QgsSymbolLayer *layer ) override;
+    QgsSymbolLayer *symbolLayer() override;
 
   public slots:
 
     void setColorStroke( const QColor &color );
     void setColorFill( const QColor &color );
-    void setSize();
-    void setAngle();
-    void setOffset();
-    void on_mSizeUnitWidget_changed();
-    void on_mOffsetUnitWidget_changed();
-    void on_mStrokeWidthUnitWidget_changed();
-    void on_mStrokeStyleComboBox_currentIndexChanged( int index );
-    void on_mStrokeWidthSpinBox_valueChanged( double d );
-    void on_mHorizontalAnchorComboBox_currentIndexChanged( int index );
-    void on_mVerticalAnchorComboBox_currentIndexChanged( int index );
 
   protected:
     QgsSimpleMarkerSymbolLayer *mLayer = nullptr;
 
   private slots:
+    void setSize();
+    void setAngle();
+    void setOffset();
+    void mSizeUnitWidget_changed();
+    void mOffsetUnitWidget_changed();
+    void mStrokeWidthUnitWidget_changed();
+    void mStrokeStyleComboBox_currentIndexChanged( int index );
+    void mStrokeWidthSpinBox_valueChanged( double d );
+    void mHorizontalAnchorComboBox_currentIndexChanged( int index );
+    void mVerticalAnchorComboBox_currentIndexChanged( int index );
     void setShape();
     void updateAssistantSymbol();
     void penJoinStyleChanged();
@@ -208,7 +242,8 @@ class GUI_EXPORT QgsSimpleMarkerSymbolLayerWidget : public QgsSymbolLayerWidget,
 
 class QgsSimpleFillSymbolLayer;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsSimpleFillSymbolLayerWidget
  */
 class GUI_EXPORT QgsSimpleFillSymbolLayerWidget : public QgsSymbolLayerWidget, private Ui::WidgetSimpleFill
@@ -216,26 +251,39 @@ class GUI_EXPORT QgsSimpleFillSymbolLayerWidget : public QgsSymbolLayerWidget, p
     Q_OBJECT
 
   public:
-    QgsSimpleFillSymbolLayerWidget( const QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
-    static QgsSymbolLayerWidget *create( const QgsVectorLayer *vl ) SIP_FACTORY { return new QgsSimpleFillSymbolLayerWidget( vl ); }
+    /**
+     * Constructor for QgsSimpleFillSymbolLayerWidget.
+     * \param vl associated vector layer
+     * \param parent parent widget
+     */
+    QgsSimpleFillSymbolLayerWidget( QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
+
+    /**
+     * Creates a new QgsSimpleFillSymbolLayerWidget.
+     * \param vl associated vector layer
+     */
+    static QgsSymbolLayerWidget *create( QgsVectorLayer *vl ) SIP_FACTORY { return new QgsSimpleFillSymbolLayerWidget( vl ); }
 
     // from base class
-    virtual void setSymbolLayer( QgsSymbolLayer *layer ) override;
-    virtual QgsSymbolLayer *symbolLayer() override;
+    void setSymbolLayer( QgsSymbolLayer *layer ) override;
+    QgsSymbolLayer *symbolLayer() override;
 
   public slots:
     void setColor( const QColor &color );
     void setStrokeColor( const QColor &color );
+
+  protected:
+    QgsSimpleFillSymbolLayer *mLayer = nullptr;
+
+  private slots:
     void setBrushStyle();
     void strokeWidthChanged();
     void strokeStyleChanged();
     void offsetChanged();
-    void on_mStrokeWidthUnitWidget_changed();
-    void on_mOffsetUnitWidget_changed();
+    void mStrokeWidthUnitWidget_changed();
+    void mOffsetUnitWidget_changed();
 
-  protected:
-    QgsSimpleFillSymbolLayer *mLayer = nullptr;
 };
 
 
@@ -245,7 +293,8 @@ class GUI_EXPORT QgsSimpleFillSymbolLayerWidget : public QgsSymbolLayerWidget, p
 
 class QgsFilledMarkerSymbolLayer;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsFilledMarkerSymbolLayerWidget
  * \brief Widget for configuring QgsFilledMarkerSymbolLayer symbol layers.
  * \since QGIS 2.16
@@ -256,20 +305,22 @@ class GUI_EXPORT QgsFilledMarkerSymbolLayerWidget : public QgsSymbolLayerWidget,
 
   public:
 
-    /** Constructor for QgsFilledMarkerSymbolLayerWidget.
+    /**
+     * Constructor for QgsFilledMarkerSymbolLayerWidget.
      * \param vl associated vector layer
      * \param parent parent widget
      */
-    QgsFilledMarkerSymbolLayerWidget( const QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = 0 );
+    QgsFilledMarkerSymbolLayerWidget( QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
-    /** Creates a new QgsFilledMarkerSymbolLayerWidget.
+    /**
+     * Creates a new QgsFilledMarkerSymbolLayerWidget.
      * \param vl associated vector layer
      */
-    static QgsSymbolLayerWidget *create( const QgsVectorLayer *vl ) SIP_FACTORY { return new QgsFilledMarkerSymbolLayerWidget( vl ); }
+    static QgsSymbolLayerWidget *create( QgsVectorLayer *vl ) SIP_FACTORY { return new QgsFilledMarkerSymbolLayerWidget( vl ); }
 
     // from base class
-    virtual void setSymbolLayer( QgsSymbolLayer *layer ) override;
-    virtual QgsSymbolLayer *symbolLayer() override;
+    void setSymbolLayer( QgsSymbolLayer *layer ) override;
+    QgsSymbolLayer *symbolLayer() override;
 
   protected:
     QgsFilledMarkerSymbolLayer *mLayer = nullptr;
@@ -281,10 +332,10 @@ class GUI_EXPORT QgsFilledMarkerSymbolLayerWidget : public QgsSymbolLayerWidget,
     void setSize();
     void setAngle();
     void setOffset();
-    void on_mSizeUnitWidget_changed();
-    void on_mOffsetUnitWidget_changed();
-    void on_mHorizontalAnchorComboBox_currentIndexChanged( int index );
-    void on_mVerticalAnchorComboBox_currentIndexChanged( int index );
+    void mSizeUnitWidget_changed();
+    void mOffsetUnitWidget_changed();
+    void mHorizontalAnchorComboBox_currentIndexChanged( int index );
+    void mVerticalAnchorComboBox_currentIndexChanged( int index );
 
   private:
 
@@ -297,7 +348,8 @@ class GUI_EXPORT QgsFilledMarkerSymbolLayerWidget : public QgsSymbolLayerWidget,
 
 class QgsGradientFillSymbolLayer;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsGradientFillSymbolLayerWidget
  */
 class GUI_EXPORT QgsGradientFillSymbolLayerWidget : public QgsSymbolLayerWidget, private Ui::WidgetGradientFill
@@ -305,33 +357,46 @@ class GUI_EXPORT QgsGradientFillSymbolLayerWidget : public QgsSymbolLayerWidget,
     Q_OBJECT
 
   public:
-    QgsGradientFillSymbolLayerWidget( const QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
-    static QgsSymbolLayerWidget *create( const QgsVectorLayer *vl ) SIP_FACTORY { return new QgsGradientFillSymbolLayerWidget( vl ); }
+    /**
+     * Constructor for QgsGradientFillSymbolLayerWidget.
+     * \param vl associated vector layer
+     * \param parent parent widget
+     */
+    QgsGradientFillSymbolLayerWidget( QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
+
+    /**
+     * Creates a new QgsGradientFillSymbolLayerWidget.
+     * \param vl associated vector layer
+     */
+    static QgsSymbolLayerWidget *create( QgsVectorLayer *vl ) SIP_FACTORY { return new QgsGradientFillSymbolLayerWidget( vl ); }
 
     // from base class
-    virtual void setSymbolLayer( QgsSymbolLayer *layer ) override;
-    virtual QgsSymbolLayer *symbolLayer() override;
+    void setSymbolLayer( QgsSymbolLayer *layer ) override;
+    QgsSymbolLayer *symbolLayer() override;
 
   public slots:
     void setColor( const QColor &color );
     void setColor2( const QColor &color );
 
-    /** Applies the color ramp passed on by the color ramp button
+    /**
+     * Applies the color ramp passed on by the color ramp button
      */
     void applyColorRamp();
-
     void setGradientType( int index );
     void setCoordinateMode( int index );
     void setGradientSpread( int index );
-    void offsetChanged();
-    void referencePointChanged();
-    void on_mOffsetUnitWidget_changed();
-    void colorModeChanged();
-    void on_mSpinAngle_valueChanged( double value );
 
   protected:
     QgsGradientFillSymbolLayer *mLayer = nullptr;
+
+  private slots:
+    void offsetChanged();
+    void referencePointChanged();
+    void mOffsetUnitWidget_changed();
+    void colorModeChanged();
+    void mSpinAngle_valueChanged( double value );
+
 };
 
 ///////////
@@ -340,7 +405,8 @@ class GUI_EXPORT QgsGradientFillSymbolLayerWidget : public QgsSymbolLayerWidget,
 
 class QgsShapeburstFillSymbolLayer;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsShapeburstFillSymbolLayerWidget
  */
 class GUI_EXPORT QgsShapeburstFillSymbolLayerWidget : public QgsSymbolLayerWidget, private Ui::WidgetShapeburstFill
@@ -348,29 +414,41 @@ class GUI_EXPORT QgsShapeburstFillSymbolLayerWidget : public QgsSymbolLayerWidge
     Q_OBJECT
 
   public:
-    QgsShapeburstFillSymbolLayerWidget( const QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
-    static QgsSymbolLayerWidget *create( const QgsVectorLayer *vl ) SIP_FACTORY { return new QgsShapeburstFillSymbolLayerWidget( vl ); }
+    /**
+     * Constructor for QgsShapeburstFillSymbolLayerWidget.
+     * \param vl associated vector layer
+     * \param parent parent widget
+     */
+    QgsShapeburstFillSymbolLayerWidget( QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
+
+    /**
+     * Creates a new QgsShapeburstFillSymbolLayerWidget.
+     * \param vl associated vector layer
+     */
+    static QgsSymbolLayerWidget *create( QgsVectorLayer *vl ) SIP_FACTORY { return new QgsShapeburstFillSymbolLayerWidget( vl ); }
 
     // from base class
-    virtual void setSymbolLayer( QgsSymbolLayer *layer ) override;
-    virtual QgsSymbolLayer *symbolLayer() override;
+    void setSymbolLayer( QgsSymbolLayer *layer ) override;
+    QgsSymbolLayer *symbolLayer() override;
 
   public slots:
     void setColor( const QColor &color );
     void setColor2( const QColor &color );
-    void colorModeChanged();
-    void on_mSpinBlurRadius_valueChanged( int value );
-    void on_mSpinMaxDistance_valueChanged( double value );
-    void on_mDistanceUnitWidget_changed();
-    void on_mRadioUseWholeShape_toggled( bool value );
-    void applyColorRamp();
-    void offsetChanged();
-    void on_mOffsetUnitWidget_changed();
-    void on_mIgnoreRingsCheckBox_stateChanged( int state );
 
   protected:
     QgsShapeburstFillSymbolLayer *mLayer = nullptr;
+
+  private slots:
+    void colorModeChanged();
+    void mSpinBlurRadius_valueChanged( int value );
+    void mSpinMaxDistance_valueChanged( double value );
+    void mDistanceUnitWidget_changed();
+    void mRadioUseWholeShape_toggled( bool value );
+    void applyColorRamp();
+    void offsetChanged();
+    void mOffsetUnitWidget_changed();
+    void mIgnoreRingsCheckBox_stateChanged( int state );
 };
 
 ///////////
@@ -379,7 +457,8 @@ class GUI_EXPORT QgsShapeburstFillSymbolLayerWidget : public QgsSymbolLayerWidge
 
 class QgsMarkerLineSymbolLayer;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsMarkerLineSymbolLayerWidget
  */
 class GUI_EXPORT QgsMarkerLineSymbolLayerWidget : public QgsSymbolLayerWidget, private Ui::WidgetMarkerLine
@@ -387,30 +466,100 @@ class GUI_EXPORT QgsMarkerLineSymbolLayerWidget : public QgsSymbolLayerWidget, p
     Q_OBJECT
 
   public:
-    QgsMarkerLineSymbolLayerWidget( const QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
-    static QgsSymbolLayerWidget *create( const QgsVectorLayer *vl ) SIP_FACTORY { return new QgsMarkerLineSymbolLayerWidget( vl ); }
+    /**
+     * Constructor for QgsMarkerLineSymbolLayerWidget.
+     * \param vl associated vector layer
+     * \param parent parent widget
+     */
+    QgsMarkerLineSymbolLayerWidget( QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
+
+    /**
+     * Creates a new QgsMarkerLineSymbolLayerWidget.
+     * \param vl associated vector layer
+     */
+    static QgsSymbolLayerWidget *create( QgsVectorLayer *vl ) SIP_FACTORY { return new QgsMarkerLineSymbolLayerWidget( vl ); }
 
     // from base class
-    virtual void setSymbolLayer( QgsSymbolLayer *layer ) override;
-    virtual QgsSymbolLayer *symbolLayer() override;
+    void setSymbolLayer( QgsSymbolLayer *layer ) override;
+    QgsSymbolLayer *symbolLayer() override;
 
   public slots:
 
     void setInterval( double val );
     void setOffsetAlongLine( double val );
-    void setRotate();
-    void setOffset();
-    void setPlacement();
-    void on_mIntervalUnitWidget_changed();
-    void on_mOffsetUnitWidget_changed();
-    void on_mOffsetAlongLineUnitWidget_changed();
 
   protected:
 
     QgsMarkerLineSymbolLayer *mLayer = nullptr;
+
+  private slots:
+    void setRotate();
+    void setOffset();
+    void setPlacement();
+    void mIntervalUnitWidget_changed();
+    void mOffsetUnitWidget_changed();
+    void mOffsetAlongLineUnitWidget_changed();
+    void averageAngleUnitChanged();
+    void setAverageAngle( double val );
+
 };
 
+
+#include "ui_widget_hashline.h"
+
+class QgsHashedLineSymbolLayer;
+
+/**
+ * \ingroup gui
+ * \class QgsHashedLineSymbolLayerWidget
+ * Widget for controlling the properties of a QgsHashedLineSymbolLayer.
+ * \since QGIS 3.8
+ */
+class GUI_EXPORT QgsHashedLineSymbolLayerWidget : public QgsSymbolLayerWidget, private Ui::WidgetHashedLine
+{
+    Q_OBJECT
+
+  public:
+
+    /**
+     * Constructor for QgsHashedLineSymbolLayerWidget.
+     * \param vl associated vector layer
+     * \param parent parent widget
+     */
+    QgsHashedLineSymbolLayerWidget( QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
+
+    /**
+     * Creates a new QgsHashedLineSymbolLayerWidget.
+     * \param vl associated vector layer
+     */
+    static QgsSymbolLayerWidget *create( QgsVectorLayer *vl ) SIP_FACTORY { return new QgsHashedLineSymbolLayerWidget( vl ); }
+
+    // from base class
+    void setSymbolLayer( QgsSymbolLayer *layer ) override;
+    QgsSymbolLayer *symbolLayer() override;
+
+  private slots:
+
+    void setInterval( double val );
+    void setOffsetAlongLine( double val );
+    void setHashLength( double val );
+    void setHashAngle( double val );
+
+    void setRotate();
+    void setOffset();
+    void setPlacement();
+    void mIntervalUnitWidget_changed();
+    void mOffsetUnitWidget_changed();
+    void mOffsetAlongLineUnitWidget_changed();
+    void hashLengthUnitWidgetChanged();
+    void averageAngleUnitChanged();
+    void setAverageAngle( double val );
+  private:
+    QgsHashedLineSymbolLayer *mLayer = nullptr;
+
+
+};
 
 ///////////
 
@@ -418,7 +567,8 @@ class GUI_EXPORT QgsMarkerLineSymbolLayerWidget : public QgsSymbolLayerWidget, p
 
 class QgsSvgMarkerSymbolLayer;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsSvgMarkerSymbolLayerWidget
  */
 class GUI_EXPORT QgsSvgMarkerSymbolLayerWidget : public QgsSymbolLayerWidget, private Ui::WidgetSvgMarker
@@ -426,31 +576,25 @@ class GUI_EXPORT QgsSvgMarkerSymbolLayerWidget : public QgsSymbolLayerWidget, pr
     Q_OBJECT
 
   public:
-    QgsSvgMarkerSymbolLayerWidget( const QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
-    static QgsSymbolLayerWidget *create( const QgsVectorLayer *vl ) SIP_FACTORY { return new QgsSvgMarkerSymbolLayerWidget( vl ); }
+    /**
+     * Constructor for QgsSvgMarkerSymbolLayerWidget.
+     * \param vl associated vector layer
+     * \param parent parent widget
+     */
+    QgsSvgMarkerSymbolLayerWidget( QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
+
+    /**
+     * Creates a new QgsSvgMarkerSymbolLayerWidget.
+     * \param vl associated vector layer
+     */
+    static QgsSymbolLayerWidget *create( QgsVectorLayer *vl ) SIP_FACTORY { return new QgsSvgMarkerSymbolLayerWidget( vl ); }
 
     // from base class
-    virtual void setSymbolLayer( QgsSymbolLayer *layer ) override;
-    virtual QgsSymbolLayer *symbolLayer() override;
+    void setSymbolLayer( QgsSymbolLayer *layer ) override;
+    QgsSymbolLayer *symbolLayer() override;
 
-  public slots:
-    void setName( const QModelIndex &idx );
-    void populateIcons( const QModelIndex &idx );
-    void setSize();
-    void setAngle();
-    void setOffset();
-    void on_mFileToolButton_clicked();
-    void on_mFileLineEdit_textEdited( const QString &text );
-    void on_mFileLineEdit_editingFinished();
-    void on_mChangeColorButton_colorChanged( const QColor &color );
-    void on_mChangeStrokeColorButton_colorChanged( const QColor &color );
-    void on_mStrokeWidthSpinBox_valueChanged( double d );
-    void on_mSizeUnitWidget_changed();
-    void on_mStrokeWidthUnitWidget_changed();
-    void on_mOffsetUnitWidget_changed();
-    void on_mHorizontalAnchorComboBox_currentIndexChanged( int index );
-    void on_mVerticalAnchorComboBox_currentIndexChanged( int index );
+    void setContext( const QgsSymbolWidgetContext &context ) override;
 
   protected:
 
@@ -461,7 +605,22 @@ class GUI_EXPORT QgsSvgMarkerSymbolLayerWidget : public QgsSymbolLayerWidget, pr
     QgsSvgMarkerSymbolLayer *mLayer = nullptr;
 
   private slots:
-
+    void setName( const QModelIndex &idx );
+    void populateIcons( const QModelIndex &idx );
+    void svgSourceChanged( const QString &text );
+    void mChangeColorButton_colorChanged( const QColor &color );
+    void mChangeStrokeColorButton_colorChanged( const QColor &color );
+    void mStrokeWidthSpinBox_valueChanged( double d );
+    void mSizeUnitWidget_changed();
+    void mStrokeWidthUnitWidget_changed();
+    void mOffsetUnitWidget_changed();
+    void mHorizontalAnchorComboBox_currentIndexChanged( int index );
+    void mVerticalAnchorComboBox_currentIndexChanged( int index );
+    void setWidth();
+    void setHeight();
+    void lockAspectRatioChanged( bool locked );
+    void setAngle();
+    void setOffset();
     void updateAssistantSymbol();
 
   private:
@@ -473,11 +632,68 @@ class GUI_EXPORT QgsSvgMarkerSymbolLayerWidget : public QgsSymbolLayerWidget, pr
 
 ///////////
 
+#include "ui_widget_rastermarker.h"
+
+class QgsRasterMarkerSymbolLayer;
+
+/**
+ * \ingroup gui
+ * \class QgsRasterMarkerSymbolLayerWidget
+ * \brief Widget for configuring QgsRasterMarkerSymbolLayer symbol layers.
+ * \since QGIS 3.6
+ */
+class GUI_EXPORT QgsRasterMarkerSymbolLayerWidget : public QgsSymbolLayerWidget, private Ui::WidgetRasterMarker
+{
+    Q_OBJECT
+
+  public:
+
+    /**
+     * Constructor for QgsRasterMarkerSymbolLayerWidget.
+     * \param vl associated vector layer
+     * \param parent parent widget
+     */
+    QgsRasterMarkerSymbolLayerWidget( QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
+
+    /**
+     * Creates a new QgsRasterMarkerSymbolLayerWidget.
+     * \param vl associated vector layer
+     */
+    static QgsSymbolLayerWidget *create( QgsVectorLayer *vl ) SIP_FACTORY { return new QgsRasterMarkerSymbolLayerWidget( vl ); }
+
+    // from base class
+    void setSymbolLayer( QgsSymbolLayer *layer ) override;
+    QgsSymbolLayer *symbolLayer() override;
+    void setContext( const QgsSymbolWidgetContext &context ) override;
+
+  protected:
+
+    QgsRasterMarkerSymbolLayer *mLayer = nullptr;
+
+  private slots:
+    void imageSourceChanged( const QString &text );
+    void mSizeUnitWidget_changed();
+    void mOffsetUnitWidget_changed();
+    void mHorizontalAnchorComboBox_currentIndexChanged( int index );
+    void mVerticalAnchorComboBox_currentIndexChanged( int index );
+    void setWidth();
+    void setHeight();
+    void setLockAspectRatio( bool locked );
+    void setAngle();
+    void setOffset();
+    void setOpacity( double value );
+    void updatePreviewImage();
+
+};
+
+///////////
+
 #include "ui_widget_rasterfill.h"
 
 class QgsRasterFillSymbolLayer;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsRasterFillSymbolLayerWidget
  */
 class GUI_EXPORT QgsRasterFillSymbolLayerWidget : public QgsSymbolLayerWidget, private Ui::WidgetRasterFill
@@ -485,27 +701,36 @@ class GUI_EXPORT QgsRasterFillSymbolLayerWidget : public QgsSymbolLayerWidget, p
     Q_OBJECT
 
   public:
-    QgsRasterFillSymbolLayerWidget( const QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
-    static QgsSymbolLayerWidget *create( const QgsVectorLayer *vl ) SIP_FACTORY { return new QgsRasterFillSymbolLayerWidget( vl ); }
+    /**
+     * Constructor for QgsRasterFillSymbolLayerWidget.
+     * \param vl associated vector layer
+     * \param parent parent widget
+     */
+    QgsRasterFillSymbolLayerWidget( QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
+
+    /**
+     * Creates a new QgsRasterFillSymbolLayerWidget.
+     * \param vl associated vector layer
+     */
+    static QgsSymbolLayerWidget *create( QgsVectorLayer *vl ) SIP_FACTORY { return new QgsRasterFillSymbolLayerWidget( vl ); }
 
     // from base class
-    virtual void setSymbolLayer( QgsSymbolLayer *layer ) override;
-    virtual QgsSymbolLayer *symbolLayer() override;
+    void setSymbolLayer( QgsSymbolLayer *layer ) override;
+    QgsSymbolLayer *symbolLayer() override;
 
   protected:
     QgsRasterFillSymbolLayer *mLayer = nullptr;
 
   private slots:
-    void on_mBrowseToolButton_clicked();
-    void on_mImageLineEdit_editingFinished();
+    void imageSourceChanged( const QString &text );
     void setCoordinateMode( int index );
     void opacityChanged( double value );
     void offsetChanged();
-    void on_mOffsetUnitWidget_changed();
-    void on_mRotationSpinBox_valueChanged( double d );
-    void on_mWidthUnitWidget_changed();
-    void on_mWidthSpinBox_valueChanged( double d );
+    void mOffsetUnitWidget_changed();
+    void mRotationSpinBox_valueChanged( double d );
+    void mWidthUnitWidget_changed();
+    void mWidthSpinBox_valueChanged( double d );
 
   private:
     void updatePreviewImage();
@@ -517,7 +742,8 @@ class GUI_EXPORT QgsRasterFillSymbolLayerWidget : public QgsSymbolLayerWidget, p
 
 class QgsSVGFillSymbolLayer;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsSVGFillSymbolLayerWidget
  */
 class GUI_EXPORT QgsSVGFillSymbolLayerWidget : public QgsSymbolLayerWidget, private Ui::WidgetSVGFill
@@ -525,38 +751,48 @@ class GUI_EXPORT QgsSVGFillSymbolLayerWidget : public QgsSymbolLayerWidget, priv
     Q_OBJECT
 
   public:
-    QgsSVGFillSymbolLayerWidget( const QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
-    static QgsSymbolLayerWidget *create( const QgsVectorLayer *vl ) SIP_FACTORY { return new QgsSVGFillSymbolLayerWidget( vl ); }
+    /**
+     * Constructor for QgsSVGFillSymbolLayerWidget.
+     * \param vl associated vector layer
+     * \param parent parent widget
+     */
+    QgsSVGFillSymbolLayerWidget( QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
+
+    /**
+     * Creates a new QgsSVGFillSymbolLayerWidget.
+     * \param vl associated vector layer
+     */
+    static QgsSymbolLayerWidget *create( QgsVectorLayer *vl ) SIP_FACTORY { return new QgsSVGFillSymbolLayerWidget( vl ); }
 
     // from base class
-    virtual void setSymbolLayer( QgsSymbolLayer *layer ) override;
-    virtual QgsSymbolLayer *symbolLayer() override;
+    void setSymbolLayer( QgsSymbolLayer *layer ) override;
+    QgsSymbolLayer *symbolLayer() override;
+    void setContext( const QgsSymbolWidgetContext &context ) override;
 
   protected:
     QgsSVGFillSymbolLayer *mLayer = nullptr;
     void insertIcons();
 
-    /** Enables or disables svg fill color, stroke color and stroke width based on whether the
+    /**
+     * Enables or disables svg fill color, stroke color and stroke width based on whether the
      * svg file supports custom parameters.
-     * \param resetValues set to true to overwrite existing layer fill color, stroke color and stroke width
+     * \param resetValues set to TRUE to overwrite existing layer fill color, stroke color and stroke width
      * with default values from svg file
      */
     void updateParamGui( bool resetValues = true );
 
   private slots:
-    void on_mBrowseToolButton_clicked();
-    void on_mTextureWidthSpinBox_valueChanged( double d );
-    void on_mSVGLineEdit_textEdited( const QString &text );
-    void on_mSVGLineEdit_editingFinished();
+    void mTextureWidthSpinBox_valueChanged( double d );
+    void svgSourceChanged( const QString &text );
     void setFile( const QModelIndex &item );
     void populateIcons( const QModelIndex &item );
-    void on_mRotationSpinBox_valueChanged( double d );
-    void on_mChangeColorButton_colorChanged( const QColor &color );
-    void on_mChangeStrokeColorButton_colorChanged( const QColor &color );
-    void on_mStrokeWidthSpinBox_valueChanged( double d );
-    void on_mTextureWidthUnitWidget_changed();
-    void on_mSvgStrokeWidthUnitWidget_changed();
+    void mRotationSpinBox_valueChanged( double d );
+    void mChangeColorButton_colorChanged( const QColor &color );
+    void mChangeStrokeColorButton_colorChanged( const QColor &color );
+    void mStrokeWidthSpinBox_valueChanged( double d );
+    void mTextureWidthUnitWidget_changed();
+    void mSvgStrokeWidthUnitWidget_changed();
 };
 
 //////////
@@ -565,7 +801,8 @@ class GUI_EXPORT QgsSVGFillSymbolLayerWidget : public QgsSymbolLayerWidget, priv
 
 class QgsLinePatternFillSymbolLayer;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsLinePatternFillSymbolLayerWidget
  */
 class GUI_EXPORT QgsLinePatternFillSymbolLayerWidget : public QgsSymbolLayerWidget, private Ui::WidgetLinePatternFill
@@ -574,21 +811,31 @@ class GUI_EXPORT QgsLinePatternFillSymbolLayerWidget : public QgsSymbolLayerWidg
 
   public:
 
-    QgsLinePatternFillSymbolLayerWidget( const QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
-    static QgsSymbolLayerWidget *create( const QgsVectorLayer *vl ) SIP_FACTORY { return new QgsLinePatternFillSymbolLayerWidget( vl ); }
+    /**
+     * Constructor for QgsLinePatternFillSymbolLayerWidget.
+     * \param vl associated vector layer
+     * \param parent parent widget
+     */
+    QgsLinePatternFillSymbolLayerWidget( QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
-    virtual void setSymbolLayer( QgsSymbolLayer *layer ) override;
-    virtual QgsSymbolLayer *symbolLayer() override;
+    /**
+     * Creates a new QgsLinePatternFillSymbolLayerWidget.
+     * \param vl associated vector layer
+     */
+    static QgsSymbolLayerWidget *create( QgsVectorLayer *vl ) SIP_FACTORY { return new QgsLinePatternFillSymbolLayerWidget( vl ); }
+
+    void setSymbolLayer( QgsSymbolLayer *layer ) override;
+    QgsSymbolLayer *symbolLayer() override;
 
   protected:
     QgsLinePatternFillSymbolLayer *mLayer = nullptr;
 
   private slots:
-    void on_mAngleSpinBox_valueChanged( double d );
-    void on_mDistanceSpinBox_valueChanged( double d );
-    void on_mOffsetSpinBox_valueChanged( double d );
-    void on_mDistanceUnitWidget_changed();
-    void on_mOffsetUnitWidget_changed();
+    void mAngleSpinBox_valueChanged( double d );
+    void mDistanceSpinBox_valueChanged( double d );
+    void mOffsetSpinBox_valueChanged( double d );
+    void mDistanceUnitWidget_changed();
+    void mOffsetUnitWidget_changed();
 };
 
 //////////
@@ -597,7 +844,8 @@ class GUI_EXPORT QgsLinePatternFillSymbolLayerWidget : public QgsSymbolLayerWidg
 
 class QgsPointPatternFillSymbolLayer;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsPointPatternFillSymbolLayerWidget
  */
 class GUI_EXPORT QgsPointPatternFillSymbolLayerWidget: public QgsSymbolLayerWidget, private Ui::WidgetPointPatternFill
@@ -605,24 +853,88 @@ class GUI_EXPORT QgsPointPatternFillSymbolLayerWidget: public QgsSymbolLayerWidg
     Q_OBJECT
 
   public:
-    QgsPointPatternFillSymbolLayerWidget( const QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
-    static QgsSymbolLayerWidget *create( const QgsVectorLayer *vl ) SIP_FACTORY { return new QgsPointPatternFillSymbolLayerWidget( vl ); }
 
-    virtual void setSymbolLayer( QgsSymbolLayer *layer ) override;
-    virtual QgsSymbolLayer *symbolLayer() override;
+    /**
+     * Constructor for QgsPointPatternFillSymbolLayerWidget.
+     * \param vl associated vector layer
+     * \param parent parent widget
+     */
+    QgsPointPatternFillSymbolLayerWidget( QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
+
+    /**
+     * Creates a new QgsPointPatternFillSymbolLayerWidget.
+     * \param vl associated vector layer
+     */
+    static QgsSymbolLayerWidget *create( QgsVectorLayer *vl ) SIP_FACTORY { return new QgsPointPatternFillSymbolLayerWidget( vl ); }
+
+    void setSymbolLayer( QgsSymbolLayer *layer ) override;
+    QgsSymbolLayer *symbolLayer() override;
 
   protected:
     QgsPointPatternFillSymbolLayer *mLayer = nullptr;
 
   private slots:
-    void on_mHorizontalDistanceSpinBox_valueChanged( double d );
-    void on_mVerticalDistanceSpinBox_valueChanged( double d );
-    void on_mHorizontalDisplacementSpinBox_valueChanged( double d );
-    void on_mVerticalDisplacementSpinBox_valueChanged( double d );
-    void on_mHorizontalDistanceUnitWidget_changed();
-    void on_mVerticalDistanceUnitWidget_changed();
-    void on_mHorizontalDisplacementUnitWidget_changed();
-    void on_mVerticalDisplacementUnitWidget_changed();
+    void mHorizontalDistanceSpinBox_valueChanged( double d );
+    void mVerticalDistanceSpinBox_valueChanged( double d );
+    void mHorizontalDisplacementSpinBox_valueChanged( double d );
+    void mVerticalDisplacementSpinBox_valueChanged( double d );
+    void mHorizontalOffsetSpinBox_valueChanged( double d );
+    void mVerticalOffsetSpinBox_valueChanged( double d );
+    void mHorizontalDistanceUnitWidget_changed();
+    void mVerticalDistanceUnitWidget_changed();
+    void mHorizontalDisplacementUnitWidget_changed();
+    void mVerticalDisplacementUnitWidget_changed();
+    void mHorizontalOffsetUnitWidget_changed();
+    void mVerticalOffsetUnitWidget_changed();
+};
+
+
+//////////
+
+#include "ui_widget_randommarkerfill.h"
+
+class QgsRandomMarkerFillSymbolLayer;
+
+/**
+ * \ingroup gui
+ * \class QgsRandomMarkerFillSymbolLayerWidget
+ *
+ * Widget for controlling the properties of a QgsRandomMarkerFillSymbolLayer.
+ *
+ * \since QGIS 3.12
+ */
+class GUI_EXPORT QgsRandomMarkerFillSymbolLayerWidget: public QgsSymbolLayerWidget, private Ui::WidgetRandomMarkerFill
+{
+    Q_OBJECT
+
+  public:
+
+    /**
+     * Constructor for QgsRandomMarkerFillSymbolLayerWidget.
+     * \param vl associated vector layer
+     * \param parent parent widget
+     */
+    QgsRandomMarkerFillSymbolLayerWidget( QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
+
+    /**
+     * Creates a new QgsRandomMarkerFillSymbolLayerWidget.
+     * \param vl associated vector layer
+     */
+    static QgsSymbolLayerWidget *create( QgsVectorLayer *vl ) SIP_FACTORY { return new QgsRandomMarkerFillSymbolLayerWidget( vl ); }
+
+    void setSymbolLayer( QgsSymbolLayer *layer ) override;
+    QgsSymbolLayer *symbolLayer() override;
+
+  private:
+    QgsRandomMarkerFillSymbolLayer *mLayer = nullptr;
+
+  private slots:
+
+    void countMethodChanged( int );
+    void countChanged( int d );
+    void densityAreaChanged( double d );
+    void densityAreaUnitChanged();
+    void seedChanged( int d );
 };
 
 /////////
@@ -632,7 +944,8 @@ class GUI_EXPORT QgsPointPatternFillSymbolLayerWidget: public QgsSymbolLayerWidg
 class QgsFontMarkerSymbolLayer;
 class CharacterWidget;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsFontMarkerSymbolLayerWidget
  */
 class GUI_EXPORT QgsFontMarkerSymbolLayerWidget : public QgsSymbolLayerWidget, private Ui::WidgetFontMarker
@@ -640,38 +953,60 @@ class GUI_EXPORT QgsFontMarkerSymbolLayerWidget : public QgsSymbolLayerWidget, p
     Q_OBJECT
 
   public:
-    QgsFontMarkerSymbolLayerWidget( const QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
-    static QgsSymbolLayerWidget *create( const QgsVectorLayer *vl ) SIP_FACTORY { return new QgsFontMarkerSymbolLayerWidget( vl ); }
+    /**
+     * Constructor for QgsFontMarkerSymbolLayerWidget.
+     * \param vl associated vector layer
+     * \param parent parent widget
+     */
+    QgsFontMarkerSymbolLayerWidget( QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
+
+    /**
+     * Creates a new QgsFontMarkerSymbolLayerWidget.
+     * \param vl associated vector layer
+     */
+    static QgsSymbolLayerWidget *create( QgsVectorLayer *vl ) SIP_FACTORY { return new QgsFontMarkerSymbolLayerWidget( vl ); }
 
     // from base class
-    virtual void setSymbolLayer( QgsSymbolLayer *layer ) override;
-    virtual QgsSymbolLayer *symbolLayer() override;
+    void setSymbolLayer( QgsSymbolLayer *layer ) override;
+    QgsSymbolLayer *symbolLayer() override;
 
   public slots:
     void setFontFamily( const QFont &font );
     void setColor( const QColor &color );
 
-    /** Set stroke color.
+    /**
+     * Set stroke color.
      * \since QGIS 2.16 */
     void setColorStroke( const QColor &color );
     void setSize( double size );
     void setAngle( double angle );
+
+    /**
+     * Set the font marker character from char.
+     * \param chr the char
+     */
     void setCharacter( QChar chr );
-    void setOffset();
-    void on_mSizeUnitWidget_changed();
-    void on_mOffsetUnitWidget_changed();
-    void on_mStrokeWidthUnitWidget_changed();
-    void on_mStrokeWidthSpinBox_valueChanged( double d );
-    void on_mHorizontalAnchorComboBox_currentIndexChanged( int index );
-    void on_mVerticalAnchorComboBox_currentIndexChanged( int index );
+
+    /**
+     * Set the font marker character from a text string.
+     * \param text the text string
+     * \since QGIS 3.8
+     */
+    void setCharacterFromText( const QString &text );
 
   protected:
     QgsFontMarkerSymbolLayer *mLayer = nullptr;
     CharacterWidget *widgetChar = nullptr;
 
   private slots:
-
+    void setOffset();
+    void mSizeUnitWidget_changed();
+    void mOffsetUnitWidget_changed();
+    void mStrokeWidthUnitWidget_changed();
+    void mStrokeWidthSpinBox_valueChanged( double d );
+    void mHorizontalAnchorComboBox_currentIndexChanged( int index );
+    void mVerticalAnchorComboBox_currentIndexChanged( int index );
     void penJoinStyleChanged();
     void updateAssistantSymbol();
 
@@ -688,7 +1023,8 @@ class GUI_EXPORT QgsFontMarkerSymbolLayerWidget : public QgsSymbolLayerWidget, p
 
 class QgsCentroidFillSymbolLayer;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsCentroidFillSymbolLayerWidget
  */
 class GUI_EXPORT QgsCentroidFillSymbolLayerWidget : public QgsSymbolLayerWidget, private Ui::WidgetCentroidFill
@@ -696,20 +1032,30 @@ class GUI_EXPORT QgsCentroidFillSymbolLayerWidget : public QgsSymbolLayerWidget,
     Q_OBJECT
 
   public:
-    QgsCentroidFillSymbolLayerWidget( const QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
-    static QgsSymbolLayerWidget *create( const QgsVectorLayer *vl ) SIP_FACTORY { return new QgsCentroidFillSymbolLayerWidget( vl ); }
+    /**
+     * Constructor for QgsCentroidFillSymbolLayerWidget.
+     * \param vl associated vector layer
+     * \param parent parent widget
+     */
+    QgsCentroidFillSymbolLayerWidget( QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
+
+    /**
+     * Creates a new QgsCentroidFillSymbolLayerWidget.
+     * \param vl associated vector layer
+     */
+    static QgsSymbolLayerWidget *create( QgsVectorLayer *vl ) SIP_FACTORY { return new QgsCentroidFillSymbolLayerWidget( vl ); }
 
     // from base class
-    virtual void setSymbolLayer( QgsSymbolLayer *layer ) override;
-    virtual QgsSymbolLayer *symbolLayer() override;
+    void setSymbolLayer( QgsSymbolLayer *layer ) override;
+    QgsSymbolLayer *symbolLayer() override;
 
   protected:
     QgsCentroidFillSymbolLayer *mLayer = nullptr;
 
   private slots:
-    void on_mDrawInsideCheckBox_stateChanged( int state );
-    void on_mDrawAllPartsCheckBox_stateChanged( int state );
+    void mDrawInsideCheckBox_stateChanged( int state );
+    void mDrawAllPartsCheckBox_stateChanged( int state );
 
 };
 
@@ -719,7 +1065,8 @@ class GUI_EXPORT QgsCentroidFillSymbolLayerWidget : public QgsSymbolLayerWidget,
 
 class QgsGeometryGeneratorSymbolLayer;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsGeometryGeneratorSymbolLayerWidget
  */
 class GUI_EXPORT QgsGeometryGeneratorSymbolLayerWidget : public QgsSymbolLayerWidget, private Ui::GeometryGeneratorWidgetBase
@@ -727,16 +1074,22 @@ class GUI_EXPORT QgsGeometryGeneratorSymbolLayerWidget : public QgsSymbolLayerWi
     Q_OBJECT
 
   public:
-    QgsGeometryGeneratorSymbolLayerWidget( const QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
+
+    /**
+     * Constructor for QgsGeometryGeneratorSymbolLayerWidget.
+     * \param vl associated vector layer
+     * \param parent parent widget
+     */
+    QgsGeometryGeneratorSymbolLayerWidget( QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
     /**
      * Will be registered as factory
      */
-    static QgsSymbolLayerWidget *create( const QgsVectorLayer *vl ) SIP_FACTORY { return new QgsGeometryGeneratorSymbolLayerWidget( vl ); }
+    static QgsSymbolLayerWidget *create( QgsVectorLayer *vl ) SIP_FACTORY { return new QgsGeometryGeneratorSymbolLayerWidget( vl ); }
 
     // from base class
-    virtual void setSymbolLayer( QgsSymbolLayer *layer ) override;
-    virtual QgsSymbolLayer *symbolLayer() override;
+    void setSymbolLayer( QgsSymbolLayer *layer ) override;
+    QgsSymbolLayer *symbolLayer() override;
 
   private:
     QgsGeometryGeneratorSymbolLayer *mLayer = nullptr;

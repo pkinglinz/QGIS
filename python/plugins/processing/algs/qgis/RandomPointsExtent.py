@@ -16,22 +16,18 @@
 *                                                                         *
 ***************************************************************************
 """
-from builtins import str
 
 __author__ = 'Alexander Bruy'
 __date__ = 'April 2014'
 __copyright__ = '(C) 2014, Alexander Bruy'
-
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
 
 import os
 import random
 
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtCore import QVariant
-from qgis.core import (QgsField,
+from qgis.core import (QgsApplication,
+                       QgsField,
                        QgsFeatureSink,
                        QgsFeature,
                        QgsFields,
@@ -41,6 +37,7 @@ from qgis.core import (QgsField,
                        QgsSpatialIndex,
                        QgsProcessing,
                        QgsProcessingException,
+                       QgsProcessingParameterDistance,
                        QgsProcessingParameterExtent,
                        QgsProcessingParameterNumber,
                        QgsProcessingParameterCrs,
@@ -62,10 +59,16 @@ class RandomPointsExtent(QgisAlgorithm):
     OUTPUT = 'OUTPUT'
 
     def icon(self):
-        return QIcon(os.path.join(pluginPath, 'images', 'ftools', 'random_points.png'))
+        return QgsApplication.getThemeIcon("/algorithms/mAlgorithmRandomPointsWithinExtent.svg")
+
+    def svgIconPath(self):
+        return QgsApplication.iconPath("/algorithms/mAlgorithmRandomPointsWithinExtent.svg")
 
     def group(self):
         return self.tr('Vector creation')
+
+    def groupId(self):
+        return 'vectorcreation'
 
     def __init__(self):
         super().__init__()
@@ -76,10 +79,9 @@ class RandomPointsExtent(QgisAlgorithm):
                                                        self.tr('Number of points'),
                                                        QgsProcessingParameterNumber.Integer,
                                                        1, False, 1, 1000000000))
-        self.addParameter(QgsProcessingParameterNumber(self.MIN_DISTANCE,
-                                                       self.tr('Minimum distance between points'),
-                                                       QgsProcessingParameterNumber.Double,
-                                                       0, False, 0, 1000000000))
+        self.addParameter(QgsProcessingParameterDistance(self.MIN_DISTANCE,
+                                                         self.tr('Minimum distance between points'),
+                                                         0, self.TARGET_CRS, False, 0, 1000000000))
         self.addParameter(QgsProcessingParameterCrs(self.TARGET_CRS,
                                                     self.tr('Target CRS'),
                                                     'ProjectCrs'))
@@ -106,6 +108,8 @@ class RandomPointsExtent(QgisAlgorithm):
 
         (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT, context,
                                                fields, QgsWkbTypes.Point, crs)
+        if sink is None:
+            raise QgsProcessingException(self.invalidSinkError(parameters, self.OUTPUT))
 
         nPoints = 0
         nIterations = 0
@@ -125,7 +129,7 @@ class RandomPointsExtent(QgisAlgorithm):
             ry = bbox.yMinimum() + bbox.height() * random.random()
 
             p = QgsPointXY(rx, ry)
-            geom = QgsGeometry.fromPoint(p)
+            geom = QgsGeometry.fromPointXY(p)
             if geom.within(extent) and \
                     vector.checkMinDistance(p, index, minDistance, points):
                 f = QgsFeature(nPoints)
@@ -134,7 +138,7 @@ class RandomPointsExtent(QgisAlgorithm):
                 f.setAttribute('id', nPoints)
                 f.setGeometry(geom)
                 sink.addFeature(f, QgsFeatureSink.FastInsert)
-                index.insertFeature(f)
+                index.addFeature(f)
                 points[nPoints] = p
                 nPoints += 1
                 feedback.setProgress(int(nPoints * total))

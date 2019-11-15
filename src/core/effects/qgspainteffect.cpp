@@ -24,20 +24,9 @@
 Q_GUI_EXPORT extern int qt_defaultDpiX();
 Q_GUI_EXPORT extern int qt_defaultDpiY();
 
-QgsPaintEffect::QgsPaintEffect()
-  : mEnabled( true )
-  , mDrawMode( ModifyAndRender )
-  , requiresQPainterDpiFix( true )
-  , mOwnsImage( false )
-{
-
-}
-
 QgsPaintEffect::QgsPaintEffect( const QgsPaintEffect &other )
   : mEnabled( other.enabled() )
   , mDrawMode( other.drawMode() )
-  , requiresQPainterDpiFix( true )
-  , mOwnsImage( false )
 {
 
 }
@@ -213,7 +202,7 @@ QPointF QgsPaintEffect::imageOffset( const QgsRenderContext &context ) const
 
 QRectF QgsPaintEffect::boundingRect( const QRectF &rect, const QgsRenderContext &context ) const
 {
-  Q_UNUSED( context );
+  Q_UNUSED( context )
   return rect;
 }
 
@@ -236,13 +225,6 @@ QRectF QgsPaintEffect::imageBoundingRect( const QgsRenderContext &context ) cons
 //
 // QgsDrawSourceEffect
 //
-
-QgsDrawSourceEffect::QgsDrawSourceEffect()
-  : QgsPaintEffect()
-  , mBlendMode( QPainter::CompositionMode_SourceOver )
-{
-
-}
 
 QgsPaintEffect *QgsDrawSourceEffect::create( const QgsStringMap &map )
 {

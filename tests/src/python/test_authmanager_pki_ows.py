@@ -26,13 +26,12 @@ import stat
 __author__ = 'Alessandro Pasotti'
 __date__ = '25/10/2016'
 __copyright__ = 'Copyright 2016, The QGIS Project'
-# This will get replaced with a git SHA1 when you do a git archive
-__revision__ = '$Format:%H$'
 
 from shutil import rmtree
 
 from utilities import unitTestDataPath, waitServer
 from qgis.core import (
+    QgsApplication,
     QgsAuthManager,
     QgsAuthMethodConfig,
     QgsVectorLayer,
@@ -64,7 +63,7 @@ class TestAuthManager(unittest.TestCase):
     @classmethod
     def setUpAuth(cls):
         """Run before all tests and set up authentication"""
-        authm = QgsAuthManager.instance()
+        authm = QgsApplication.authManager()
         assert (authm.setMasterPassword('masterpassword', True))
         cls.sslrootcert_path = os.path.join(cls.certsdata_path, 'chains_subissuer-issuer-root_issuer2-root2.pem')
         cls.sslcert = os.path.join(cls.certsdata_path, 'gerardus_cert.pem')

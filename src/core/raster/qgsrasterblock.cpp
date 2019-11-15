@@ -28,35 +28,22 @@
 const QRgb QgsRasterBlock::NO_DATA_COLOR = qRgba( 0, 0, 0, 0 );
 
 QgsRasterBlock::QgsRasterBlock()
-  : mValid( true )
-  , mDataType( Qgis::UnknownDataType )
-  , mTypeSize( 0 )
-  , mWidth( 0 )
-  , mHeight( 0 )
-  , mHasNoDataValue( false )
-  , mNoDataValue( std::numeric_limits<double>::quiet_NaN() )
-  , mNoDataBitmapWidth( 0 )
-  , mNoDataBitmapSize( 0 )
+  : mNoDataValue( std::numeric_limits<double>::quiet_NaN() )
 {
 }
 
 QgsRasterBlock::QgsRasterBlock( Qgis::DataType dataType, int width, int height )
-  : mValid( true )
-  , mDataType( dataType )
-  , mTypeSize( 0 )
+  : mDataType( dataType )
   , mWidth( width )
   , mHeight( height )
-  , mHasNoDataValue( false )
   , mNoDataValue( std::numeric_limits<double>::quiet_NaN() )
-  , mNoDataBitmapWidth( 0 )
-  , mNoDataBitmapSize( 0 )
 {
   ( void )reset( mDataType, mWidth, mHeight );
 }
 
 QgsRasterBlock::~QgsRasterBlock()
 {
-  QgsDebugMsgLevel( QString( "mData = %1" ).arg( reinterpret_cast< quint64 >( mData ) ), 4 );
+  QgsDebugMsgLevel( QStringLiteral( "mData = %1" ).arg( reinterpret_cast< quint64 >( mData ) ), 4 );
   qgsFree( mData );
   delete mImage;
   qgsFree( mNoDataBitmap );
@@ -64,7 +51,7 @@ QgsRasterBlock::~QgsRasterBlock()
 
 bool QgsRasterBlock::reset( Qgis::DataType dataType, int width, int height )
 {
-  QgsDebugMsgLevel( QString( "theWidth= %1 height = %2 dataType = %3" ).arg( width ).arg( height ).arg( dataType ), 4 );
+  QgsDebugMsgLevel( QStringLiteral( "theWidth= %1 height = %2 dataType = %3" ).arg( width ).arg( height ).arg( dataType ), 4 );
 
   qgsFree( mData );
   mData = nullptr;
@@ -82,25 +69,25 @@ bool QgsRasterBlock::reset( Qgis::DataType dataType, int width, int height )
 
   if ( typeIsNumeric( dataType ) )
   {
-    QgsDebugMsgLevel( "Numeric type", 4 );
+    QgsDebugMsgLevel( QStringLiteral( "Numeric type" ), 4 );
     qgssize tSize = typeSize( dataType );
-    QgsDebugMsgLevel( QString( "allocate %1 bytes" ).arg( tSize * width * height ), 4 );
+    QgsDebugMsgLevel( QStringLiteral( "allocate %1 bytes" ).arg( tSize * width * height ), 4 );
     mData = qgsMalloc( tSize * width * height );
     if ( !mData )
     {
-      QgsDebugMsg( QString( "Couldn't allocate data memory of %1 bytes" ).arg( tSize * width * height ) );
+      QgsDebugMsg( QStringLiteral( "Couldn't allocate data memory of %1 bytes" ).arg( tSize * width * height ) );
       return false;
     }
   }
   else if ( typeIsColor( dataType ) )
   {
-    QgsDebugMsgLevel( "Color type", 4 );
+    QgsDebugMsgLevel( QStringLiteral( "Color type" ), 4 );
     QImage::Format format = imageFormat( dataType );
     mImage = new QImage( width, height, format );
   }
   else
   {
-    QgsDebugMsg( "Wrong data type" );
+    QgsDebugMsg( QStringLiteral( "Wrong data type" ) );
     return false;
   }
 
@@ -109,7 +96,7 @@ bool QgsRasterBlock::reset( Qgis::DataType dataType, int width, int height )
   mTypeSize = QgsRasterBlock::typeSize( mDataType );
   mWidth = width;
   mHeight = height;
-  QgsDebugMsgLevel( QString( "mWidth= %1 mHeight = %2 mDataType = %3 mData = %4 mImage = %5" ).arg( mWidth ).arg( mHeight ).arg( mDataType )
+  QgsDebugMsgLevel( QStringLiteral( "mWidth= %1 mHeight = %2 mDataType = %3 mData = %4 mImage = %5" ).arg( mWidth ).arg( mHeight ).arg( mDataType )
                     .arg( reinterpret_cast< quint64 >( mData ) ).arg( reinterpret_cast< quint64 >( mImage ) ), 4 );
   return true;
 }
@@ -142,7 +129,7 @@ Qgis::DataType QgsRasterBlock::dataType( QImage::Format format )
 
 bool QgsRasterBlock::isEmpty() const
 {
-  QgsDebugMsgLevel( QString( "mWidth= %1 mHeight = %2 mDataType = %3 mData = %4 mImage = %5" ).arg( mWidth ).arg( mHeight ).arg( mDataType )
+  QgsDebugMsgLevel( QStringLiteral( "mWidth= %1 mHeight = %2 mDataType = %3 mData = %4 mImage = %5" ).arg( mWidth ).arg( mHeight ).arg( mDataType )
                     .arg( reinterpret_cast< quint64 >( mData ) ).arg( reinterpret_cast< quint64 >( mImage ) ), 4 );
   return mWidth == 0 || mHeight == 0 ||
          ( typeIsNumeric( mDataType ) && !mData ) ||
@@ -225,16 +212,11 @@ Qgis::DataType QgsRasterBlock::typeWithNoDataValue( Qgis::DataType dataType, dou
       newDataType = Qgis::Float64;
       break;
     default:
-      QgsDebugMsg( QString( "Unknown data type %1" ).arg( dataType ) );
+      QgsDebugMsg( QStringLiteral( "Unknown data type %1" ).arg( dataType ) );
       return Qgis::UnknownDataType;
   }
-  QgsDebugMsgLevel( QString( "newDataType = %1 noDataValue = %2" ).arg( newDataType ).arg( *noDataValue ), 4 );
+  QgsDebugMsgLevel( QStringLiteral( "newDataType = %1 noDataValue = %2" ).arg( newDataType ).arg( *noDataValue ), 4 );
   return newDataType;
-}
-
-bool QgsRasterBlock::hasNoData() const
-{
-  return mHasNoDataValue || mNoDataBitmap;
 }
 
 void QgsRasterBlock::setNoDataValue( double noDataValue )
@@ -249,168 +231,33 @@ void QgsRasterBlock::resetNoDataValue()
   mNoDataValue = std::numeric_limits<double>::quiet_NaN();
 }
 
-bool QgsRasterBlock::isNoDataValue( double value, double noDataValue )
-{
-  // TODO: optimize no data value test by memcmp()
-  // More precise would be std::isnan(value) && std::isnan(noDataValue(bandNo)), but probably
-  // not important and slower
-  return std::isnan( value ) ||
-         qgsDoubleNear( value, noDataValue );
-}
-
-double QgsRasterBlock::value( int row, int column ) const
-{
-  return value( static_cast< qgssize >( row ) * mWidth + column );
-}
-
-QRgb QgsRasterBlock::color( qgssize index ) const
-{
-  int row = std::floor( static_cast< double >( index ) / mWidth );
-  int column = index % mWidth;
-  return color( row, column );
-}
-
-QRgb QgsRasterBlock::color( int row, int column ) const
-{
-  if ( !mImage ) return NO_DATA_COLOR;
-
-  return mImage->pixel( column, row );
-}
-
-bool QgsRasterBlock::isNoData( qgssize index )
-{
-  if ( !mHasNoDataValue && !mNoDataBitmap ) return false;
-  if ( index >= static_cast< qgssize >( mWidth )*mHeight )
-  {
-    QgsDebugMsg( QString( "Index %1 out of range (%2 x %3)" ).arg( index ).arg( mWidth ).arg( mHeight ) );
-    return true; // we consider no data if outside
-  }
-  if ( mHasNoDataValue )
-  {
-    double value = readValue( mData, mDataType, index );
-    return isNoDataValue( value );
-  }
-  // use no data bitmap
-  if ( !mNoDataBitmap )
-  {
-    // no data are not defined
-    return false;
-  }
-  // TODO: optimize
-  int row = static_cast< int >( index ) / mWidth;
-  int column = index % mWidth;
-  qgssize byte = static_cast< qgssize >( row ) * mNoDataBitmapWidth + column / 8;
-  int bit = column % 8;
-  int mask = 0x80 >> bit;
-  //int x = mNoDataBitmap[byte] & mask;
-  //QgsDebugMsg ( QString("byte = %1 bit = %2 mask = %3 nodata = %4 is nodata = %5").arg(byte).arg(bit).arg(mask, 0, 2 ).arg( x, 0, 2 ).arg( (bool)(x) ) );
-  return mNoDataBitmap[byte] & mask;
-}
-
-bool QgsRasterBlock::isNoData( int row, int column )
-{
-  return isNoData( static_cast< qgssize >( row ) * mWidth + column );
-}
-
-bool QgsRasterBlock::setValue( qgssize index, double value )
-{
-  if ( !mData )
-  {
-    QgsDebugMsg( "Data block not allocated" );
-    return false;
-  }
-  if ( index >= static_cast< qgssize >( mWidth ) *mHeight )
-  {
-    QgsDebugMsg( QString( "Index %1 out of range (%2 x %3)" ).arg( index ).arg( mWidth ).arg( mHeight ) );
-    return false;
-  }
-  writeValue( mData, mDataType, index, value );
-  return true;
-}
-
-bool QgsRasterBlock::setValue( int row, int column, double value )
-{
-  return setValue( static_cast< qgssize >( row ) * mWidth + column, value );
-}
-
-bool QgsRasterBlock::setColor( int row, int column, QRgb color )
-{
-  return setColor( static_cast< qgssize >( row ) * mWidth + column, color );
-}
-
-bool QgsRasterBlock::setColor( qgssize index, QRgb color )
-{
-  if ( !mImage )
-  {
-    QgsDebugMsg( "Image not allocated" );
-    return false;
-  }
-
-  if ( index >= static_cast< qgssize >( mImage->width() ) * mImage->height() )
-  {
-    QgsDebugMsg( QString( "index %1 out of range" ).arg( index ) );
-    return false;
-  }
-
-  // setPixel() is slow, see Qt doc -> use direct access
-  QRgb *bits = reinterpret_cast< QRgb * >( mImage->bits() );
-  bits[index] = color;
-  return true;
-}
-
-bool QgsRasterBlock::setIsNoData( int row, int column )
-{
-  return setIsNoData( static_cast< qgssize >( row ) * mWidth + column );
-}
-
-bool QgsRasterBlock::setIsNoData( qgssize index )
-{
-  if ( mHasNoDataValue )
-  {
-    return setValue( index, mNoDataValue );
-  }
-  else
-  {
-    if ( !mNoDataBitmap )
-    {
-      if ( !createNoDataBitmap() )
-      {
-        return false;
-      }
-    }
-    // TODO: optimize
-    int row = static_cast< int >( index ) / mWidth;
-    int column = index % mWidth;
-    qgssize byte = static_cast< qgssize >( row ) * mNoDataBitmapWidth + column / 8;
-    int bit = column % 8;
-    int nodata = 0x80 >> bit;
-    //QgsDebugMsg ( QString("set byte = %1 bit = %2 no data by %3").arg(byte).arg(bit).arg(nodata, 0,2 ) );
-    mNoDataBitmap[byte] = mNoDataBitmap[byte] | nodata;
-    return true;
-  }
-}
-
 bool QgsRasterBlock::setIsNoData()
 {
-  QgsDebugMsgLevel( "Entered", 4 );
+  QgsDebugMsgLevel( QStringLiteral( "Entered" ), 4 );
   if ( typeIsNumeric( mDataType ) )
   {
+    const size_t dataTypeSize = typeSize( mDataType );
     if ( mHasNoDataValue )
     {
       if ( !mData )
       {
-        QgsDebugMsg( "Data block not allocated" );
+        QgsDebugMsg( QStringLiteral( "Data block not allocated" ) );
         return false;
       }
 
-      QgsDebugMsgLevel( "set mData to mNoDataValue", 4 );
-      int dataTypeSize = typeSize( mDataType );
+      QgsDebugMsgLevel( QStringLiteral( "set mData to mNoDataValue" ), 4 );
       QByteArray noDataByteArray = valueBytes( mDataType, mNoDataValue );
-
-      char *nodata = noDataByteArray.data();
-      for ( qgssize i = 0; i < static_cast< qgssize >( mWidth )*mHeight; i++ )
+      if ( mNoDataValue == 0 )
       {
-        memcpy( reinterpret_cast< char * >( mData ) + i * dataTypeSize, nodata, dataTypeSize );
+        memset( mData, 0, dataTypeSize * mWidth * mHeight );
+      }
+      else
+      {
+        const char *nodata = noDataByteArray.data();
+        for ( qgssize i = 0; i < static_cast< qgssize >( mWidth )*mHeight; i++ )
+        {
+          memcpy( reinterpret_cast< char * >( mData ) + i * dataTypeSize, nodata, dataTypeSize );
+        }
       }
     }
     else
@@ -423,8 +270,12 @@ bool QgsRasterBlock::setIsNoData()
           return false;
         }
       }
-      QgsDebugMsgLevel( "set mNoDataBitmap to 1", 4 );
+      QgsDebugMsgLevel( QStringLiteral( "set mNoDataBitmap to 1" ), 4 );
       memset( mNoDataBitmap, 0xff, mNoDataBitmapSize );
+      if ( mData )
+      {
+        memset( mData, 0, dataTypeSize * mWidth * mHeight );
+      }
     }
     return true;
   }
@@ -433,10 +284,10 @@ bool QgsRasterBlock::setIsNoData()
     // image
     if ( !mImage )
     {
-      QgsDebugMsg( "Image not allocated" );
+      QgsDebugMsg( QStringLiteral( "Image not allocated" ) );
       return false;
     }
-    QgsDebugMsgLevel( "Fill image", 4 );
+    QgsDebugMsgLevel( QStringLiteral( "Fill image" ), 4 );
     mImage->fill( NO_DATA_COLOR );
     return true;
   }
@@ -453,19 +304,19 @@ bool QgsRasterBlock::setIsNoDataExcept( QRect exceptRect )
   bottom = std::max( 0, std::min( bottom, mHeight - 1 ) );
   right = std::max( 0, std::min( right, mWidth - 1 ) );
 
-  QgsDebugMsgLevel( "Entered", 4 );
+  QgsDebugMsgLevel( QStringLiteral( "Entered" ), 4 );
   if ( typeIsNumeric( mDataType ) )
   {
+    const size_t dataTypeSize = typeSize( mDataType );
     if ( mHasNoDataValue )
     {
       if ( !mData )
       {
-        QgsDebugMsg( "Data block not allocated" );
+        QgsDebugMsg( QStringLiteral( "Data block not allocated" ) );
         return false;
       }
 
-      QgsDebugMsgLevel( "set mData to mNoDataValue", 4 );
-      int dataTypeSize = typeSize( mDataType );
+      QgsDebugMsgLevel( QStringLiteral( "set mData to mNoDataValue" ), 4 );
       QByteArray noDataByteArray = valueBytes( mDataType, mNoDataValue );
 
       char *nodata = noDataByteArray.data();
@@ -505,7 +356,12 @@ bool QgsRasterBlock::setIsNoDataExcept( QRect exceptRect )
           return false;
         }
       }
-      QgsDebugMsgLevel( "set mNoDataBitmap to 1", 4 );
+      QgsDebugMsgLevel( QStringLiteral( "set mNoDataBitmap to 1" ), 4 );
+
+      if ( mData )
+      {
+        memset( mData, 0, dataTypeSize * mWidth * mHeight );
+      }
 
       char *nodataRow = new char[mNoDataBitmapWidth]; // full row of no data
       // TODO: we can simply set all bytes to 11111111 (~0) I think
@@ -549,22 +405,22 @@ bool QgsRasterBlock::setIsNoDataExcept( QRect exceptRect )
     // image
     if ( !mImage )
     {
-      QgsDebugMsg( "Image not allocated" );
+      QgsDebugMsg( QStringLiteral( "Image not allocated" ) );
       return false;
     }
 
     if ( mImage->width() != mWidth ||  mImage->height() != mHeight )
     {
-      QgsDebugMsg( "Image and block size differ" );
+      QgsDebugMsg( QStringLiteral( "Image and block size differ" ) );
       return false;
     }
 
-    QgsDebugMsgLevel( QString( "Fill image depth = %1" ).arg( mImage->depth() ), 4 );
+    QgsDebugMsgLevel( QStringLiteral( "Fill image depth = %1" ).arg( mImage->depth() ), 4 );
 
     // TODO: support different depths
     if ( mImage->depth() != 32 )
     {
-      QgsDebugMsg( "Unsupported image depth" );
+      QgsDebugMsg( QStringLiteral( "Unsupported image depth" ) );
       return false;
     }
 
@@ -602,33 +458,6 @@ bool QgsRasterBlock::setIsNoDataExcept( QRect exceptRect )
   }
 }
 
-void QgsRasterBlock::setIsData( int row, int column )
-{
-  setIsData( static_cast< qgssize >( row )*mWidth + column );
-}
-
-void QgsRasterBlock::setIsData( qgssize index )
-{
-  if ( mHasNoDataValue )
-  {
-    //no data value set, so mNoDataBitmap is not being used
-    return;
-  }
-
-  if ( !mNoDataBitmap )
-  {
-    return;
-  }
-
-  // TODO: optimize
-  int row = static_cast< int >( index ) / mWidth;
-  int column = index % mWidth;
-  qgssize byte = static_cast< qgssize >( row ) * mNoDataBitmapWidth + column / 8;
-  int bit = column % 8;
-  int nodata = 0x80 >> bit;
-  mNoDataBitmap[byte] = mNoDataBitmap[byte] & ~nodata;
-}
-
 QByteArray QgsRasterBlock::data() const
 {
   if ( mData )
@@ -661,7 +490,7 @@ char *QgsRasterBlock::bits( qgssize index )
   // Not testing type to avoid too much overhead because this method is called per pixel
   if ( index >= static_cast< qgssize >( mWidth )*mHeight )
   {
-    QgsDebugMsgLevel( QString( "Index %1 out of range (%2 x %3)" ).arg( index ).arg( mWidth ).arg( mHeight ), 4 );
+    QgsDebugMsgLevel( QStringLiteral( "Index %1 out of range (%2 x %3)" ).arg( index ).arg( mWidth ).arg( mHeight ), 4 );
     return nullptr;
   }
   if ( mData )
@@ -706,7 +535,7 @@ bool QgsRasterBlock::convert( Qgis::DataType destDataType )
 
     if ( !data )
     {
-      QgsDebugMsg( "Cannot convert raster block" );
+      QgsDebugMsg( QStringLiteral( "Cannot convert raster block" ) );
       return false;
     }
     qgsFree( mData );
@@ -821,7 +650,7 @@ QString QgsRasterBlock::printValue( double value )
     }
   }
   // Should not happen
-  QgsDebugMsg( "Cannot correctly parse printed value" );
+  QgsDebugMsg( QStringLiteral( "Cannot correctly parse printed value" ) );
   return s;
 }
 
@@ -842,7 +671,7 @@ QString QgsRasterBlock::printValue( float value )
     }
   }
   // Should not happen
-  QgsDebugMsg( "Cannot correctly parse printed value" );
+  QgsDebugMsg( QStringLiteral( "Cannot correctly parse printed value" ) );
   return s;
 }
 
@@ -855,7 +684,7 @@ void *QgsRasterBlock::convert( void *srcData, Qgis::DataType srcDataType, Qgis::
     double value = readValue( srcData, srcDataType, i );
     writeValue( destData, destDataType, i, value );
     //double newValue = readValue( destData, destDataType, i );
-    //QgsDebugMsg( QString("convert %1 type %2 to %3: %4 -> %5").arg(i).arg(srcDataType).arg(destDataType).arg( value ).arg( newValue ) );
+    //QgsDebugMsg( QStringLiteral("convert %1 type %2 to %3: %4 -> %5").arg(i).arg(srcDataType).arg(destDataType).arg( value ).arg( newValue ) );
   }
   return destData;
 }
@@ -904,7 +733,7 @@ QByteArray QgsRasterBlock::valueBytes( Qgis::DataType dataType, double value )
       memcpy( data, &d, size );
       break;
     default:
-      QgsDebugMsg( "Data type is not supported" );
+      QgsDebugMsg( QStringLiteral( "Data type is not supported" ) );
   }
   return ba;
 }
@@ -913,11 +742,11 @@ bool QgsRasterBlock::createNoDataBitmap()
 {
   mNoDataBitmapWidth = mWidth / 8 + 1;
   mNoDataBitmapSize = static_cast< qgssize >( mNoDataBitmapWidth ) * mHeight;
-  QgsDebugMsgLevel( QString( "allocate %1 bytes" ).arg( mNoDataBitmapSize ), 4 );
+  QgsDebugMsgLevel( QStringLiteral( "allocate %1 bytes" ).arg( mNoDataBitmapSize ), 4 );
   mNoDataBitmap = reinterpret_cast< char * >( qgsMalloc( mNoDataBitmapSize ) );
   if ( !mNoDataBitmap )
   {
-    QgsDebugMsg( QString( "Couldn't allocate no data memory of %1 bytes" ).arg( mNoDataBitmapSize ) );
+    QgsDebugMsg( QStringLiteral( "Couldn't allocate no data memory of %1 bytes" ).arg( mNoDataBitmapSize ) );
     return false;
   }
   memset( mNoDataBitmap, 0, mNoDataBitmapSize );
@@ -937,7 +766,7 @@ QRect QgsRasterBlock::subRect( const QgsRectangle &extent, int width, int height
   double xRes = extent.width() / width;
   double yRes = extent.height() / height;
 
-  QgsDebugMsgLevel( QString( "theWidth = %1 height = %2 xRes = %3 yRes = %4" ).arg( width ).arg( height ).arg( xRes ).arg( yRes ), 4 );
+  QgsDebugMsgLevel( QStringLiteral( "theWidth = %1 height = %2 xRes = %3 yRes = %4" ).arg( width ).arg( height ).arg( xRes ).arg( yRes ), 4 );
 
   int top = 0;
   int bottom = height - 1;
@@ -962,6 +791,6 @@ QRect QgsRasterBlock::subRect( const QgsRectangle &extent, int width, int height
     right = std::round( ( subExtent.xMaximum() - extent.xMinimum() ) / xRes ) - 1;
   }
   QRect subRect = QRect( left, top, right - left + 1, bottom - top + 1 );
-  QgsDebugMsgLevel( QString( "subRect: %1 %2 %3 %4" ).arg( subRect.x() ).arg( subRect.y() ).arg( subRect.width() ).arg( subRect.height() ), 4 );
+  QgsDebugMsgLevel( QStringLiteral( "subRect: %1 %2 %3 %4" ).arg( subRect.x() ).arg( subRect.y() ).arg( subRect.width() ).arg( subRect.height() ), 4 );
   return subRect;
 }

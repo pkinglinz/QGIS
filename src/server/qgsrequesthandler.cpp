@@ -20,16 +20,10 @@
 #include "qgis.h"
 #include "qgsrequesthandler.h"
 #include "qgsmessagelog.h"
-#include "qgsserverexception.h"
 #include "qgsserverrequest.h"
 #include "qgsserverresponse.h"
-#include <QBuffer>
 #include <QByteArray>
 #include <QDomDocument>
-#include <QFile>
-#include <QImage>
-#include <QTextStream>
-#include <QStringList>
 #include <QUrl>
 #include <QUrlQuery>
 
@@ -37,10 +31,6 @@ QgsRequestHandler::QgsRequestHandler( QgsServerRequest &request, QgsServerRespon
   : mExceptionRaised( false )
   , mRequest( request )
   , mResponse( response )
-{
-}
-
-QgsRequestHandler::~QgsRequestHandler()
 {
 }
 
@@ -158,20 +148,6 @@ void QgsRequestHandler::setupParameters()
 {
   const QgsServerRequest::Parameters parameters = mRequest.parameters();
 
-  // SLD
-  QString value = parameters.value( QStringLiteral( "SLD" ) );
-  if ( !value.isEmpty() )
-  {
-    QgsMessageLog::logMessage( QStringLiteral( "http and ftp methods not supported with Qt5." ) );
-  }
-
-  // SLD_BODY
-  value = parameters.value( QStringLiteral( "SLD_BODY" ) );
-  if ( ! value.isEmpty() )
-  {
-    mRequest.setParameter( QStringLiteral( "SLD" ), value );
-  }
-
   //feature info format?
   QString infoFormat = parameters.value( QStringLiteral( "INFO_FORMAT" ) );
   if ( !infoFormat.isEmpty() )
@@ -232,9 +208,12 @@ void QgsRequestHandler::parseInput()
       typedef QPair<QString, QString> pair_t;
       QUrlQuery query( inputString );
       QList<pair_t> items = query.queryItems();
-      Q_FOREACH ( const pair_t &pair, items )
+      for ( pair_t pair : items )
       {
-        mRequest.setParameter( pair.first.toUpper(), pair.second );
+        // QUrl::fromPercentEncoding doesn't replace '+' with space
+        const QString key = QUrl::fromPercentEncoding( pair.first.replace( '+', ' ' ).toUtf8() );
+        const QString value = QUrl::fromPercentEncoding( pair.second.replace( '+', ' ' ).toUtf8() );
+        mRequest.setParameter( key.toUpper(), value );
       }
       setupParameters();
     }
@@ -245,15 +224,27 @@ void QgsRequestHandler::parseInput()
       setupParameters();
 
       QDomElement docElem = doc.documentElement();
-      if ( docElem.hasAttribute( QStringLiteral( "version" ) ) )
-      {
-        mRequest.setParameter( QStringLiteral( "VERSION" ), docElem.attribute( QStringLiteral( "version" ) ) );
-      }
-      if ( docElem.hasAttribute( QStringLiteral( "service" ) ) )
-      {
-        mRequest.setParameter( QStringLiteral( "SERVICE" ), docElem.attribute( QStringLiteral( "service" ) ) );
-      }
+      // the document element tag name is the request
       mRequest.setParameter( QStringLiteral( "REQUEST" ), docElem.tagName() );
+      // loop through the attributes which are the parameters
+      // excepting the attributes started by xmlns or xsi
+      QDomNamedNodeMap map = docElem.attributes();
+      for ( int i = 0 ; i < map.length() ; ++i )
+      {
+        if ( map.item( i ).isNull() )
+          continue;
+
+        const QDomNode attrNode = map.item( i );
+        const QDomAttr attr = attrNode.toAttr();
+        if ( attr.isNull() )
+          continue;
+
+        const QString attrName = attr.name();
+        if ( attrName.startsWith( "xmlns" ) || attrName.startsWith( "xsi:" ) )
+          continue;
+
+        mRequest.setParameter( attrName.toUpper(), attr.value() );
+      }
       mRequest.setParameter( QStringLiteral( "REQUEST_BODY" ), inputString );
     }
   }
@@ -268,6 +259,13 @@ void QgsRequestHandler::setParameter( const QString &key, const QString &value )
 {
   if ( !( key.isEmpty() || value.isEmpty() ) )
   {
+    // Warn for potential breaking change if plugin set the MAP parameter
+    // expecting changing the config file path, see PR #9773
+    if ( key.compare( QLatin1String( "MAP" ), Qt::CaseInsensitive ) == 0 )
+    {
+      QgsMessageLog::logMessage( QStringLiteral( "Changing the 'MAP' parameter will have no effect on config path: use QgsSerververInterface::setConfigFilePath instead" ),
+                                 "Server", Qgis::Warning );
+    }
     mRequest.setParameter( key, value );
   }
 }

@@ -15,6 +15,7 @@
 #include "qgsheatmaprendererwidget.h"
 #include "qgsheatmaprenderer.h"
 #include "qgsrendererregistry.h"
+#include "qgsexpressioncontextutils.h"
 
 #include "qgssymbol.h"
 
@@ -54,7 +55,8 @@ QgsExpressionContext QgsHeatmapRendererWidget::createExpressionContext() const
     expContext << QgsExpressionContextUtils::layerScope( vectorLayer() );
 
   // additional scopes
-  Q_FOREACH ( const QgsExpressionContextScope &scope, mContext.additionalExpressionContextScopes() )
+  const auto constAdditionalExpressionContextScopes = mContext.additionalExpressionContextScopes();
+  for ( const QgsExpressionContextScope &scope : constAdditionalExpressionContextScopes )
   {
     expContext.appendScope( new QgsExpressionContextScope( scope ) );
   }
@@ -78,11 +80,17 @@ QgsHeatmapRendererWidget::QgsHeatmapRendererWidget( QgsVectorLayer *layer, QgsSt
     QLabel *label = new QLabel( tr( "The heatmap renderer only applies to point and multipoint layers. \n"
                                     "'%1' is not a point layer and cannot be rendered as a heatmap." )
                                 .arg( layer->name() ), this );
+    if ( !layout() )
+      setLayout( new QGridLayout() );
     layout()->addWidget( label );
     return;
   }
 
   setupUi( this );
+  connect( mRadiusUnitWidget, &QgsUnitSelectionWidget::changed, this, &QgsHeatmapRendererWidget::mRadiusUnitWidget_changed );
+  connect( mRadiusSpinBox, static_cast < void ( QDoubleSpinBox::* )( double ) > ( &QDoubleSpinBox::valueChanged ), this, &QgsHeatmapRendererWidget::mRadiusSpinBox_valueChanged );
+  connect( mMaxSpinBox, static_cast < void ( QDoubleSpinBox::* )( double ) > ( &QDoubleSpinBox::valueChanged ), this, &QgsHeatmapRendererWidget::mMaxSpinBox_valueChanged );
+  connect( mQualitySlider, &QSlider::valueChanged, this, &QgsHeatmapRendererWidget::mQualitySlider_valueChanged );
   this->layout()->setContentsMargins( 0, 0, 0, 0 );
 
   mRadiusUnitWidget->setUnits( QgsUnitTypes::RenderUnitList() << QgsUnitTypes::RenderMillimeters << QgsUnitTypes::RenderPixels << QgsUnitTypes::RenderMapUnits
@@ -154,7 +162,7 @@ void QgsHeatmapRendererWidget::applyColorRamp()
   emit widgetChanged();
 }
 
-void QgsHeatmapRendererWidget::on_mRadiusUnitWidget_changed()
+void QgsHeatmapRendererWidget::mRadiusUnitWidget_changed()
 {
   if ( !mRenderer )
   {
@@ -166,7 +174,7 @@ void QgsHeatmapRendererWidget::on_mRadiusUnitWidget_changed()
   emit widgetChanged();
 }
 
-void QgsHeatmapRendererWidget::on_mRadiusSpinBox_valueChanged( double d )
+void QgsHeatmapRendererWidget::mRadiusSpinBox_valueChanged( double d )
 {
   if ( !mRenderer )
   {
@@ -177,7 +185,7 @@ void QgsHeatmapRendererWidget::on_mRadiusSpinBox_valueChanged( double d )
   emit widgetChanged();
 }
 
-void QgsHeatmapRendererWidget::on_mMaxSpinBox_valueChanged( double d )
+void QgsHeatmapRendererWidget::mMaxSpinBox_valueChanged( double d )
 {
   if ( !mRenderer )
   {
@@ -188,7 +196,7 @@ void QgsHeatmapRendererWidget::on_mMaxSpinBox_valueChanged( double d )
   emit widgetChanged();
 }
 
-void QgsHeatmapRendererWidget::on_mQualitySlider_valueChanged( int v )
+void QgsHeatmapRendererWidget::mQualitySlider_valueChanged( int v )
 {
   if ( !mRenderer )
   {

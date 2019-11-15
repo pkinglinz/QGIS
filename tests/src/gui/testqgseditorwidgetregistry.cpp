@@ -77,7 +77,7 @@ class TestQgsEditorWidgetRegistry: public QObject
 
     void doubleType()
     {
-      checkSimple( QStringLiteral( "double" ), QStringLiteral( "Range" ) );
+      checkSimple( QStringLiteral( "double" ), QStringLiteral( "TextEdit" ) );
     }
 
     void arrayType()
@@ -85,6 +85,11 @@ class TestQgsEditorWidgetRegistry: public QObject
       checkSimple( QStringLiteral( "double[]" ), QStringLiteral( "List" ) );
       checkSimple( QStringLiteral( "int[]" ), QStringLiteral( "List" ) );
       checkSimple( QStringLiteral( "string[]" ), QStringLiteral( "List" ) );
+    }
+
+    void binaryType()
+    {
+      checkSimple( QStringLiteral( "binary" ), QStringLiteral( "Binary" ) );
     }
 
     void configuredType()

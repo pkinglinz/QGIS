@@ -18,13 +18,8 @@
 #include "qgseffectstack.h"
 #include "qgspainteffectregistry.h"
 #include "qgsrendercontext.h"
+#include "qgsapplication.h"
 #include <QPicture>
-
-QgsEffectStack::QgsEffectStack()
-  : QgsPaintEffect()
-{
-
-}
 
 QgsEffectStack::QgsEffectStack( const QgsEffectStack &other )
   : QgsPaintEffect( other )
@@ -36,8 +31,13 @@ QgsEffectStack::QgsEffectStack( const QgsEffectStack &other )
   }
 }
 
+QgsEffectStack::QgsEffectStack( QgsEffectStack &&other )
+  : QgsPaintEffect( other )
+{
+  std::swap( mEffectList, other.mEffectList );
+}
+
 QgsEffectStack::QgsEffectStack( const QgsPaintEffect &effect )
-  : QgsPaintEffect()
 {
   appendEffect( effect.clone() );
 }
@@ -59,6 +59,13 @@ QgsEffectStack &QgsEffectStack::operator=( const QgsEffectStack &rhs )
     appendEffect( rhs.effect( i )->clone() );
   }
   mEnabled = rhs.enabled();
+  return *this;
+}
+
+QgsEffectStack &QgsEffectStack::operator=( QgsEffectStack &&other )
+{
+  std::swap( mEffectList, other.mEffectList );
+  mEnabled = other.enabled();
   return *this;
 }
 
@@ -198,7 +205,7 @@ QgsStringMap QgsEffectStack::properties() const
 
 void QgsEffectStack::readProperties( const QgsStringMap &props )
 {
-  Q_UNUSED( props );
+  Q_UNUSED( props )
 }
 
 void QgsEffectStack::clearStack()

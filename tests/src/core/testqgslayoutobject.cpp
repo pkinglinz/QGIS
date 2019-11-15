@@ -20,6 +20,7 @@
 #include "qgstest.h"
 #include "qgsproject.h"
 #include "qgsreadwritecontext.h"
+#include "qgsprintlayout.h"
 
 class TestQgsLayoutObject: public QObject
 {
@@ -36,7 +37,7 @@ class TestQgsLayoutObject: public QObject
     void context();
     void writeReadXml();
     void writeRetrieveDDProperty(); //test writing and retrieving dd properties from xml
-    void writeRetrieveCustomProperties(); //test writing/retreiving custom properties from xml
+    void writeRetrieveCustomProperties(); //test writing/retrieving custom properties from xml
 
 
   private:
@@ -126,7 +127,7 @@ void TestQgsLayoutObject::context()
 {
   QgsProject p;
   p.setTitle( QStringLiteral( "my title" ) );
-  QgsLayout l( &p );
+  QgsPrintLayout l( &p );
   l.setName( QStringLiteral( "my layout" ) );
 
   QgsLayoutObject *object = new QgsLayoutObject( nullptr );

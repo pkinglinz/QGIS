@@ -32,7 +32,7 @@ class QgsMssqlFeatureSource : public QgsAbstractFeatureSource
   public:
     explicit QgsMssqlFeatureSource( const QgsMssqlProvider *p );
 
-    virtual QgsFeatureIterator getFeatures( const QgsFeatureRequest &request ) override;
+    QgsFeatureIterator getFeatures( const QgsFeatureRequest &request ) override;
 
   private:
     QgsFields mFields;
@@ -61,6 +61,8 @@ class QgsMssqlFeatureSource : public QgsAbstractFeatureSource
     // SQL statement used to limit the features retrieved
     QString mSqlWhereClause;
 
+    bool mDisableInvalidGeometryHandling = false;
+
     QgsCoordinateReferenceSystem mCrs;
 
     // Return True if this feature source has spatial attributes.
@@ -75,14 +77,14 @@ class QgsMssqlFeatureIterator : public QgsAbstractFeatureIteratorFromSource<QgsM
   public:
     QgsMssqlFeatureIterator( QgsMssqlFeatureSource *source, bool ownSource, const QgsFeatureRequest &request );
 
-    ~QgsMssqlFeatureIterator();
+    ~QgsMssqlFeatureIterator() override;
 
-    virtual bool rewind() override;
-    virtual bool close() override;
+    bool rewind() override;
+    bool close() override;
 
   protected:
 
-    virtual bool fetchFeature( QgsFeature &feature ) override;
+    bool fetchFeature( QgsFeature &feature ) override;
     bool nextFeatureFilterExpression( QgsFeature &f ) override;
 
   private:
@@ -91,7 +93,10 @@ class QgsMssqlFeatureIterator : public QgsAbstractFeatureIteratorFromSource<QgsM
 
   private:
 
-    virtual bool prepareOrderBy( const QList<QgsFeatureRequest::OrderByClause> &orderBys ) override;
+    bool prepareOrderBy( const QList<QgsFeatureRequest::OrderByClause> &orderBys ) override;
+
+    double validLat( double latitude ) const;
+    double validLon( double longitude ) const;
 
     // The current database
     QSqlDatabase mDatabase;
@@ -106,7 +111,7 @@ class QgsMssqlFeatureIterator : public QgsAbstractFeatureIteratorFromSource<QgsM
     QString mFallbackStatement;
 
     // Field index of FID column
-    long mFidCol = -1;
+    int mFidCol = -1;
 
     // List of attribute indices to fetch with nextFeature calls
     QgsAttributeList mAttributesToFetch;
@@ -116,6 +121,7 @@ class QgsMssqlFeatureIterator : public QgsAbstractFeatureIteratorFromSource<QgsM
 
     bool mExpressionCompiled = false;
     bool mOrderByCompiled = false;
+    bool mDisableInvalidGeometryHandling = false;
 
     QgsCoordinateTransform mTransform;
     QgsRectangle mFilterRect;

@@ -30,11 +30,13 @@
 #include <qgssymbol.h>
 #include <qgssinglesymbolrenderer.h>
 #include <qgsfillsymbollayer.h>
+#include "qgsmarkersymbollayer.h"
 
 //qgis test includes
 #include "qgsrenderchecker.h"
 
-/** \ingroup UnitTests
+/**
+ * \ingroup UnitTests
  * This is a unit test for line fill symbol types.
  */
 class TestQgsCentroidFillSymbol : public QObject
@@ -42,13 +44,7 @@ class TestQgsCentroidFillSymbol : public QObject
     Q_OBJECT
 
   public:
-    TestQgsCentroidFillSymbol()
-      : mTestHasError( false )
-      , mpPolysLayer( 0 )
-      , mCentroidFill( 0 )
-      , mFillSymbol( 0 )
-      , mSymbolRenderer( 0 )
-    {}
+    TestQgsCentroidFillSymbol() = default;
 
   private slots:
     void initTestCase();// will be called before the first testfunction is executed.
@@ -57,10 +53,11 @@ class TestQgsCentroidFillSymbol : public QObject
     void cleanup() {} // will be called after every testfunction.
 
     void centroidFillSymbol();
+    void centroidFillSymbolPointOnSurface();
     void centroidFillSymbolPartBiggest();
 
   private:
-    bool mTestHasError;
+    bool mTestHasError =  false ;
 
     bool imageCheck( const QString &type );
     QgsMapSettings mMapSettings;
@@ -99,6 +96,7 @@ void TestQgsCentroidFillSymbol::initTestCase()
 
   //setup gradient fill
   mCentroidFill = new QgsCentroidFillSymbolLayer();
+  static_cast< QgsSimpleMarkerSymbolLayer * >( mCentroidFill->subSymbol()->symbolLayer( 0 ) )->setStrokeColor( Qt::black );
   mFillSymbol = new QgsFillSymbol();
   mFillSymbol->changeSymbolLayer( 0, mCentroidFill );
   mSymbolRenderer = new QgsSingleSymbolRenderer( mFillSymbol );
@@ -135,11 +133,18 @@ void TestQgsCentroidFillSymbol::centroidFillSymbol()
   QVERIFY( imageCheck( "symbol_centroidfill" ) );
 }
 
+void TestQgsCentroidFillSymbol::centroidFillSymbolPointOnSurface()
+{
+  mCentroidFill->setPointOnSurface( true );
+  QVERIFY( imageCheck( "symbol_centroidfill_point_on_surface" ) );
+  mCentroidFill->setPointOnSurface( false );
+}
+
 void TestQgsCentroidFillSymbol::centroidFillSymbolPartBiggest()
 {
   mCentroidFill->setPointOnAllParts( false );
-
   QVERIFY( imageCheck( "symbol_centroidfill_part_biggest" ) );
+  mCentroidFill->setPointOnAllParts( true );
 }
 
 //

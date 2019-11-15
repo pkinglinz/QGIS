@@ -36,7 +36,8 @@
 //qgis test includes
 #include "qgsrenderchecker.h"
 
-/** \ingroup UnitTests
+/**
+ * \ingroup UnitTests
  * This is a unit test for ellipse marker symbol types.
  */
 class TestQgsEllipseMarkerSymbol : public QObject
@@ -44,13 +45,7 @@ class TestQgsEllipseMarkerSymbol : public QObject
     Q_OBJECT
 
   public:
-    TestQgsEllipseMarkerSymbol()
-      : mTestHasError( false )
-      , mpPointsLayer( 0 )
-      , mEllipseMarkerLayer( 0 )
-      , mMarkerSymbol( 0 )
-      , mSymbolRenderer( 0 )
-    {}
+    TestQgsEllipseMarkerSymbol() = default;
 
   private slots:
     void initTestCase();// will be called before the first testfunction is executed.
@@ -59,13 +54,14 @@ class TestQgsEllipseMarkerSymbol : public QObject
     void cleanup() {} // will be called after every testfunction.
 
     void ellipseMarkerSymbol();
+    void ellipseMarkerSymbolSize();
     void ellipseMarkerSymbolBevelJoin();
     void ellipseMarkerSymbolMiterJoin();
     void ellipseMarkerSymbolRoundJoin();
     void bounds();
 
   private:
-    bool mTestHasError;
+    bool mTestHasError =  false ;
 
     bool imageCheck( const QString &type );
     QgsMapSettings mMapSettings;
@@ -140,6 +136,21 @@ void TestQgsEllipseMarkerSymbol::ellipseMarkerSymbol()
   mEllipseMarkerLayer->setSymbolWidth( 6 );
   mEllipseMarkerLayer->setStrokeWidth( 0.8 );
   QVERIFY( imageCheck( "ellipsemarker" ) );
+}
+
+void TestQgsEllipseMarkerSymbol::ellipseMarkerSymbolSize()
+{
+  mReport += QLatin1String( "<h2>Ellipse marker symbol layer setSize / size test</h2>\n" );
+
+  mEllipseMarkerLayer->setSymbolHeight( 3 );
+  mEllipseMarkerLayer->setSymbolWidth( 6 );
+  // Verify size value derived from width/height (largest value)
+  QCOMPARE( mEllipseMarkerLayer->size(), 6.0 );
+
+  mEllipseMarkerLayer->setSize( 2 );
+  // Verify width / height values adjusted from setSize
+  QCOMPARE( mEllipseMarkerLayer->symbolHeight(), 1.0 );
+  QCOMPARE( mEllipseMarkerLayer->symbolWidth(), 2.0 );
 }
 
 void TestQgsEllipseMarkerSymbol::ellipseMarkerSymbolBevelJoin()

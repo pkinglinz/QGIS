@@ -34,20 +34,22 @@ void QgsDiagramLayerSettings::initPropertyDefinitions()
   if ( !sPropertyDefinitions.isEmpty() )
     return;
 
+  const QString origin = QStringLiteral( "diagram" );
+
   sPropertyDefinitions = QgsPropertiesDefinition
   {
-    { QgsDiagramLayerSettings::BackgroundColor, QgsPropertyDefinition( "backgroundColor", QObject::tr( "Background color" ), QgsPropertyDefinition::ColorWithAlpha ) },
-    { QgsDiagramLayerSettings::StrokeColor, QgsPropertyDefinition( "strokeColor", QObject::tr( "Stroke color" ), QgsPropertyDefinition::ColorWithAlpha ) },
-    { QgsDiagramLayerSettings::StrokeWidth, QgsPropertyDefinition( "strokeWidth", QObject::tr( "Stroke width" ), QgsPropertyDefinition::StrokeWidth ) },
-    { QgsDiagramLayerSettings::PositionX, QgsPropertyDefinition( "positionX", QObject::tr( "Position (X)" ), QgsPropertyDefinition::Double ) },
-    { QgsDiagramLayerSettings::PositionY, QgsPropertyDefinition( "positionY", QObject::tr( "Position (Y)" ), QgsPropertyDefinition::Double ) },
-    { QgsDiagramLayerSettings::Distance, QgsPropertyDefinition( "distance", QObject::tr( "Placement distance" ), QgsPropertyDefinition::DoublePositive ) },
-    { QgsDiagramLayerSettings::Priority, QgsPropertyDefinition( "priority", QObject::tr( "Placement priority" ), QgsPropertyDefinition::DoublePositive ) },
-    { QgsDiagramLayerSettings::ZIndex, QgsPropertyDefinition( "zIndex", QObject::tr( "Placement z-index" ), QgsPropertyDefinition::Double ) },
-    { QgsDiagramLayerSettings::IsObstacle, QgsPropertyDefinition( "isObstacle", QObject::tr( "Diagram is an obstacle" ), QgsPropertyDefinition::Boolean ) },
-    { QgsDiagramLayerSettings::Show, QgsPropertyDefinition( "show", QObject::tr( "Show diagram" ), QgsPropertyDefinition::Boolean ) },
-    { QgsDiagramLayerSettings::AlwaysShow, QgsPropertyDefinition( "alwaysShow", QObject::tr( "Always show diagram" ), QgsPropertyDefinition::Boolean ) },
-    { QgsDiagramLayerSettings::StartAngle, QgsPropertyDefinition( "startAngle", QObject::tr( "Pie chart start angle" ), QgsPropertyDefinition::Rotation ) },
+    { QgsDiagramLayerSettings::BackgroundColor, QgsPropertyDefinition( "backgroundColor", QObject::tr( "Background color" ), QgsPropertyDefinition::ColorWithAlpha, origin ) },
+    { QgsDiagramLayerSettings::StrokeColor, QgsPropertyDefinition( "strokeColor", QObject::tr( "Stroke color" ), QgsPropertyDefinition::ColorWithAlpha, origin ) },
+    { QgsDiagramLayerSettings::StrokeWidth, QgsPropertyDefinition( "strokeWidth", QObject::tr( "Stroke width" ), QgsPropertyDefinition::StrokeWidth, origin ) },
+    { QgsDiagramLayerSettings::PositionX, QgsPropertyDefinition( "positionX", QObject::tr( "Position (X)" ), QgsPropertyDefinition::Double, origin ) },
+    { QgsDiagramLayerSettings::PositionY, QgsPropertyDefinition( "positionY", QObject::tr( "Position (Y)" ), QgsPropertyDefinition::Double, origin ) },
+    { QgsDiagramLayerSettings::Distance, QgsPropertyDefinition( "distance", QObject::tr( "Placement distance" ), QgsPropertyDefinition::DoublePositive, origin ) },
+    { QgsDiagramLayerSettings::Priority, QgsPropertyDefinition( "priority", QObject::tr( "Placement priority" ), QgsPropertyDefinition::DoublePositive, origin ) },
+    { QgsDiagramLayerSettings::ZIndex, QgsPropertyDefinition( "zIndex", QObject::tr( "Placement z-index" ), QgsPropertyDefinition::Double, origin ) },
+    { QgsDiagramLayerSettings::IsObstacle, QgsPropertyDefinition( "isObstacle", QObject::tr( "Diagram is an obstacle" ), QgsPropertyDefinition::Boolean, origin ) },
+    { QgsDiagramLayerSettings::Show, QgsPropertyDefinition( "show", QObject::tr( "Show diagram" ), QgsPropertyDefinition::Boolean, origin ) },
+    { QgsDiagramLayerSettings::AlwaysShow, QgsPropertyDefinition( "alwaysShow", QObject::tr( "Always show diagram" ), QgsPropertyDefinition::Boolean, origin ) },
+    { QgsDiagramLayerSettings::StartAngle, QgsPropertyDefinition( "startAngle", QObject::tr( "Pie chart start angle" ), QgsPropertyDefinition::Rotation, origin ) },
   };
 }
 
@@ -395,20 +397,12 @@ void QgsDiagramSettings::writeXml( QDomElement &rendererElem, QDomDocument &doc 
   rendererElem.appendChild( categoryElem );
 }
 
-QgsDiagramRenderer::QgsDiagramRenderer()
-  : mShowAttributeLegend( true )
-{
-}
-
-QgsDiagramRenderer::~QgsDiagramRenderer()
-{
-  delete mDiagram;
-}
-
 void QgsDiagramRenderer::setDiagram( QgsDiagram *d )
 {
-  delete mDiagram;
-  mDiagram = d;
+  if ( mDiagram.get() == d )
+    return;
+
+  mDiagram.reset( d );
 }
 
 QgsDiagramRenderer::QgsDiagramRenderer( const QgsDiagramRenderer &other )
@@ -419,7 +413,7 @@ QgsDiagramRenderer::QgsDiagramRenderer( const QgsDiagramRenderer &other )
 
 QgsDiagramRenderer &QgsDiagramRenderer::operator=( const QgsDiagramRenderer &other )
 {
-  mDiagram = other.mDiagram ? other.mDiagram->clone() : nullptr;
+  mDiagram.reset( other.mDiagram ? other.mDiagram->clone() : nullptr );
   mShowAttributeLegend = other.mShowAttributeLegend;
   return *this;
 }
@@ -477,10 +471,12 @@ QSet<QString> QgsDiagramRenderer::referencedFields( const QgsExpressionContext &
   if ( !mDiagram )
     return referenced;
 
-  Q_FOREACH ( const QString &att, diagramAttributes() )
+  const auto constDiagramAttributes = diagramAttributes();
+  for ( const QString &att : constDiagramAttributes )
   {
     QgsExpression *expression = mDiagram->getExpression( att, context );
-    Q_FOREACH ( const QString &field, expression->referencedColumns() )
+    const auto constReferencedColumns = expression->referencedColumns();
+    for ( const QString &field : constReferencedColumns )
     {
       referenced << field;
     }
@@ -515,42 +511,34 @@ int QgsDiagramRenderer::dpiPaintDevice( const QPainter *painter )
 
 void QgsDiagramRenderer::_readXml( const QDomElement &elem, const QgsReadWriteContext &context )
 {
-  Q_UNUSED( context );
-  delete mDiagram;
+  Q_UNUSED( context )
+  mDiagram.reset();
   QString diagramType = elem.attribute( QStringLiteral( "diagramType" ) );
   if ( diagramType == QLatin1String( "Pie" ) )
   {
-    mDiagram = new QgsPieDiagram();
+    mDiagram.reset( new QgsPieDiagram() );
   }
   else if ( diagramType == QLatin1String( "Text" ) )
   {
-    mDiagram = new QgsTextDiagram();
+    mDiagram.reset( new QgsTextDiagram() );
   }
   else if ( diagramType == QLatin1String( "Histogram" ) )
   {
-    mDiagram = new QgsHistogramDiagram();
-  }
-  else
-  {
-    mDiagram = nullptr;
+    mDiagram.reset( new QgsHistogramDiagram() );
   }
   mShowAttributeLegend = ( elem.attribute( QStringLiteral( "attributeLegend" ), QStringLiteral( "1" ) ) != QLatin1String( "0" ) );
 }
 
 void QgsDiagramRenderer::_writeXml( QDomElement &rendererElem, QDomDocument &doc, const QgsReadWriteContext &context ) const
 {
-  Q_UNUSED( doc );
-  Q_UNUSED( context );
+  Q_UNUSED( doc )
+  Q_UNUSED( context )
 
   if ( mDiagram )
   {
     rendererElem.setAttribute( QStringLiteral( "diagramType" ), mDiagram->diagramName() );
   }
   rendererElem.setAttribute( QStringLiteral( "attributeLegend" ), mShowAttributeLegend );
-}
-
-QgsSingleCategoryDiagramRenderer::QgsSingleCategoryDiagramRenderer(): QgsDiagramRenderer()
-{
 }
 
 QgsSingleCategoryDiagramRenderer *QgsSingleCategoryDiagramRenderer::clone() const
@@ -560,7 +548,7 @@ QgsSingleCategoryDiagramRenderer *QgsSingleCategoryDiagramRenderer::clone() cons
 
 bool QgsSingleCategoryDiagramRenderer::diagramSettings( const QgsFeature &, const QgsRenderContext &c, QgsDiagramSettings &s ) const
 {
-  Q_UNUSED( c );
+  Q_UNUSED( c )
   s = mSettings;
   return true;
 }
@@ -599,7 +587,6 @@ void QgsSingleCategoryDiagramRenderer::writeXml( QDomElement &layerElem, QDomDoc
 
 
 QgsLinearlyInterpolatedDiagramRenderer::QgsLinearlyInterpolatedDiagramRenderer()
-  : QgsDiagramRenderer()
 {
   mInterpolationSettings.classificationAttributeIsExpression = false;
 }
@@ -647,7 +634,8 @@ QSet<QString> QgsLinearlyInterpolatedDiagramRenderer::referencedFields( const Qg
   if ( mInterpolationSettings.classificationAttributeIsExpression )
   {
     QgsExpression *expression = mDiagram->getExpression( mInterpolationSettings.classificationAttributeExpression, context );
-    Q_FOREACH ( const QString &field, expression->referencedColumns() )
+    const auto constReferencedColumns = expression->referencedColumns();
+    for ( const QString &field : constReferencedColumns )
     {
       referenced << field;
     }
@@ -749,7 +737,7 @@ QList< QgsLayerTreeModelLegendNode * > QgsDiagramSettings::legendItems( QgsLayer
 {
   QList< QgsLayerTreeModelLegendNode * > list;
   list.reserve( categoryLabels.size() );
-  for ( int i = 0 ; i < categoryLabels.size(); ++i )
+  for ( int i = 0; i < categoryLabels.size(); ++i )
   {
     QPixmap pix( 16, 16 );
     pix.fill( categoryColors[i] );
@@ -792,7 +780,8 @@ QList< QgsLayerTreeModelLegendNode * > QgsLinearlyInterpolatedDiagramRenderer::l
     if ( ddSizeLegend.classes().isEmpty() )
     {
       // automatic class creation if the classes are not defined manually
-      Q_FOREACH ( double v, QgsSymbolLayerUtils::prettyBreaks( mInterpolationSettings.lowerValue, mInterpolationSettings.upperValue, 4 ) )
+      const auto prettyBreaks { QgsSymbolLayerUtils::prettyBreaks( mInterpolationSettings.lowerValue, mInterpolationSettings.upperValue, 4 ) };
+      for ( double v : prettyBreaks )
       {
         double size = mDiagram->legendSize( v, mSettings, mInterpolationSettings );
         sizeClasses << QgsDataDefinedSizeLegend::SizeClass( size, QString::number( v ) );
@@ -801,7 +790,8 @@ QList< QgsLayerTreeModelLegendNode * > QgsLinearlyInterpolatedDiagramRenderer::l
     else
     {
       // manual classes need to get size scaled because the QgsSizeScaleTransformer is not used in diagrams :-(
-      Q_FOREACH ( const QgsDataDefinedSizeLegend::SizeClass &sc, ddSizeLegend.classes() )
+      const auto constClasses = ddSizeLegend.classes();
+      for ( const QgsDataDefinedSizeLegend::SizeClass &sc : constClasses )
       {
         double size = mDiagram->legendSize( sc.size, mSettings, mInterpolationSettings );
         sizeClasses << QgsDataDefinedSizeLegend::SizeClass( size, sc.label );
@@ -809,7 +799,8 @@ QList< QgsLayerTreeModelLegendNode * > QgsLinearlyInterpolatedDiagramRenderer::l
     }
     ddSizeLegend.setClasses( sizeClasses );
 
-    Q_FOREACH ( const QgsLegendSymbolItem &si, ddSizeLegend.legendSymbolList() )
+    const auto constLegendSymbolList = ddSizeLegend.legendSymbolList();
+    for ( const QgsLegendSymbolItem &si : constLegendSymbolList )
     {
       if ( si.dataDefinedSizeLegendSettings() )
         nodes << new QgsDataDefinedSizeLegendNode( nodeLayer, *si.dataDefinedSizeLegendSettings() );

@@ -9,8 +9,6 @@ the Free Software Foundation; either version 2 of the License, or
 __author__ = 'Nyall Dawson'
 __date__ = '30/07/2017'
 __copyright__ = 'Copyright 2017, The QGIS Project'
-# This will get replaced with a git SHA1 when you do a git archive
-__revision__ = '$Format:%H$'
 
 import qgis  # NOQA
 
@@ -32,13 +30,13 @@ def createReferencingLayer():
                            "referencinglayer", "memory")
     pr = layer.dataProvider()
     f1 = QgsFeature()
-    f1.setFields(layer.pendingFields())
+    f1.setFields(layer.fields())
     f1.setAttributes(["test1", 123])
     f2 = QgsFeature()
-    f2.setFields(layer.pendingFields())
+    f2.setFields(layer.fields())
     f2.setAttributes(["test2", 123])
     f3 = QgsFeature()
-    f3.setFields(layer.pendingFields())
+    f3.setFields(layer.fields())
     f3.setAttributes(["foobar'bar", 124])
     assert pr.addFeatures([f1, f2, f3])
     return layer
@@ -50,13 +48,13 @@ def createReferencedLayer():
         "referencedlayer", "memory")
     pr = layer.dataProvider()
     f1 = QgsFeature()
-    f1.setFields(layer.pendingFields())
+    f1.setFields(layer.fields())
     f1.setAttributes(["foo", 123, 321])
     f2 = QgsFeature()
-    f2.setFields(layer.pendingFields())
+    f2.setFields(layer.fields())
     f2.setAttributes(["bar", 456, 654])
     f3 = QgsFeature()
-    f3.setFields(layer.pendingFields())
+    f3.setFields(layer.fields())
     f3.setAttributes(["foobar'bar", 789, 554])
     assert pr.addFeatures([f1, f2, f3])
     return layer

@@ -27,14 +27,20 @@ QgsRelationReferenceConfigDlg::QgsRelationReferenceConfigDlg( QgsVectorLayer *vl
 
 {
   setupUi( this );
+  connect( mAddFilterButton, &QToolButton::clicked, this, &QgsRelationReferenceConfigDlg::mAddFilterButton_clicked );
+  connect( mRemoveFilterButton, &QToolButton::clicked, this, &QgsRelationReferenceConfigDlg::mRemoveFilterButton_clicked );
 
   mExpressionWidget->registerExpressionContextGenerator( vl );
 
   connect( mComboRelation, static_cast<void ( QComboBox::* )( int )>( &QComboBox::currentIndexChanged ), this, &QgsRelationReferenceConfigDlg::relationChanged );
 
-  Q_FOREACH ( const QgsRelation &relation, vl->referencingRelations( fieldIdx ) )
+  const auto constReferencingRelations = vl->referencingRelations( fieldIdx );
+  for ( const QgsRelation &relation : constReferencingRelations )
   {
-    mComboRelation->addItem( QStringLiteral( "%1 (%2)" ).arg( relation.id(), relation.referencedLayerId() ), relation.id() );
+    if ( relation.name().isEmpty() )
+      mComboRelation->addItem( QStringLiteral( "%1 (%2)" ).arg( relation.id(), relation.referencedLayerId() ), relation.id() );
+    else
+      mComboRelation->addItem( QStringLiteral( "%1 (%2)" ).arg( relation.name(), relation.referencedLayerId() ), relation.id() );
     if ( relation.referencedLayer() )
     {
       mExpressionWidget->setField( relation.referencedLayer()->displayExpression() );
@@ -75,7 +81,8 @@ void QgsRelationReferenceConfigDlg::setConfig( const QVariantMap &config )
   if ( config.contains( QStringLiteral( "FilterFields" ) ) )
   {
     mFilterGroupBox->setChecked( true );
-    Q_FOREACH ( const QString &fld, config.value( "FilterFields" ).toStringList() )
+    const auto constToStringList = config.value( "FilterFields" ).toStringList();
+    for ( const QString &fld : constToStringList )
     {
       addFilterField( fld );
     }
@@ -100,17 +107,19 @@ void QgsRelationReferenceConfigDlg::relationChanged( int idx )
   loadFields();
 }
 
-void QgsRelationReferenceConfigDlg::on_mAddFilterButton_clicked()
+void QgsRelationReferenceConfigDlg::mAddFilterButton_clicked()
 {
-  Q_FOREACH ( QListWidgetItem *item, mAvailableFieldsList->selectedItems() )
+  const auto constSelectedItems = mAvailableFieldsList->selectedItems();
+  for ( QListWidgetItem *item : constSelectedItems )
   {
     addFilterField( item );
   }
 }
 
-void QgsRelationReferenceConfigDlg::on_mRemoveFilterButton_clicked()
+void QgsRelationReferenceConfigDlg::mRemoveFilterButton_clicked()
 {
-  Q_FOREACH ( QListWidgetItem *item, mFilterFieldsList->selectedItems() )
+  const auto constSelectedItems = mFilterFieldsList->selectedItems();
+  for ( QListWidgetItem *item : constSelectedItems )
   {
     mFilterFieldsList->takeItem( indexFromListWidgetItem( item ) );
     mAvailableFieldsList->addItem( item );

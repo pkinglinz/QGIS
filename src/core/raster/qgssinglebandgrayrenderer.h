@@ -19,14 +19,15 @@
 #define QGSSINGLEBANDGRAYRENDERER_H
 
 #include "qgis_core.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsrasterrenderer.h"
 #include <memory>
 
 class QgsContrastEnhancement;
 class QDomElement;
 
-/** \ingroup core
+/**
+ * \ingroup core
   * Raster renderer pipe for single band gray.
   */
 class CORE_EXPORT QgsSingleBandGrayRenderer: public QgsRasterRenderer
@@ -65,6 +66,8 @@ class CORE_EXPORT QgsSingleBandGrayRenderer: public QgsRasterRenderer
     void legendSymbologyItems( QList< QPair< QString, QColor > > &symbolItems SIP_OUT ) const override;
 
     QList<int> usesBands() const override;
+
+    void toSld( QDomDocument &doc, QDomElement &element, const QgsStringMap &props = QgsStringMap() ) const override;
 
   private:
 #ifdef SIP_RUN

@@ -32,13 +32,16 @@ QgsAddTabOrGroup::QgsAddTabOrGroup( QgsVectorLayer *lyr, const QList < TabPair >
   , mTabs( tabList )
 {
   setupUi( this );
+  connect( mGroupButton, &QRadioButton::toggled, this, &QgsAddTabOrGroup::mGroupButton_toggled );
+  connect( mTabButton, &QRadioButton::toggled, this, &QgsAddTabOrGroup::mTabButton_toggled );
 
   mTabButton->setChecked( true );
   mTabList->setEnabled( false );
   if ( !mTabs.isEmpty() )
   {
     int i = 0;
-    Q_FOREACH ( const TabPair &tab, mTabs )
+    const auto constMTabs = mTabs;
+    for ( const TabPair &tab : constMTabs )
     {
       mTabList->addItem( tab.first, i );
       ++i;
@@ -49,8 +52,6 @@ QgsAddTabOrGroup::QgsAddTabOrGroup( QgsVectorLayer *lyr, const QList < TabPair >
     mGroupButton->setEnabled( false );
   }
 
-  connect( mTabButton, &QAbstractButton::toggled, this, &QgsAddTabOrGroup::on_mTabButton_toggled );
-  connect( mGroupButton, &QAbstractButton::toggled, this, &QgsAddTabOrGroup::on_mGroupButton_toggled );
   connect( buttonBox, &QDialogButtonBox::helpRequested, this, &QgsAddTabOrGroup::showHelp );
 
   mColumnCountSpinBox->setValue( QgsSettings().value( QStringLiteral( "/qgis/attributeForm/defaultTabColumnCount" ), 1 ).toInt() );
@@ -96,7 +97,7 @@ void QgsAddTabOrGroup::accept()
   QDialog::accept();
 }
 
-void QgsAddTabOrGroup::on_mGroupButton_toggled( bool checked )
+void QgsAddTabOrGroup::mGroupButton_toggled( bool checked )
 {
   mTabList->setEnabled( checked );
 
@@ -106,7 +107,7 @@ void QgsAddTabOrGroup::on_mGroupButton_toggled( bool checked )
   }
 }
 
-void QgsAddTabOrGroup::on_mTabButton_toggled( bool checked )
+void QgsAddTabOrGroup::mTabButton_toggled( bool checked )
 {
   mTabList->setEnabled( !checked );
   if ( checked )
@@ -115,5 +116,5 @@ void QgsAddTabOrGroup::on_mTabButton_toggled( bool checked )
 
 void QgsAddTabOrGroup::showHelp()
 {
-  QgsHelp::openHelp( QStringLiteral( "working_with_vector/vector_properties.html#customize-a-form-for-your-data" ) );
+  QgsHelp::openHelp( QStringLiteral( "working_with_vector/vector_properties.html#the-drag-and-drop-designer" ) );
 }

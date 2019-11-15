@@ -20,21 +20,8 @@
 
 #include <memory>
 
-QgsRegularPolygon::QgsRegularPolygon()
-  : mCenter( QgsPoint() )
-  , mFirstVertex( QgsPoint() )
-  , mNumberSides( 0 )
-  , mRadius( 0.0 )
-{
-
-}
-
-
 QgsRegularPolygon::QgsRegularPolygon( const QgsPoint &center, const double radius, const double azimuth, const unsigned int numSides, const ConstructionOption circle )
   : mCenter( center )
-  , mFirstVertex( QgsPoint() )
-  , mNumberSides( 0 )
-  , mRadius( 0.0 )
 {
   // TODO: inclination
 
@@ -64,9 +51,6 @@ QgsRegularPolygon::QgsRegularPolygon( const QgsPoint &center, const double radiu
 
 QgsRegularPolygon::QgsRegularPolygon( const QgsPoint &center, const QgsPoint &pt1, const unsigned int numSides, const ConstructionOption circle )
   : mCenter( center )
-  , mFirstVertex( QgsPoint() )
-  , mNumberSides( 0 )
-  , mRadius( 0.0 )
 {
   if ( numSides >= 3 )
   {
@@ -95,10 +79,6 @@ QgsRegularPolygon::QgsRegularPolygon( const QgsPoint &center, const QgsPoint &pt
 }
 
 QgsRegularPolygon::QgsRegularPolygon( const QgsPoint &pt1, const QgsPoint &pt2, const unsigned int numSides )
-  : mCenter( QgsPoint() )
-  , mFirstVertex( QgsPoint() )
-  , mNumberSides( 0 )
-  , mRadius( 0.0 )
 {
   if ( numSides >= 3 )
   {
@@ -134,13 +114,15 @@ bool QgsRegularPolygon::operator !=( const QgsRegularPolygon &rp ) const
 bool QgsRegularPolygon::isEmpty() const
 {
   return ( ( mNumberSides < 3 ) ||
+           ( mCenter.isEmpty() ) ||
+           ( mFirstVertex.isEmpty() ) ||
            ( mCenter == mFirstVertex )
          );
 }
 
 void QgsRegularPolygon::setCenter( const QgsPoint &center )
 {
-  double azimuth = mCenter.azimuth( mFirstVertex );
+  double azimuth = mFirstVertex.isEmpty() ? 0 : mCenter.azimuth( mFirstVertex );
   // TODO: double inclination = mCenter.inclination(mFirstVertex);
   mCenter = center;
   mFirstVertex = center.project( mRadius, azimuth );
@@ -149,7 +131,7 @@ void QgsRegularPolygon::setCenter( const QgsPoint &center )
 void QgsRegularPolygon::setRadius( const double radius )
 {
   mRadius = std::fabs( radius );
-  double azimuth = mCenter.azimuth( mFirstVertex );
+  double azimuth = mFirstVertex.isEmpty() ? 0 : mCenter.azimuth( mFirstVertex );
   // TODO: double inclination = mCenter.inclination(mFirstVertex);
   mFirstVertex = mCenter.project( mRadius, azimuth );
 }
@@ -178,7 +160,7 @@ QgsPointSequence QgsRegularPolygon::points() const
     return pts;
   }
 
-  double azimuth =  mCenter.azimuth( mFirstVertex );
+  double azimuth = mCenter.azimuth( mFirstVertex );
   double azimuth_add = centralAngle();
   // TODO: inclination
 
@@ -198,9 +180,9 @@ QgsPointSequence QgsRegularPolygon::points() const
   return pts;
 }
 
-QgsPolygonV2 *QgsRegularPolygon::toPolygon() const
+QgsPolygon *QgsRegularPolygon::toPolygon() const
 {
-  std::unique_ptr<QgsPolygonV2> polygon( new QgsPolygonV2() );
+  std::unique_ptr<QgsPolygon> polygon( new QgsPolygon() );
   if ( isEmpty() )
   {
     return polygon.release();
@@ -223,6 +205,7 @@ QgsLineString *QgsRegularPolygon::toLineString() const
   pts = points();
 
   ext->setPoints( pts );
+  ext->addVertex( pts.at( 0 ) ); //close regular polygon
 
   return ext.release();
 }
@@ -240,9 +223,9 @@ QgsTriangle QgsRegularPolygon::toTriangle() const
   return QgsTriangle( pts.at( 0 ), pts.at( 1 ), pts.at( 2 ) );
 }
 
-QList<QgsTriangle> QgsRegularPolygon::triangulate() const
+QVector<QgsTriangle> QgsRegularPolygon::triangulate() const
 {
-  QList<QgsTriangle> l_tri;
+  QVector<QgsTriangle> l_tri;
   if ( isEmpty() )
   {
     return l_tri;
@@ -298,7 +281,7 @@ double QgsRegularPolygon::area() const
     return 0.0;
   }
 
-  return ( mRadius * mRadius * mNumberSides * std::sin( centralAngle() * M_PI / 180.0 ) ) / 2 ;
+  return ( mRadius * mRadius * mNumberSides * std::sin( centralAngle() * M_PI / 180.0 ) ) / 2;
 }
 
 double QgsRegularPolygon::perimeter() const

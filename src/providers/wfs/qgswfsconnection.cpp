@@ -28,16 +28,32 @@ QgsWfsConnection::QgsWfsConnection( const QString &connName )
   const QString &version = settings.value( key + "/" + QgsWFSConstants::SETTINGS_VERSION ).toString();
   if ( !version.isEmpty() )
   {
+    mUri.removeParam( QgsWFSConstants::URI_PARAM_VERSION ); // setParam allow for duplicates!
     mUri.setParam( QgsWFSConstants::URI_PARAM_VERSION, version );
   }
 
   const QString &maxnumfeatures = settings.value( key + "/" + QgsWFSConstants::SETTINGS_MAXNUMFEATURES ).toString();
   if ( !maxnumfeatures.isEmpty() )
   {
+    mUri.removeParam( QgsWFSConstants::URI_PARAM_MAXNUMFEATURES ); // setParam allow for duplicates!
     mUri.setParam( QgsWFSConstants::URI_PARAM_MAXNUMFEATURES, maxnumfeatures );
   }
 
-  QgsDebugMsg( QString( "WFS full uri: '%1'." ).arg( QString( mUri.uri() ) ) );
+  const QString &pagesize = settings.value( key + "/" + QgsWFSConstants::SETTINGS_PAGE_SIZE ).toString();
+  if ( !pagesize.isEmpty() )
+  {
+    mUri.removeParam( QgsWFSConstants::URI_PARAM_PAGE_SIZE ); // setParam allow for duplicates!
+    mUri.setParam( QgsWFSConstants::URI_PARAM_PAGE_SIZE, pagesize );
+  }
+
+  if ( settings.contains( key + "/" + QgsWFSConstants::SETTINGS_PAGING_ENABLED ) )
+  {
+    mUri.removeParam( QgsWFSConstants::URI_PARAM_PAGING_ENABLED ); // setParam allow for duplicates!
+    mUri.setParam( QgsWFSConstants::URI_PARAM_PAGING_ENABLED,
+                   settings.value( key + "/" + QgsWFSConstants::SETTINGS_PAGING_ENABLED, true ).toBool() ? QStringLiteral( "true" ) : QStringLiteral( "false" ) );
+  }
+
+  QgsDebugMsgLevel( QStringLiteral( "WFS full uri: '%1'." ).arg( QString( mUri.uri() ) ), 4 );
 }
 
 QStringList QgsWfsConnection::connectionList()

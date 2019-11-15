@@ -23,12 +23,19 @@
      </widget>
     </item>
     <item>
+     <widget class="QgsFilterLineEdit" name="mLeFilter">
+      <property name="placeholderText">
+       <string>Search…</string>
+      </property>
+     </widget>
+    </item>
+    <item>
      <widget class="QTreeWidget" name="treeWidget">
       <property name="selectionBehavior">
        <enum>QAbstractItemView::SelectItems</enum>
       </property>
       <property name="columnCount">
-       <number>3</number>
+       <number>2</number>
       </property>
       <attribute name="headerVisible">
        <bool>true</bool>
@@ -41,11 +48,6 @@
       <column>
        <property name="text">
         <string notr="true">2</string>
-       </property>
-      </column>
-      <column>
-       <property name="text">
-        <string notr="true">3</string>
        </property>
       </column>
      </widget>

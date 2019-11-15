@@ -21,6 +21,8 @@
 #include "qgis_gui.h"
 
 class QgsLayoutView;
+class QGraphicsLineItem;
+class QgsLayoutItem;
 
 /**
  * \ingroup gui
@@ -48,13 +50,23 @@ class GUI_EXPORT QgsLayoutViewMouseEvent : public QMouseEvent
      * Constructor for QgsLayoutViewMouseEvent. Should only be required to be called from the QgsLayoutView.
      * \param view The view in which the event occurred.
      * \param event The original mouse event
-     * \param snap set to true to snap the point using the layout's snapping settings
+     * \param snap set to TRUE to snap the point using the layout's snapping settings
      */
     QgsLayoutViewMouseEvent( QgsLayoutView *view, QMouseEvent *event, bool snap = false );
 
     /**
+     * Manually triggers a snap for the mouse event position using the layout's snapper.
+     *
+     * If the \a horizontalSnapLine and \a verticalSnapLine arguments are specified, then the snapper
+     * will automatically display and position these lines to indicate snapping positions to item bounds.
+     *
+     * The \a ignoreItems argument can be used to specify a list of items to avoid snapping to.
+     */
+    void snapPoint( QGraphicsLineItem *horizontalSnapLine = nullptr, QGraphicsLineItem *verticalSnapLine = nullptr,
+                    const QList<QgsLayoutItem *> &ignoreItems = QList< QgsLayoutItem * >() );
+
+    /**
      * Returns the event point location in layout coordinates.
-     * \see pos()
      */
     QPointF layoutPoint() const;
 
@@ -62,12 +74,11 @@ class GUI_EXPORT QgsLayoutViewMouseEvent : public QMouseEvent
      * Returns the snapped event point location in layout coordinates. The snapped point will consider
      * all possible snapping methods, such as snapping to grid or guide lines.
      * \see isSnapped()
-     * \see pos()
      */
     QPointF snappedPoint() const { return mSnappedPoint; }
 
     /**
-     * Returns true if point was snapped, e.g. to grid or guide lines.
+     * Returns TRUE if point was snapped, e.g. to grid or guide lines.
      * \see snappedPoint()
      */
     bool isSnapped() const { return mSnapped; }

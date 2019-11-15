@@ -21,6 +21,7 @@
 #include "qgslogger.h"
 #include "qgsproject.h"
 #include "qgsvectordataprovider.h"
+#include "qgsauxiliarystorage.h"
 
 #include <QDomElement>
 
@@ -32,7 +33,8 @@ QgsVectorLayerJoinBuffer::QgsVectorLayerJoinBuffer( QgsVectorLayer *layer )
 static QList<QgsVectorLayer *> _outEdges( QgsVectorLayer *vl )
 {
   QList<QgsVectorLayer *> lst;
-  Q_FOREACH ( const QgsVectorLayerJoinInfo &info, vl->vectorJoins() )
+  const auto constVectorJoins = vl->vectorJoins();
+  for ( const QgsVectorLayerJoinInfo &info : constVectorJoins )
   {
     if ( QgsVectorLayer *joinVl = info.joinLayer() )
       lst << joinVl;
@@ -47,7 +49,8 @@ static bool _hasCycleDFS( QgsVectorLayer *n, QHash<QgsVectorLayer *, int> &mark 
   if ( mark.value( n ) == 0 ) // not visited
   {
     mark[n] = 1; // temporary
-    Q_FOREACH ( QgsVectorLayer *m, _outEdges( n ) )
+    const auto outEdges { _outEdges( n ) };
+    for ( QgsVectorLayer *m : outEdges )
     {
       if ( _hasCycleDFS( m, mark ) )
         return true;
@@ -87,6 +90,8 @@ bool QgsVectorLayerJoinBuffer::addJoin( const QgsVectorLayerJoinInfo &joinInfo )
   {
     connectJoinedLayer( vl );
   }
+
+  locker.unlock();
 
   emit joinedFieldsChanged();
   return true;
@@ -137,11 +142,11 @@ void QgsVectorLayerJoinBuffer::cacheJoinLayer( QgsVectorLayerJoinInfo &joinInfo 
     request.setFlags( QgsFeatureRequest::NoGeometry );
     // maybe user requested just a subset of layer's attributes
     // so we do not have to cache everything
-    bool hasSubset = joinInfo.joinFieldNamesSubset();
     QVector<int> subsetIndices;
-    if ( hasSubset )
+    if ( joinInfo.hasSubset() )
     {
-      subsetIndices = joinSubsetIndices( cacheLayer, *joinInfo.joinFieldNamesSubset() );
+      const QStringList subsetNames = QgsVectorLayerJoinInfo::joinFieldNamesSubset( joinInfo );
+      subsetIndices = joinSubsetIndices( cacheLayer, subsetNames );
 
       // we need just subset of attributes - but make sure to include join field name
       QgsAttributeList cacheLayerAttrs = subsetIndices.toList();
@@ -156,7 +161,7 @@ void QgsVectorLayerJoinBuffer::cacheJoinLayer( QgsVectorLayerJoinInfo &joinInfo 
     {
       QgsAttributes attrs = f.attributes();
       QString key = attrs.at( joinFieldIndex ).toString();
-      if ( hasSubset )
+      if ( joinInfo.hasSubset() )
       {
         QgsAttributes subsetAttrs( subsetIndices.count() );
         for ( int i = 0; i < subsetIndices.count(); ++i )
@@ -201,7 +206,7 @@ void QgsVectorLayerJoinBuffer::updateFields( QgsFields &fields )
   QString prefix;
 
   QList< QgsVectorLayerJoinInfo>::const_iterator joinIt = mVectorJoins.constBegin();
-  for ( int joinIdx = 0 ; joinIt != mVectorJoins.constEnd(); ++joinIt, ++joinIdx )
+  for ( int joinIdx = 0; joinIt != mVectorJoins.constEnd(); ++joinIt, ++joinIdx )
   {
     QgsVectorLayer *joinLayer = joinIt->joinLayer();
     if ( !joinLayer )
@@ -213,11 +218,10 @@ void QgsVectorLayerJoinBuffer::updateFields( QgsFields &fields )
     QString joinFieldName = joinIt->joinFieldName();
 
     QSet<QString> subset;
-    bool hasSubset = false;
-    if ( joinIt->joinFieldNamesSubset() )
+    if ( joinIt->hasSubset() )
     {
-      hasSubset = true;
-      subset = QSet<QString>::fromList( *joinIt->joinFieldNamesSubset() );
+      const QStringList subsetNames = QgsVectorLayerJoinInfo::joinFieldNamesSubset( *joinIt );
+      subset = QSet<QString>::fromList( subsetNames );
     }
 
     if ( joinIt->prefix().isNull() )
@@ -232,12 +236,12 @@ void QgsVectorLayerJoinBuffer::updateFields( QgsFields &fields )
     for ( int idx = 0; idx < joinFields.count(); ++idx )
     {
       // if using just a subset of fields, filter some of them out
-      if ( hasSubset && !subset.contains( joinFields.at( idx ).name() ) )
+      if ( joinIt->hasSubset() && !subset.contains( joinFields.at( idx ).name() ) )
         continue;
 
       //skip the join field to avoid double field names (fields often have the same name)
       // when using subset of field, use all the selected fields
-      if ( hasSubset || joinFields.at( idx ).name() != joinFieldName )
+      if ( joinIt->hasSubset() || joinFields.at( idx ).name() != joinFieldName )
       {
         QgsField f = joinFields.at( idx );
         f.setName( prefix + f.name() );
@@ -266,6 +270,9 @@ void QgsVectorLayerJoinBuffer::writeXml( QDomNode &layer_node, QDomDocument &doc
   QList< QgsVectorLayerJoinInfo >::const_iterator joinIt = mVectorJoins.constBegin();
   for ( ; joinIt != mVectorJoins.constEnd(); ++joinIt )
   {
+    if ( isAuxiliaryJoin( *joinIt ) )
+      continue;
+
     QDomElement joinElem = document.createElement( QStringLiteral( "join" ) );
 
     joinElem.setAttribute( QStringLiteral( "targetFieldName" ), joinIt->targetFieldName() );
@@ -279,10 +286,13 @@ void QgsVectorLayerJoinBuffer::writeXml( QDomNode &layer_node, QDomDocument &doc
     joinElem.setAttribute( QStringLiteral( "upsertOnEdit" ), joinIt->hasUpsertOnEdit() );
     joinElem.setAttribute( QStringLiteral( "cascadedDelete" ), joinIt->hasCascadedDelete() );
 
-    if ( joinIt->joinFieldNamesSubset() )
+    if ( joinIt->hasSubset() )
     {
       QDomElement subsetElem = document.createElement( QStringLiteral( "joinFieldsSubset" ) );
-      Q_FOREACH ( const QString &fieldName, *joinIt->joinFieldNamesSubset() )
+      const QStringList subsetNames = QgsVectorLayerJoinInfo::joinFieldNamesSubset( *joinIt );
+
+      const auto constSubsetNames = subsetNames;
+      for ( const QString &fieldName : constSubsetNames )
       {
         QDomElement fieldElem = document.createElement( QStringLiteral( "field" ) );
         fieldElem.setAttribute( QStringLiteral( "name" ), fieldName );
@@ -403,7 +413,8 @@ QList<const QgsVectorLayerJoinInfo *> QgsVectorLayerJoinBuffer::joinsWhereFieldI
 {
   QList<const QgsVectorLayerJoinInfo *> infos;
 
-  Q_FOREACH ( const QgsVectorLayerJoinInfo &info, mVectorJoins )
+  const auto constMVectorJoins = mVectorJoins;
+  for ( const QgsVectorLayerJoinInfo &info : constMVectorJoins )
   {
     if ( infos.contains( &info ) )
       continue;
@@ -523,7 +534,8 @@ bool QgsVectorLayerJoinBuffer::addFeatures( QgsFeatureList &features, QgsFeature
     return false;
 
   // try to add/update a feature in each joined layer
-  Q_FOREACH ( const QgsVectorLayerJoinInfo &info, vectorJoins() )
+  const auto constVectorJoins = vectorJoins();
+  for ( const QgsVectorLayerJoinInfo &info : constVectorJoins )
   {
     QgsVectorLayer *joinLayer = info.joinLayer();
 
@@ -531,7 +543,8 @@ bool QgsVectorLayerJoinBuffer::addFeatures( QgsFeatureList &features, QgsFeature
     {
       QgsFeatureList joinFeatures;
 
-      Q_FOREACH ( const QgsFeature &feature, features )
+      const auto constFeatures = features;
+      for ( const QgsFeature &feature : constFeatures )
       {
         const QgsFeature joinFeature = info.extractJoinedFeature( feature );
 
@@ -542,7 +555,7 @@ bool QgsVectorLayerJoinBuffer::addFeatures( QgsFeatureList &features, QgsFeature
 
         QgsFeatureRequest request;
         request.setFlags( QgsFeatureRequest::NoGeometry );
-        request.setSubsetOfAttributes( QgsAttributeList() );
+        request.setNoAttributes();
         request.setFilterExpression( filter );
         request.setLimit( 1 );
 
@@ -552,10 +565,11 @@ bool QgsVectorLayerJoinBuffer::addFeatures( QgsFeatureList &features, QgsFeature
 
         if ( existingFeature.isValid() )
         {
-          const QStringList *subsetFields = info.joinFieldNamesSubset();
-          if ( subsetFields )
+          if ( info.hasSubset() )
           {
-            Q_FOREACH ( const QString &field, *subsetFields )
+            const QStringList subsetNames = QgsVectorLayerJoinInfo::joinFieldNamesSubset( info );
+            const auto constSubsetNames = subsetNames;
+            for ( const QString &field : constSubsetNames )
             {
               QVariant newValue = joinFeature.attribute( field );
               int fieldIndex = joinLayer->fields().indexOf( field );
@@ -630,6 +644,25 @@ bool QgsVectorLayerJoinBuffer::changeAttributeValue( QgsFeatureId fid, int field
     return false;
 }
 
+bool QgsVectorLayerJoinBuffer::changeAttributeValues( QgsFeatureId fid, const QgsAttributeMap &newValues, const QgsAttributeMap &oldValues )
+{
+  bool success = true;
+
+  for ( auto it = newValues.constBegin(); it != newValues.constEnd(); ++it )
+  {
+    const int field = it.key();
+    const QVariant newValue = it.value();
+    QVariant oldValue;
+
+    if ( oldValues.contains( field ) )
+      oldValue = oldValues[field];
+
+    success &= changeAttributeValue( fid, field, newValue, oldValue );
+  }
+
+  return success;
+}
+
 bool QgsVectorLayerJoinBuffer::deleteFeature( QgsFeatureId fid ) const
 {
   return deleteFeatures( QgsFeatureIds() << fid );
@@ -640,9 +673,11 @@ bool QgsVectorLayerJoinBuffer::deleteFeatures( const QgsFeatureIds &fids ) const
   if ( !containsJoins() )
     return false;
 
-  Q_FOREACH ( const QgsFeatureId &fid, fids )
+  const auto constFids = fids;
+  for ( const QgsFeatureId &fid : constFids )
   {
-    Q_FOREACH ( const QgsVectorLayerJoinInfo &info, vectorJoins() )
+    const auto constVectorJoins = vectorJoins();
+    for ( const QgsVectorLayerJoinInfo &info : constVectorJoins )
     {
       if ( info.isEditable() && info.hasCascadedDelete() )
       {
@@ -654,4 +689,11 @@ bool QgsVectorLayerJoinBuffer::deleteFeatures( const QgsFeatureIds &fids ) const
   }
 
   return true;
+}
+
+bool QgsVectorLayerJoinBuffer::isAuxiliaryJoin( const QgsVectorLayerJoinInfo &info ) const
+{
+  const QgsAuxiliaryLayer *al = mLayer->auxiliaryLayer();
+
+  return al && al->id() == info.joinLayerId();
 }

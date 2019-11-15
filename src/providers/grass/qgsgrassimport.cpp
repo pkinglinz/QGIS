@@ -76,7 +76,7 @@ void QgsGrassImportProgress::onReadyReadStandardError()
       QgsDebugMsg( "line = '" + line + "'" );
       QString text, html;
       int value;
-      QgsGrass::ModuleOutput type =  QgsGrass::parseModuleOutput( line, text, html, value );
+      QgsGrass::ModuleOutput type = QgsGrass::parseModuleOutput( line, text, html, value );
       if ( type == QgsGrass::OutputPercent )
       {
         mProgressMin = 0;
@@ -113,23 +113,19 @@ void QgsGrassImportProgress::setRange( int min, int max )
   mProgressMin = min;
   mProgressMax = max;
   mProgressValue = min;
-  emit progressChanged( QLatin1String( "" ), mProgressHtml, mProgressMin, mProgressMax, mProgressValue );
+  emit progressChanged( QString(), mProgressHtml, mProgressMin, mProgressMax, mProgressValue );
 }
 
 void QgsGrassImportProgress::setValue( int value )
 {
   mProgressValue = value;
-  emit progressChanged( QLatin1String( "" ), mProgressHtml, mProgressMin, mProgressMax, mProgressValue );
+  emit progressChanged( QString(), mProgressHtml, mProgressMin, mProgressMax, mProgressValue );
 }
 
 //------------------------------ QgsGrassImport ------------------------------------
 QgsGrassImport::QgsGrassImport( const QgsGrassObject &grassObject )
-  : QObject()
-  , mGrassObject( grassObject )
+  : mGrassObject( grassObject )
   , mCanceled( false )
-  , mProcess( 0 )
-  , mProgress( 0 )
-  , mFutureWatcher( 0 )
 {
   // QMovie used by QgsAnimatedIcon is using QTimer which cannot be start from another thread
   // (it works on Linux however) so we cannot start it connecting from QgsGrassImportItem and
@@ -352,7 +348,7 @@ bool QgsGrassRasterImport::import()
     int iterTop = 0;
     int iterCols = 0;
     int iterRows = 0;
-    QgsRasterBlock *block = 0;
+    QgsRasterBlock *block = nullptr;
     mProcess->setReadChannel( QProcess::StandardOutput );
     mProgress->setRange( 0, mYSize - 1 );
     while ( iter.readNextRasterPart( band, iterCols, iterRows, &block, iterLeft, iterTop ) )
@@ -449,7 +445,7 @@ bool QgsGrassRasterImport::import()
     if ( mProcess->exitStatus() != QProcess::NormalExit )
     {
       setError( mProcess->errorString() );
-      mProcess = 0;
+      mProcess = nullptr;
       return false;
     }
 
@@ -457,12 +453,12 @@ bool QgsGrassRasterImport::import()
     {
       setError( stderrString );
       delete mProcess;
-      mProcess = 0;
+      mProcess = nullptr;
       return false;
     }
 
     delete mProcess;
-    mProcess = 0;
+    mProcess = nullptr;
   }
   QgsDebugMsg( QString( "redBand = %1 greenBand = %2 blueBand = %3" ).arg( redBand ).arg( greenBand ).arg( blueBand ) );
   if ( redBand > 0 && greenBand > 0 && blueBand > 0 )
@@ -475,14 +471,14 @@ bool QgsGrassRasterImport::import()
     {
       QgsGrass::setMapset( mGrassObject.gisdbase(), mGrassObject.location(), mGrassObject.mapset() );
       struct Ref ref;
-      I_get_group_ref( name.toUtf8().data(), &ref );
+      I_get_group_ref( name.toUtf8().constData(), &ref );
       QString redName = name + QStringLiteral( ".%1" ).arg( redBand );
       QString greenName = name + QStringLiteral( ".%1" ).arg( greenBand );
       QString blueName = name + QStringLiteral( ".%1" ).arg( blueBand );
-      I_add_file_to_group_ref( redName.toUtf8().data(), mGrassObject.mapset().toUtf8().data(), &ref );
-      I_add_file_to_group_ref( greenName.toUtf8().data(), mGrassObject.mapset().toUtf8().data(), &ref );
-      I_add_file_to_group_ref( blueName.toUtf8().data(), mGrassObject.mapset().toUtf8().data(), &ref );
-      I_put_group_ref( name.toUtf8().data(), &ref );
+      I_add_file_to_group_ref( redName.toUtf8().constData(), mGrassObject.mapset().toUtf8().constData(), &ref );
+      I_add_file_to_group_ref( greenName.toUtf8().constData(), mGrassObject.mapset().toUtf8().constData(), &ref );
+      I_add_file_to_group_ref( blueName.toUtf8().constData(), mGrassObject.mapset().toUtf8().constData(), &ref );
+      I_put_group_ref( name.toUtf8().constData(), &ref );
     }
     G_CATCH( QgsGrass::Exception & e )
     {
@@ -496,7 +492,7 @@ QString QgsGrassRasterImport::srcDescription() const
 {
   if ( !mPipe || !mPipe->provider() )
   {
-    return QLatin1String( "" );
+    return QString();
   }
   return mPipe->provider()->dataSourceUri();
 }
@@ -732,7 +728,7 @@ bool QgsGrassVectorImport::import()
   {
     setError( mProcess->errorString() );
     delete mProcess;
-    mProcess = 0;
+    mProcess = nullptr;
     return false;
   }
 
@@ -740,12 +736,12 @@ bool QgsGrassVectorImport::import()
   {
     setError( stderrString );
     delete mProcess;
-    mProcess = 0;
+    mProcess = nullptr;
     return false;
   }
 
   delete mProcess;
-  mProcess = 0;
+  mProcess = nullptr;
   return true;
 }
 
@@ -753,7 +749,7 @@ QString QgsGrassVectorImport::srcDescription() const
 {
   if ( !mProvider )
   {
-    return QLatin1String( "" );
+    return QString();
   }
   return mProvider->dataSourceUri();
 }

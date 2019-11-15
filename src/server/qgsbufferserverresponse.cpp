@@ -18,10 +18,7 @@
  ***************************************************************************/
 
 #include "qgsbufferserverresponse.h"
-#include "qgslogger.h"
 #include "qgsmessagelog.h"
-
-#include <QDebug>
 
 //
 // QgsBufferServerResponse
@@ -30,11 +27,6 @@
 QgsBufferServerResponse::QgsBufferServerResponse()
 {
   mBuffer.open( QIODevice::ReadWrite );
-}
-
-QgsBufferServerResponse::~QgsBufferServerResponse()
-{
-
 }
 
 void QgsBufferServerResponse::removeHeader( const QString &key )

@@ -16,15 +16,10 @@
 *                                                                         *
 ***************************************************************************
 """
-from builtins import str
 
 __author__ = 'Victor Olaya, Carterix Geomatics'
 __date__ = 'October 2012'
 __copyright__ = '(C) 2012, Victor Olaya, Carterix Geomatics'
-
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
 
 from qgis.core import (QgsProcessingException, QgsProcessingParameterString)
 from processing.algs.qgis.QgisAlgorithm import QgisAlgorithm
@@ -39,6 +34,9 @@ class PostGISExecuteSQL(QgisAlgorithm):
     def group(self):
         return self.tr('Database')
 
+    def groupId(self):
+        return 'database'
+
     def __init__(self):
         super().__init__()
 
@@ -50,13 +48,19 @@ class PostGISExecuteSQL(QgisAlgorithm):
             'widget_wrapper': {
                 'class': 'processing.gui.wrappers_postgis.ConnectionWidgetWrapper'}})
         self.addParameter(db_param)
-        self.addParameter(QgsProcessingParameterString(self.SQL, self.tr('SQL query')))
+        self.addParameter(QgsProcessingParameterString(self.SQL, self.tr('SQL query'), multiLine=True))
 
     def name(self):
         return 'postgisexecutesql'
 
     def displayName(self):
-        return self.tr('PostGIS execute SQL')
+        return self.tr('PostgreSQL execute SQL')
+
+    def shortDescription(self):
+        return self.tr('Executes a SQL command on a PostgreSQL database')
+
+    def tags(self):
+        return self.tr('postgis,database').split(',')
 
     def processAlgorithm(self, parameters, context, feedback):
         connection = self.parameterAsString(parameters, self.DATABASE, context)

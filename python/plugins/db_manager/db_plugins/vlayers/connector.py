@@ -24,7 +24,15 @@ from qgis.PyQt.QtCore import QUrl, QTemporaryFile
 from ..connector import DBConnector
 from ..plugin import Table
 
-from qgis.core import QgsDataSourceUri, QgsVirtualLayerDefinition, QgsProject, QgsMapLayer, QgsVectorLayer, QgsCoordinateReferenceSystem, QgsWkbTypes
+from qgis.core import (
+    QgsDataSourceUri,
+    QgsVirtualLayerDefinition,
+    QgsProject,
+    QgsMapLayerType,
+    QgsVectorLayer,
+    QgsCoordinateReferenceSystem,
+    QgsWkbTypes
+)
 
 import sqlite3
 
@@ -96,6 +104,9 @@ class VLayerRegistry(object):
         lid = self.layers.get(l)
         if lid is None:
             return lid
+        if lid not in QgsProject.instance().mapLayers().keys():
+            self.layers.pop(l)
+            return None
         return QgsProject.instance().mapLayer(lid)
 
 
@@ -190,8 +201,8 @@ class VLayerConnector(DBConnector):
         reg = VLayerRegistry.instance()
         VLayerRegistry.instance().reset()
         lst = []
-        for _, l in list(QgsProject.instance().mapLayers().items()):
-            if l.type() == QgsMapLayer.VectorLayer:
+        for _, l in QgsProject.instance().mapLayers().items():
+            if l.type() == QgsMapLayerType.VectorLayer:
 
                 lname = l.name()
                 # if there is already a layer with this name, use the layer id
@@ -249,12 +260,16 @@ class VLayerConnector(DBConnector):
     def getTableRowCount(self, table):
         t = table[1]
         l = VLayerRegistry.instance().getLayer(t)
+        if not l or not l.isValid():
+            return None
         return l.featureCount()
 
     def getTableFields(self, table):
         """ return list of columns in table """
         t = table[1]
         l = VLayerRegistry.instance().getLayer(t)
+        if not l or not l.isValid():
+            return []
         # id, name, type, nonnull, default, pk
         n = l.dataProvider().fields().size()
         f = [(i, f.name(), f.typeName(), False, None, False)
@@ -280,6 +295,8 @@ class VLayerConnector(DBConnector):
             l = QgsProject.instance().mapLayer(t)
         else:
             l = VLayerRegistry.instance().getLayer(t)
+        if not l or not l.isValid():
+            return None
         e = l.extent()
         r = (e.xMinimum(), e.yMinimum(), e.xMaximum(), e.yMaximum())
         return r
@@ -340,7 +357,7 @@ class VLayerConnector(DBConnector):
     def deleteTableColumn(self, table, column):
         print("**unimplemented** deleteTableColumn")
 
-    def updateTableColumn(self, table, column, new_name, new_data_type=None, new_not_null=None, new_default=None):
+    def updateTableColumn(self, table, column, new_name, new_data_type=None, new_not_null=None, new_default=None, comment=None):
         print("**unimplemented** updateTableColumn")
 
     def renameTableColumn(self, table, column, new_name):

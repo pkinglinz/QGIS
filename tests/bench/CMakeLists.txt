@@ -6,41 +6,38 @@ SET (BENCH_SRCS
      qgsbench.cpp
 )
 
-SET (BENCH_MOC_HDRS
-     qgsbench.h
-)
-
 ########################################################
 # Build
 
-QT5_WRAP_CPP (BENCH_MOC_SRCS  ${BENCH_MOC_HDRS})
-
-ADD_EXECUTABLE (qgis_bench MACOSX_BUNDLE WIN32 ${BENCH_SRCS} ${BENCH_MOC_SRCS} )
+ADD_EXECUTABLE (qgis_bench MACOSX_BUNDLE WIN32 ${BENCH_SRCS} )
 
 INCLUDE_DIRECTORIES(
+  ${CMAKE_SOURCE_DIR}/external
+  ${CMAKE_SOURCE_DIR}/external/nlohmann
+
   ${CMAKE_SOURCE_DIR}/src/core
   ${CMAKE_SOURCE_DIR}/src/core/expression
   ${CMAKE_SOURCE_DIR}/src/core/geometry
   ${CMAKE_SOURCE_DIR}/src/core/metadata
   ${CMAKE_SOURCE_DIR}/src/core/raster
+  ${CMAKE_SOURCE_DIR}/src/core/symbology
 
   ${CMAKE_BINARY_DIR}
   ${CMAKE_BINARY_DIR}/src/core
 )
 INCLUDE_DIRECTORIES(SYSTEM
-  ${GEOS_INCLUDE_DIR}
   ${SQLITE3_INCLUDE_DIR}
 )
 
 TARGET_LINK_LIBRARIES(qgis_bench
   qgis_core
   ${SQLITE3_LIBRARY}
-  ${QT_QTCORE_LIBRARY}
-  ${QT_QTNETWORK_LIBRARY}
-  ${QT_QTSVG_LIBRARY}
-  ${QT_QTXML_LIBRARY}
+  ${Qt5Core_LIBRARIES}
+  ${Qt5Network_LIBRARIES}
+  ${Qt5Svg_LIBRARIES}
+  ${Qt5Xml_LIBRARIES}
   ${OPTIONAL_QTWEBKIT}
-  ${QT_QTTEST_LIBRARY}
+  ${Qt5Test_LIBRARIES}
 )
 
 IF(APPLE)

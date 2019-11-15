@@ -37,16 +37,9 @@ class QNetworkReply;
 //! CoverageSummary structure
 struct QgsWcsCoverageSummary
 {
-  QgsWcsCoverageSummary()
-    : orderId( 0 )
-    , valid( false )
-    , described( false )
-    , width( 0 )
-    , height( 0 )
-    , hasSize( false )
-  { }
+  QgsWcsCoverageSummary() = default;
 
-  int           orderId;
+  int           orderId = 0;
   QString       identifier;
   QString       title;
   QString       abstract;
@@ -62,12 +55,12 @@ struct QgsWcsCoverageSummary
   QStringList times;
   QVector<QgsWcsCoverageSummary> coverageSummary;
   // non reflecting Capabilities structure:
-  bool valid;
-  bool described;
+  bool valid = false;
+  bool described = false;
   // native size
-  int width;
-  int height;
-  bool hasSize;
+  int width = 0;
+  int height = 0;
+  bool hasSize = false;
 };
 
 //! Capability Property structure
@@ -98,10 +91,9 @@ class QgsWcsCapabilities : public QObject
      *
      */
     explicit QgsWcsCapabilities( QgsDataSourceUri const &uri );
-    QgsWcsCapabilities();
-
-
-    ~QgsWcsCapabilities();
+    //! copy constructor
+    explicit QgsWcsCapabilities( const QgsWcsCapabilities &other );
+    QgsWcsCapabilities() = default;
 
     void setUri( QgsDataSourceUri const &uri );
 
@@ -112,7 +104,7 @@ class QgsWcsCapabilities : public QObject
      *
      * \param[out] layers   The list of layers will be placed here.
      *
-     * \retval false if the layers could not be retrieved or parsed -
+     * \returns false if the layers could not be retrieved or parsed -
      *         see lastError() for more info
      */
     bool supportedCoverages( QVector<QgsWcsCoverageSummary> &coverageSummary );
@@ -122,20 +114,21 @@ class QgsWcsCapabilities : public QObject
      */
     void coverageParents( QMap<int, int> &parents, QMap<int, QStringList> &parentNames ) const;
 
-    //! Get coverage summary for identifier
+    //! Gets coverage summary for identifier
     QgsWcsCoverageSummary coverage( QString const &identifier );
 
-    //! Get list of all coverage summaries
+    //! Gets list of all coverage summaries
     QList<QgsWcsCoverageSummary> coverages();
 
     /**
      * \brief Prepare the URI so that we can later simply append param=value
      * \param uri uri to prepare
-     * \retval prepared uri
+     * \returns prepared uri
      */
     static QString prepareUri( QString uri );
 
-    /** \brief Returns the GetCoverage full url
+    /**
+     * \brief Returns the GetCoverage full url
      *  \param version optional version, e.g. 1.0.0 or 1.1.0 */
     QString getCapabilitiesUrl( const QString &version ) const;
 
@@ -151,7 +144,8 @@ class QgsWcsCapabilities : public QObject
     //! Send request to server
     bool sendRequest( QString const &url );
 
-    /** Get additional coverage info from server. Version 1.0 GetCapabilities
+    /**
+     * Gets additional coverage info from server. Version 1.0 GetCapabilities
      *  response does not contain all info (CRS, formats).
      */
     bool describeCoverage( QString const &identifier, bool forceRefresh = false );
@@ -160,10 +154,10 @@ class QgsWcsCapabilities : public QObject
     bool parseDescribeCoverageDom10( QByteArray const &xml, QgsWcsCoverageSummary *coverage );
     bool parseDescribeCoverageDom11( QByteArray const &xml, QgsWcsCoverageSummary *coverage );
 
-    //! set authorization header
+    //! Sets authorization header
     bool setAuthorization( QNetworkRequest &request ) const;
 
-    //! set authorization reply
+    //! Sets authorization reply
     bool setAuthorizationReply( QNetworkReply *reply ) const;
 
     QString version() const { return mCapabilities.version; }
@@ -193,27 +187,29 @@ class QgsWcsCapabilities : public QObject
      */
     QString lastErrorFormat();
 
-    //! Get tag name without namespace
+    //! Gets tag name without namespace
     static QString stripNS( const QString &name );
 
-    //! Get text of first child of specified name, NS is ignored
+    //! Gets text of first child of specified name, NS is ignored
     static QString firstChildText( const QDomElement &element, const QString &name );
 
-    //! Get first child of specified name, NS is ignored
+    //! Gets first child of specified name, NS is ignored
     static QDomElement firstChild( const QDomElement &element, const QString &name );
 
-    /** Find sub elements by path which is string of dot separated tag names.
+    /**
+     * Find sub elements by path which is string of dot separated tag names.
      *  NS is ignored. Example path: domainSet.spatialDomain.RectifiedGrid */
     static QList<QDomElement> domElements( const QDomElement &element, const QString &path );
 
-    /** Find first sub element by path which is string of dot separated tag names.
+    /**
+     * Find first sub element by path which is string of dot separated tag names.
      *  NS is ignored. Example path: domainSet.spatialDomain.RectifiedGrid */
     static QDomElement domElement( const QDomElement &element, const QString &path );
 
-    //! Get text of element specified by path
+    //! Gets text of element specified by path
     static QString domElementText( const QDomElement &element, const QString &path );
 
-    //! Get sub elements texts by path
+    //! Gets sub elements texts by path
     static QStringList domElementsTexts( const QDomElement &element, const QString &path );
 
   signals:
@@ -232,7 +228,7 @@ class QgsWcsCapabilities : public QObject
   private:
     void parseUri();
 
-    //! Get coverage summary for identifier
+    //! Gets coverage summary for identifier
     QgsWcsCoverageSummary *coverageSummary( QString const &identifier, QgsWcsCoverageSummary *parent = nullptr );
 
     // ! Get list of all sub coverages
@@ -253,7 +249,7 @@ class QgsWcsCapabilities : public QObject
      *
      * \param preferredVersion - optional version, e.g. 1.0.0, 1.1.0
      *
-     * \retval false if the capabilities document could not be retrieved or parsed -
+     * \returns false if the capabilities document could not be retrieved or parsed -
      *         see lastError() for more info
      *
      * When this returns, "layers" will make sense.
@@ -328,11 +324,12 @@ class QgsWcsCapabilities : public QObject
      */
     QString mError;
 
-    /** The mime type of the message
+    /**
+     * The mime type of the message
      */
     QString mErrorFormat;
 
-    int mCoverageCount;
+    int mCoverageCount = 0;
 
     //! number of layers and parents
     QMap<int, int> mCoverageParents;
@@ -345,7 +342,7 @@ class QgsWcsCapabilities : public QObject
     QString mPassword;
 
     //! Cache load control
-    QNetworkRequest::CacheLoadControl mCacheLoadControl;
+    QNetworkRequest::CacheLoadControl mCacheLoadControl = QNetworkRequest::PreferNetwork;
 };
 
 

@@ -25,8 +25,6 @@ from builtins import str
 __author__ = 'Alessandro Pasotti'
 __date__ = '05/15/2016'
 __copyright__ = 'Copyright 2016, The QGIS Project'
-# This will get replaced with a git SHA1 when you do a git archive
-__revision__ = '$Format:%H$'
 
 
 import os
@@ -38,7 +36,8 @@ import tempfile
 from utilities import unitTestDataPath, waitServer
 from qgis.core import (
     QgsVectorLayer,
-    QgsAuthManager
+    QgsAuthManager,
+    QgsApplication
 )
 
 from qgis.testing import (
@@ -135,7 +134,7 @@ class TestWFST(unittest.TestCase, OfflineTestBase):
         self.counter += 1
         uri = ' '.join([("%s='%s'" % (k, v)) for k, v in list(parms.items())])
         wfs_layer = QgsVectorLayer(uri, layer_name, 'WFS')
-        wfs_layer.setParent(QgsAuthManager.instance())
+        wfs_layer.setParent(QgsApplication.authManager())
         assert wfs_layer.isValid()
         return wfs_layer
 
@@ -146,7 +145,7 @@ class TestWFST(unittest.TestCase, OfflineTestBase):
         """
         path = cls.testdata_path + layer_name + '.shp'
         layer = QgsVectorLayer(path, layer_name, "ogr")
-        layer.setParent(QgsAuthManager.instance())
+        layer.setParent(QgsApplication.authManager())
         assert layer.isValid()
         return layer
 

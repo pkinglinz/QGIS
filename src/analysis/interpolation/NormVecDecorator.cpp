@@ -14,11 +14,15 @@
  *                                                                         *
  ***************************************************************************/
 
-#include "NormVecDecorator.h"
+#include <QApplication>
+
 #include "qgsfeedback.h"
 #include "qgslogger.h"
 #include "qgsfields.h"
-#include <QApplication>
+#include "qgspoint.h"
+
+#include "NormVecDecorator.h"
+
 
 NormVecDecorator::~NormVecDecorator()
 {
@@ -33,14 +37,10 @@ NormVecDecorator::~NormVecDecorator()
 
   delete mNormVec;
   delete mPointState;
-
-  if ( mTIN )
-  {
-    delete mTIN;
-  }
+  delete mTIN;
 }
 
-int NormVecDecorator::addPoint( QgsPoint *p )
+int NormVecDecorator::addPoint( const QgsPoint &p )
 {
   if ( mTIN )
   {
@@ -58,9 +58,9 @@ int NormVecDecorator::addPoint( QgsPoint *p )
     {
       estimateFirstDerivative( pointno );
       //update also the neighbours of the new point
-      QList<int> *list = mTIN->getSurroundingTriangles( pointno );
-      QList<int>::iterator it = list->begin();//iterate through the list and analize it
-      while ( it != list->end() )
+      const QList<int> list = mTIN->getSurroundingTriangles( pointno );
+      auto it = list.constBegin();//iterate through the list and analyze it
+      while ( it != list.constEnd() )
       {
         int point;
         point = *it;
@@ -73,7 +73,6 @@ int NormVecDecorator::addPoint( QgsPoint *p )
         ++it;
         ++it;
       }
-      delete list;
     }
     return pointno;
   }
@@ -96,7 +95,7 @@ bool NormVecDecorator::calcNormal( double x, double y, Vector3D *result )
   }
   else
   {
-    QgsDebugMsg( "warning, null pointer" );
+    QgsDebugMsg( QStringLiteral( "warning, null pointer" ) );
     return false;
   }
 }
@@ -122,20 +121,19 @@ bool NormVecDecorator::calcNormalForPoint( double x, double y, int point, Vector
     result->setY( 0 );
     result->setZ( 0 );
 
-    QList<int> *vlist = getSurroundingTriangles( point );//get the value list
-
-    if ( !vlist )//an error occurred in 'getSurroundingTriangles'
+    const QList<int> vlist = getSurroundingTriangles( point );//get the value list
+    if ( vlist.empty() )//an error occurred in 'getSurroundingTriangles'
     {
       return false;
     }
 
-    if ( ( ( vlist->count() ) % 4 ) != 0 ) //number of items in vlist has to be a multiple of 4
+    if ( ( ( vlist.count() ) % 4 ) != 0 ) //number of items in vlist has to be a multiple of 4
     {
-      QgsDebugMsg( "warning, wrong number of items in vlist" );
+      QgsDebugMsg( QStringLiteral( "warning, wrong number of items in vlist" ) );
       return false;
     }
 
-    QList<int>::iterator it = vlist->begin();
+    auto it = vlist.constBegin();
 
     bool firstrun;
 
@@ -144,7 +142,7 @@ bool NormVecDecorator::calcNormalForPoint( double x, double y, int point, Vector
       numberofruns++;
       if ( numberofruns > limit )
       {
-        QgsDebugMsg( "warning, a probable endless loop is detected" );
+        QgsDebugMsg( QStringLiteral( "warning, a probable endless loop is detected" ) );
         return false;
       }
 
@@ -191,7 +189,7 @@ bool NormVecDecorator::calcNormalForPoint( double x, double y, int point, Vector
         {
           if ( !pointfound )//the point with coordinates x, y was in no triangle
           {
-            QgsDebugMsg( "warning: point (x,y) was in no triangle" );
+            QgsDebugMsg( QStringLiteral( "warning: point (x,y) was in no triangle" ) );
             return false;
           }
           result->standardise();
@@ -212,27 +210,22 @@ bool NormVecDecorator::calcNormalForPoint( double x, double y, int point, Vector
       }
 
       ++it;
-      if ( it == vlist->end() )//restart at the beginning of the loop
-      {it = vlist->begin();}
-
-
+      if ( it == vlist.constEnd() )//restart at the beginning of the loop
+      {
+        it = vlist.constBegin();
+      }
     }
-
-    delete vlist;
-
     return true;
-
   }
-
   else
   {
-    QgsDebugMsg( "warning, null pointer" );
+    QgsDebugMsg( QStringLiteral( "warning, null pointer" ) );
     return false;
   }
 
 }
 
-bool NormVecDecorator::calcPoint( double x, double y, QgsPoint *result )
+bool NormVecDecorator::calcPoint( double x, double y, QgsPoint &result )
 {
 
   if ( !alreadyestimated )
@@ -248,63 +241,51 @@ bool NormVecDecorator::calcPoint( double x, double y, QgsPoint *result )
   }
   else
   {
-    QgsDebugMsg( "warning, null pointer" );
+    QgsDebugMsg( QStringLiteral( "warning, null pointer" ) );
     return false;
   }
 }
 
-bool NormVecDecorator::getTriangle( double x, double y, QgsPoint *p1, Vector3D *v1, QgsPoint *p2, Vector3D *v2, QgsPoint *p3, Vector3D *v3 )
+bool NormVecDecorator::getTriangle( double x, double y, QgsPoint &p1, Vector3D *v1, QgsPoint &p2, Vector3D *v2, QgsPoint &p3, Vector3D *v3 )
 {
-  if ( p1 && p2 && p3 && v1 && v2 && v3 )
+  if ( v1 && v2 && v3 )
   {
-    int *nr1 = new int();
-    int *nr2 = new int();
-    int *nr3 = new int();
+    int nr1 = 0;
+    int nr2 = 0;
+    int nr3 = 0;
 
-    if ( TriDecorator::getTriangle( x, y, p1, nr1, p2, nr2, p3, nr3 ) )//everything allright
+    if ( TriDecorator::getTriangle( x, y, p1, nr1, p2, nr2, p3, nr3 ) )//everything alright
     {
-      if ( ( *mNormVec )[( *nr1 )] && ( *mNormVec )[( *nr2 )] && ( *mNormVec )[( *nr3 )] )
+      if ( ( *mNormVec )[ nr1 ] && ( *mNormVec )[ nr2 ] && ( *mNormVec )[ nr3 ] )
       {
-        v1->setX( ( *mNormVec )[( *nr1 )]->getX() );
-        v1->setY( ( *mNormVec )[( *nr1 )]->getY() );
-        v1->setZ( ( *mNormVec )[( *nr1 )]->getZ() );
+        v1->setX( ( *mNormVec )[ nr1 ]->getX() );
+        v1->setY( ( *mNormVec )[nr1 ]->getY() );
+        v1->setZ( ( *mNormVec )[nr1 ]->getZ() );
 
-        v2->setX( ( *mNormVec )[( *nr2 )]->getX() );
-        v2->setY( ( *mNormVec )[( *nr2 )]->getY() );
-        v2->setZ( ( *mNormVec )[( *nr2 )]->getZ() );
+        v2->setX( ( *mNormVec )[nr2 ]->getX() );
+        v2->setY( ( *mNormVec )[nr2 ]->getY() );
+        v2->setZ( ( *mNormVec )[nr2 ]->getZ() );
 
-        v3->setX( ( *mNormVec )[( *nr3 )]->getX() );
-        v3->setY( ( *mNormVec )[( *nr3 )]->getY() );
-        v3->setZ( ( *mNormVec )[( *nr3 )]->getZ() );
+        v3->setX( ( *mNormVec )[nr3 ]->getX() );
+        v3->setY( ( *mNormVec )[nr3 ]->getY() );
+        v3->setZ( ( *mNormVec )[nr3 ]->getZ() );
       }
       else
       {
-        QgsDebugMsg( "warning, null pointer" );
-        delete nr1;
-        delete nr2;
-        delete nr3;
+        QgsDebugMsg( QStringLiteral( "warning, null pointer" ) );
         return false;
       }
-
-      delete nr1;
-      delete nr2;
-      delete nr3;
       return true;
-
     }
-
     else
     {
-      delete nr1;
-      delete nr2;
-      delete nr3;
       return false;
     }
   }
 
   else
   {
-    QgsDebugMsg( "warning, null pointer" );
+    QgsDebugMsg( QStringLiteral( "warning, null pointer" ) );
     return false;
   }
 }
@@ -317,35 +298,35 @@ NormVecDecorator::PointState NormVecDecorator::getState( int pointno ) const
   }
   else
   {
-    QgsDebugMsg( "warning, number below 0" );
+    QgsDebugMsg( QStringLiteral( "warning, number below 0" ) );
     return mPointState->at( 0 );//just to avoid a compiler warning
   }
 }
 
 
-bool NormVecDecorator::getTriangle( double x, double y, QgsPoint *p1, int *ptn1, Vector3D *v1, PointState *state1, QgsPoint *p2, int *ptn2, Vector3D *v2, PointState *state2, QgsPoint *p3, int *ptn3, Vector3D *v3, PointState *state3 )
+bool NormVecDecorator::getTriangle( double x, double y, QgsPoint &p1, int &ptn1, Vector3D *v1, PointState *state1, QgsPoint &p2, int &ptn2, Vector3D *v2, PointState *state2, QgsPoint &p3, int &ptn3, Vector3D *v3, PointState *state3 )
 {
-  if ( p1 && p2 && p3 && v1 && v2 && v3 && ptn1 && ptn2 && ptn3 && state1 && state2 && state3 )
+  if ( v1 && v2 && v3 && state1 && state2 && state3 )
   {
-    if ( TriDecorator::getTriangle( x, y, p1, ptn1, p2, ptn2, p3, ptn3 ) )//everything allright
+    if ( TriDecorator::getTriangle( x, y, p1, ptn1, p2, ptn2, p3, ptn3 ) )//everything alright
     {
-      v1->setX( ( *mNormVec )[( *ptn1 )]->getX() );
-      v1->setY( ( *mNormVec )[( *ptn1 )]->getY() );
-      v1->setZ( ( *mNormVec )[( *ptn1 )]->getZ() );
+      v1->setX( ( *mNormVec )[( ptn1 )]->getX() );
+      v1->setY( ( *mNormVec )[( ptn1 )]->getY() );
+      v1->setZ( ( *mNormVec )[( ptn1 )]->getZ() );
 
-      ( *state1 ) = ( *mPointState )[( *ptn1 )];
+      ( *state1 ) = ( *mPointState )[( ptn1 )];
 
-      v2->setX( ( *mNormVec )[( *ptn2 )]->getX() );
-      v2->setY( ( *mNormVec )[( *ptn2 )]->getY() );
-      v2->setZ( ( *mNormVec )[( *ptn2 )]->getZ() );
+      v2->setX( ( *mNormVec )[( ptn2 )]->getX() );
+      v2->setY( ( *mNormVec )[( ptn2 )]->getY() );
+      v2->setZ( ( *mNormVec )[( ptn2 )]->getZ() );
 
-      ( *state2 ) = ( *mPointState )[( *ptn2 )];
+      ( *state2 ) = ( *mPointState )[( ptn2 )];
 
-      v3->setX( ( *mNormVec )[( *ptn3 )]->getX() );
-      v3->setY( ( *mNormVec )[( *ptn3 )]->getY() );
-      v3->setZ( ( *mNormVec )[( *ptn3 )]->getZ() );
+      v3->setX( ( *mNormVec )[( ptn3 )]->getX() );
+      v3->setY( ( *mNormVec )[( ptn3 )]->getY() );
+      v3->setZ( ( *mNormVec )[( ptn3 )]->getZ() );
 
-      ( *state3 ) = ( *mPointState )[( *ptn3 )];
+      ( *state3 ) = ( *mPointState )[( ptn3 )];
 
       return true;
     }
@@ -357,7 +338,7 @@ bool NormVecDecorator::getTriangle( double x, double y, QgsPoint *p1, int *ptn1,
   }
   else
   {
-    QgsDebugMsg( "warning, null pointer" );
+    QgsDebugMsg( QStringLiteral( "warning, null pointer" ) );
     return false;
   }
 }
@@ -379,14 +360,14 @@ bool NormVecDecorator::estimateFirstDerivative( int pointno )
   double currentweight = 0;//current weight
   PointState status;
 
-  QList<int> *vlist = getSurroundingTriangles( pointno );//get the value list
+  const QList<int> vlist = getSurroundingTriangles( pointno );//get the value list
 
-  if ( !vlist )
+  if ( vlist.empty() )
   {
     //something went wrong in getSurroundingTriangles, set the normal to (0,0,0)
     if ( mNormVec->size() <= mNormVec->count() )//allocate more memory if necessary
     {
-      QgsDebugMsg( QString( "resizing mNormVec from %1 to %2" ).arg( mNormVec->size() ).arg( mNormVec->size() + 1 ) );
+      QgsDebugMsg( QStringLiteral( "resizing mNormVec from %1 to %2" ).arg( mNormVec->size() ).arg( mNormVec->size() + 1 ) );
       mNormVec->resize( mNormVec->size() + 1 );
     }
 
@@ -406,14 +387,14 @@ bool NormVecDecorator::estimateFirstDerivative( int pointno )
     return false;
   }
 
-  if ( ( vlist->count() % 4 ) != 0 ) //number of items in vlist has to be a multiple of 4
+  if ( ( vlist.count() % 4 ) != 0 ) //number of items in vlist has to be a multiple of 4
   {
-    QgsDebugMsg( "warning, wrong number of items in vlist" );
+    QgsDebugMsg( QStringLiteral( "warning, wrong number of items in vlist" ) );
     return false;
   }
 
-  QList<int>::iterator it = vlist->begin();//iterate through the list and analize it
-  while ( it != vlist->end() )
+  auto it = vlist.constBegin();//iterate through the list and analyze it
+  while ( it != vlist.constEnd() )
   {
     int p1, p2, p3, flag;
     part.setX( 0 );
@@ -479,8 +460,6 @@ bool NormVecDecorator::estimateFirstDerivative( int pointno )
     status = BreakLine;
   }
 
-  delete vlist;
-
   //insert the new calculated vector
   if ( mNormVec->size() <= mNormVec->count() )//allocate more memory if necessary
   {
@@ -543,7 +522,7 @@ void NormVecDecorator::eliminateHorizontalTriangles()
   }
   else
   {
-    QgsDebugMsg( "warning, null pointer" );
+    QgsDebugMsg( QStringLiteral( "warning, null pointer" ) );
   }
 }
 
@@ -555,7 +534,7 @@ void NormVecDecorator::setState( int pointno, PointState s )
   }
   else
   {
-    QgsDebugMsg( "warning, pointno>0" );
+    QgsDebugMsg( QStringLiteral( "warning, pointno>0" ) );
   }
 }
 
@@ -586,7 +565,7 @@ bool NormVecDecorator::swapEdge( double x, double y )
   }
   else
   {
-    QgsDebugMsg( "warning, null pointer" );
+    QgsDebugMsg( QStringLiteral( "warning, null pointer" ) );
     return false;
   }
 }

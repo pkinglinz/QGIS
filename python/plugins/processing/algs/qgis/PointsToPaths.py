@@ -16,15 +16,10 @@
 *                                                                         *
 ***************************************************************************
 """
-from builtins import str
 
 __author__ = 'Alexander Bruy'
 __date__ = 'April 2014'
 __copyright__ = '(C) 2014, Alexander Bruy'
-
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
 
 import os
 from datetime import datetime
@@ -39,9 +34,11 @@ from qgis.core import (QgsFeature,
                        QgsLineString,
                        QgsWkbTypes,
                        QgsFeatureRequest,
+                       QgsProcessingException,
                        QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterField,
                        QgsProcessingParameterString,
+                       QgsProcessingFeatureSource,
                        QgsProcessing,
                        QgsProcessingParameterFeatureSink,
                        QgsProcessingParameterFolderDestination)
@@ -60,6 +57,9 @@ class PointsToPaths(QgisAlgorithm):
 
     def group(self):
         return self.tr('Vector creation')
+
+    def groupId(self):
+        return 'vectorcreation'
 
     def __init__(self):
         super().__init__()
@@ -90,6 +90,9 @@ class PointsToPaths(QgisAlgorithm):
 
     def processAlgorithm(self, parameters, context, feedback):
         source = self.parameterAsSource(parameters, self.INPUT, context)
+        if source is None:
+            raise QgsProcessingException(self.invalidSourceError(parameters, self.INPUT))
+
         group_field_name = self.parameterAsString(parameters, self.GROUP_FIELD, context)
         order_field_name = self.parameterAsString(parameters, self.ORDER_FIELD, context)
         date_format = self.parameterAsString(parameters, self.DATE_FORMAT, context)
@@ -122,9 +125,11 @@ class PointsToPaths(QgisAlgorithm):
 
         (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT, context,
                                                fields, output_wkb, source.sourceCrs())
+        if sink is None:
+            raise QgsProcessingException(self.invalidSinkError(parameters, self.OUTPUT))
 
         points = dict()
-        features = source.getFeatures(QgsFeatureRequest().setSubsetOfAttributes([group_field_index, order_field_index]))
+        features = source.getFeatures(QgsFeatureRequest().setSubsetOfAttributes([group_field_index, order_field_index]), QgsProcessingFeatureSource.FlagSkipGeometryValidityChecks)
         total = 100.0 / source.featureCount() if source.featureCount() else 0
         for current, f in enumerate(features):
             if feedback.isCanceled():
@@ -133,12 +138,12 @@ class PointsToPaths(QgisAlgorithm):
             if not f.hasGeometry():
                 continue
 
-            point = f.geometry().geometry().clone()
+            point = f.geometry().constGet().clone()
             if group_field_index >= 0:
-                group = f.attributes()[group_field_index]
+                group = f[group_field_index]
             else:
                 group = 1
-            order = f.attributes()[order_field_index]
+            order = f[order_field_index]
             if date_format != '':
                 order = datetime.strptime(str(order), date_format)
             if group in points:
@@ -151,16 +156,16 @@ class PointsToPaths(QgisAlgorithm):
         feedback.setProgress(0)
 
         da = QgsDistanceArea()
-        da.setSourceCrs(source.sourceCrs())
+        da.setSourceCrs(source.sourceCrs(), context.transformContext())
         da.setEllipsoid(context.project().ellipsoid())
 
         current = 0
         total = 100.0 / len(points) if points else 1
-        for group, vertices in list(points.items()):
+        for group, vertices in points.items():
             if feedback.isCanceled():
                 break
 
-            vertices.sort()
+            vertices.sort(key=lambda x: (x[0] is None, x[0]))
             f = QgsFeature()
             attributes = []
             if group_field_index >= 0:

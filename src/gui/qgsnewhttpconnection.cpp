@@ -15,9 +15,10 @@
  *                                                                         *
  ***************************************************************************/
 #include "qgsnewhttpconnection.h"
-#include "qgsauthconfigselect.h"
+#include "qgsauthsettingswidget.h"
 #include "qgssettings.h"
 #include "qgshelp.h"
+#include "qgsgui.h"
 
 #include <QMessageBox>
 #include <QUrl>
@@ -32,17 +33,30 @@ QgsNewHttpConnection::QgsNewHttpConnection( QWidget *parent, ConnectionTypes typ
   , mOriginalConnName( connectionName )
 {
   setupUi( this );
+
+  if ( !( flags & FlagShowHttpSettings ) )
+    mHttpGroupBox->hide();
+
+  QgsGui::enableAutoGeometryRestore( this );
+
   connect( buttonBox, &QDialogButtonBox::helpRequested, this, &QgsNewHttpConnection::showHelp );
 
   QRegExp rx( "/connections-([^/]+)/" );
   if ( rx.indexIn( baseKey ) != -1 )
-    setWindowTitle( tr( "Create a New %1 Connection" ).arg( rx.cap( 1 ).toUpper() ) );
+  {
+    QString connectionType( rx.cap( 1 ).toUpper() );
+    if ( connectionType == QLatin1String( "WMS" ) )
+    {
+      connectionType = QStringLiteral( "WMS/WMTS" );
+    }
+    setWindowTitle( tr( "Create a New %1 Connection" ).arg( connectionType ) );
+  }
 
   // It would be obviously much better to use mBaseKey also for credentials,
   // but for some strange reason a different hardcoded key was used instead.
   // WFS and WMS credentials were mixed with the same key WMS.
   // Only WMS and WFS providers are using QgsNewHttpConnection at this moment
-  // using connection-wms and connection-wfs -> parse credential key fro it.
+  // using connection-wms and connection-wfs -> parse credential key from it.
   mCredentialsBaseKey = mBaseKey.split( '-' ).last().toUpper();
 
   txtName->setValidator( new QRegExpValidator( QRegExp( "[^\\/]+" ), txtName ) );
@@ -55,13 +69,17 @@ QgsNewHttpConnection::QgsNewHttpConnection( QWidget *parent, ConnectionTypes typ
   cmbDpiMode->addItem( tr( "GeoServer" ) );
 
   cmbVersion->clear();
-  cmbVersion->addItem( tr( "Auto-detect" ) );
+  cmbVersion->addItem( tr( "Maximum" ) );
   cmbVersion->addItem( tr( "1.0" ) );
   cmbVersion->addItem( tr( "1.1" ) );
   cmbVersion->addItem( tr( "2.0" ) );
+  cmbVersion->addItem( tr( "OGC API - Features" ) );
+  connect( cmbVersion,
+           static_cast<void ( QComboBox::* )( int )>( &QComboBox::currentIndexChanged ),
+           this, &QgsNewHttpConnection::wfsVersionCurrentIndexChanged );
 
-  mAuthConfigSelect = new QgsAuthConfigSelect( this );
-  tabAuth->insertTab( 1, mAuthConfigSelect, tr( "Configurations" ) );
+  connect( cbxWfsFeaturePaging, &QCheckBox::stateChanged,
+           this, &QgsNewHttpConnection::wfsFeaturePagingStateChanged );
 
   if ( !connectionName.isEmpty() )
   {
@@ -74,19 +92,16 @@ QgsNewHttpConnection::QgsNewHttpConnection( QWidget *parent, ConnectionTypes typ
     QString credentialsKey = "qgis/" + mCredentialsBaseKey + '/' + connectionName;
     txtName->setText( connectionName );
     txtUrl->setText( settings.value( key + "/url" ).toString() );
+    mRefererLineEdit->setText( settings.value( key + "/referer" ).toString() );
 
     updateServiceSpecificSettings();
 
-    txtUserName->setText( settings.value( credentialsKey + "/username" ).toString() );
-    txtPassword->setText( settings.value( credentialsKey + "/password" ).toString() );
-
-    QString authcfg = settings.value( credentialsKey + "/authcfg" ).toString();
-    mAuthConfigSelect->setConfigId( authcfg );
-    if ( !authcfg.isEmpty() )
-    {
-      tabAuth->setCurrentIndex( tabAuth->indexOf( mAuthConfigSelect ) );
-    }
+    // Authentication
+    mAuthSettings->setUsername( settings.value( credentialsKey + "/username" ).toString() );
+    mAuthSettings->setPassword( settings.value( credentialsKey + "/password" ).toString() );
+    mAuthSettings->setConfigId( settings.value( credentialsKey + "/authcfg" ).toString() );
   }
+  mWfsVersionDetectButton->setDisabled( txtUrl->text().isEmpty() );
 
   if ( !( mTypes & ConnectionWms ) && !( mTypes & ConnectionWcs ) )
   {
@@ -129,6 +144,11 @@ QgsNewHttpConnection::QgsNewHttpConnection( QWidget *parent, ConnectionTypes typ
     mGroupBox->layout()->removeWidget( mTestConnectionButton );
   }
 
+  if ( flags & FlagHideAuthenticationGroup )
+  {
+    mAuthGroupBox->hide();
+    mGroupBox->layout()->removeWidget( mAuthGroupBox );
+  }
   // Adjust height
   int w = width();
   adjustSize();
@@ -144,6 +164,22 @@ QgsNewHttpConnection::QgsNewHttpConnection( QWidget *parent, ConnectionTypes typ
   nameChanged( connectionName );
 }
 
+void QgsNewHttpConnection::wfsVersionCurrentIndexChanged( int index )
+{
+  // For now 2019-06-06, leave paging checkable for some WFS version 1.1 servers with support
+  cbxWfsFeaturePaging->setEnabled( index == WFS_VERSION_MAX || index >= WFS_VERSION_2_0 );
+  lblPageSize->setEnabled( cbxWfsFeaturePaging->isChecked() && ( index == WFS_VERSION_MAX || index >= WFS_VERSION_1_1 ) );
+  txtPageSize->setEnabled( cbxWfsFeaturePaging->isChecked() && ( index == WFS_VERSION_MAX || index >= WFS_VERSION_1_1 ) );
+  cbxWfsIgnoreAxisOrientation->setEnabled( index != WFS_VERSION_1_0 && index != WFS_VERSION_API_FEATURES_1_0 );
+  cbxWfsInvertAxisOrientation->setEnabled( index != WFS_VERSION_API_FEATURES_1_0 );
+}
+
+void QgsNewHttpConnection::wfsFeaturePagingStateChanged( int state )
+{
+  lblPageSize->setEnabled( state == Qt::Checked );
+  txtPageSize->setEnabled( state == Qt::Checked );
+}
+
 QString QgsNewHttpConnection::name() const
 {
   return txtName->text();
@@ -156,14 +192,15 @@ QString QgsNewHttpConnection::url() const
 
 void QgsNewHttpConnection::nameChanged( const QString &text )
 {
-  Q_UNUSED( text );
+  Q_UNUSED( text )
   buttonBox->button( QDialogButtonBox::Ok )->setDisabled( txtName->text().isEmpty() || txtUrl->text().isEmpty() );
 }
 
 void QgsNewHttpConnection::urlChanged( const QString &text )
 {
-  Q_UNUSED( text );
+  Q_UNUSED( text )
   buttonBox->button( QDialogButtonBox::Ok )->setDisabled( txtName->text().isEmpty() || txtUrl->text().isEmpty() );
+  mWfsVersionDetectButton->setDisabled( txtUrl->text().isEmpty() );
 }
 
 void QgsNewHttpConnection::updateOkButtonState()
@@ -181,17 +218,17 @@ bool QgsNewHttpConnection::validate()
   if ( ( mOriginalConnName.isNull() || mOriginalConnName.compare( txtName->text(), Qt::CaseInsensitive ) != 0 ) &&
        settings.contains( key + "/url" ) &&
        QMessageBox::question( this,
-                              tr( "Save connection" ),
+                              tr( "Save Connection" ),
                               tr( "Should the existing connection %1 be overwritten?" ).arg( txtName->text() ),
                               QMessageBox::Ok | QMessageBox::Cancel ) == QMessageBox::Cancel )
   {
     return false;
   }
 
-  if ( !txtPassword->text().isEmpty() &&
+  if ( ! mAuthSettings->password().isEmpty() &&
        QMessageBox::question( this,
-                              tr( "Saving passwords" ),
-                              trUtf8( "WARNING: You have entered a password. It will be stored in unsecured plain text in your project files and your home directory (Unix-like OS) or user profile (Windows). If you want to avoid this, press Cancel and either:\n\na) Don't provide a password in the connection settings — it will be requested interactively when needed;\nb) Use the Configuration tab to add your credentials in an HTTP Basic Authentication method and store them in an encrypted database." ),
+                              tr( "Saving Passwords" ),
+                              tr( "WARNING: You have entered a password. It will be stored in unsecured plain text in your project files and your home directory (Unix-like OS) or user profile (Windows). If you want to avoid this, press Cancel and either:\n\na) Don't provide a password in the connection settings — it will be requested interactively when needed;\nb) Use the Configuration tab to add your credentials in an HTTP Basic Authentication method and store them in an encrypted database." ),
                               QMessageBox::Ok | QMessageBox::Cancel ) == QMessageBox::Cancel )
   {
     return false;
@@ -203,6 +240,31 @@ bool QgsNewHttpConnection::validate()
 QPushButton *QgsNewHttpConnection::testConnectButton()
 {
   return mTestConnectionButton;
+}
+
+QgsAuthSettingsWidget *QgsNewHttpConnection::authSettingsWidget()
+{
+  return mAuthSettings;
+}
+
+QPushButton *QgsNewHttpConnection::wfsVersionDetectButton()
+{
+  return mWfsVersionDetectButton;
+}
+
+QComboBox *QgsNewHttpConnection::wfsVersionComboBox()
+{
+  return cmbVersion;
+}
+
+QCheckBox *QgsNewHttpConnection::wfsPagingEnabledCheckBox()
+{
+  return cbxWfsFeaturePaging;
+}
+
+QLineEdit *QgsNewHttpConnection::wfsPageSizeLineEdit()
+{
+  return txtPageSize;
 }
 
 QString QgsNewHttpConnection::wfsSettingsKey( const QString &base, const QString &connectionName ) const
@@ -222,6 +284,7 @@ void QgsNewHttpConnection::updateServiceSpecificSettings()
   QString wmsKey = wmsSettingsKey( mBaseKey, mOriginalConnName );
 
   cbxIgnoreGetMapURI->setChecked( settings.value( wmsKey + "/ignoreGetMapURI", false ).toBool() );
+  cbxWmsIgnoreReportedLayerExtents->setChecked( settings.value( wmsKey + QStringLiteral( "/ignoreReportedLayerExtents" ), false ).toBool() );
   cbxWfsIgnoreAxisOrientation->setChecked( settings.value( wfsKey + "/ignoreAxisOrientation", false ).toBool() );
   cbxWfsInvertAxisOrientation->setChecked( settings.value( wfsKey + "/invertAxisOrientation", false ).toBool() );
   cbxWmsIgnoreAxisOrientation->setChecked( settings.value( wmsKey + "/ignoreAxisOrientation", false ).toBool() );
@@ -251,35 +314,31 @@ void QgsNewHttpConnection::updateServiceSpecificSettings()
   cmbDpiMode->setCurrentIndex( dpiIdx );
 
   QString version = settings.value( wfsKey + "/version" ).toString();
-  int versionIdx = 0; // AUTO
+  int versionIdx = WFS_VERSION_MAX; // AUTO
   if ( version == QLatin1String( "1.0.0" ) )
-    versionIdx = 1;
+    versionIdx = WFS_VERSION_1_0;
   else if ( version == QLatin1String( "1.1.0" ) )
-    versionIdx = 2;
+    versionIdx = WFS_VERSION_1_1;
   else if ( version == QLatin1String( "2.0.0" ) )
-    versionIdx = 3;
+    versionIdx = WFS_VERSION_2_0;
+  else if ( version == QLatin1String( "OGC_API_FEATURES" ) )
+    versionIdx = WFS_VERSION_API_FEATURES_1_0;
   cmbVersion->setCurrentIndex( versionIdx );
+
+  // Enable/disable these items per WFS versions
+  wfsVersionCurrentIndexChanged( versionIdx );
 
   txtReferer->setText( settings.value( wmsKey + "/referer" ).toString() );
   txtMaxNumFeatures->setText( settings.value( wfsKey + "/maxnumfeatures" ).toString() );
+
+  // Only default to paging enabled if WFS 2.0.0 or higher
+  bool pagingEnabled = settings.value( wfsKey + "/pagingenabled", ( versionIdx == WFS_VERSION_MAX || versionIdx >= WFS_VERSION_2_0 ) ).toBool();
+  txtPageSize->setText( settings.value( wfsKey + "/pagesize" ).toString() );
+  cbxWfsFeaturePaging->setChecked( pagingEnabled );
 }
 
-void QgsNewHttpConnection::accept()
+QUrl QgsNewHttpConnection::urlTrimmed() const
 {
-  QgsSettings settings;
-  QString key = mBaseKey + txtName->text();
-  QString credentialsKey = "qgis/" + mCredentialsBaseKey + '/' + txtName->text();
-
-  if ( !validate() )
-    return;
-
-  // on rename delete original entry first
-  if ( !mOriginalConnName.isNull() && mOriginalConnName != key )
-  {
-    settings.remove( mBaseKey + mOriginalConnName );
-    settings.remove( "qgis/" + mCredentialsBaseKey + '/' + mOriginalConnName );
-    settings.sync();
-  }
 
   QUrl url( txtUrl->text().trimmed() );
   const QList< QPair<QByteArray, QByteArray> > &items = url.encodedQueryItems();
@@ -302,7 +361,27 @@ void QgsNewHttpConnection::accept()
   {
     url.setEncodedPath( "/" );
   }
+  return url;
+}
 
+void QgsNewHttpConnection::accept()
+{
+  QgsSettings settings;
+  QString key = mBaseKey + txtName->text();
+  QString credentialsKey = "qgis/" + mCredentialsBaseKey + '/' + txtName->text();
+
+  if ( !validate() )
+    return;
+
+  // on rename delete original entry first
+  if ( !mOriginalConnName.isNull() && mOriginalConnName != key )
+  {
+    settings.remove( mBaseKey + mOriginalConnName );
+    settings.remove( "qgis/" + mCredentialsBaseKey + '/' + mOriginalConnName );
+    settings.sync();
+  }
+
+  QUrl url( urlTrimmed() );
   settings.setValue( key + "/url", url.toString() );
 
   QString wfsKey = wfsSettingsKey( mBaseKey, txtName->text() );
@@ -318,6 +397,7 @@ void QgsNewHttpConnection::accept()
     settings.setValue( wmsKey + "/ignoreAxisOrientation", cbxWmsIgnoreAxisOrientation->isChecked() );
     settings.setValue( wmsKey + "/invertAxisOrientation", cbxWmsInvertAxisOrientation->isChecked() );
 
+    settings.setValue( wmsKey + QStringLiteral( "/ignoreReportedLayerExtents" ), cbxWmsIgnoreReportedLayerExtents->isChecked() );
     settings.setValue( wmsKey + "/ignoreGetMapURI", cbxIgnoreGetMapURI->isChecked() );
     settings.setValue( wmsKey + "/smoothPixmapTransform", cbxSmoothPixmapTransform->isChecked() );
 
@@ -354,28 +434,37 @@ void QgsNewHttpConnection::accept()
     QString version = QStringLiteral( "auto" );
     switch ( cmbVersion->currentIndex() )
     {
-      case 0:
+      case WFS_VERSION_MAX:
         version = QStringLiteral( "auto" );
         break;
-      case 1:
+      case WFS_VERSION_1_0:
         version = QStringLiteral( "1.0.0" );
         break;
-      case 2:
+      case WFS_VERSION_1_1:
         version = QStringLiteral( "1.1.0" );
         break;
-      case 3:
+      case WFS_VERSION_2_0:
         version = QStringLiteral( "2.0.0" );
+        break;
+      case WFS_VERSION_API_FEATURES_1_0:
+        version = QStringLiteral( "OGC_API_FEATURES" );
         break;
     }
     settings.setValue( wfsKey + "/version", version );
 
     settings.setValue( wfsKey + "/maxnumfeatures", txtMaxNumFeatures->text() );
+
+    settings.setValue( wfsKey + "/pagesize", txtPageSize->text() );
+    settings.setValue( wfsKey + "/pagingenabled", cbxWfsFeaturePaging->isChecked() );
   }
 
-  settings.setValue( credentialsKey + "/username", txtUserName->text() );
-  settings.setValue( credentialsKey + "/password", txtPassword->text() );
+  settings.setValue( credentialsKey + "/username", mAuthSettings->username() );
+  settings.setValue( credentialsKey + "/password", mAuthSettings->password() );
 
-  settings.setValue( credentialsKey + "/authcfg", mAuthConfigSelect->configId() );
+  settings.setValue( credentialsKey + "/authcfg", mAuthSettings->configId() );
+
+  if ( mHttpGroupBox->isVisible() )
+    settings.setValue( key + "/referer", mRefererLineEdit->text() );
 
   settings.setValue( mBaseKey + "/selected", txtName->text() );
 

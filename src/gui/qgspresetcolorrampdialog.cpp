@@ -27,6 +27,7 @@ QgsPresetColorRampWidget::QgsPresetColorRampWidget( const QgsPresetSchemeColorRa
   , mRamp( ramp )
 {
   setupUi( this );
+  connect( mButtonAddColor, &QToolButton::clicked, this, &QgsPresetColorRampWidget::mButtonAddColor_clicked );
   mTreeColors->setScheme( &mRamp );
 
   connect( mButtonCopyColors, &QAbstractButton::clicked, mTreeColors, &QgsColorSchemeList::copyColors );
@@ -66,7 +67,7 @@ void QgsPresetColorRampWidget::setColors()
   emit changed();
 }
 
-void QgsPresetColorRampWidget::on_mButtonAddColor_clicked()
+void QgsPresetColorRampWidget::mButtonAddColor_clicked()
 {
   if ( dockMode() )
   {
@@ -111,10 +112,22 @@ QgsPresetColorRampDialog::QgsPresetColorRampDialog( const QgsPresetSchemeColorRa
   QVBoxLayout *vLayout = new QVBoxLayout();
   mWidget = new QgsPresetColorRampWidget( ramp );
   vLayout->addWidget( mWidget );
-  QDialogButtonBox *bbox = new QDialogButtonBox( QDialogButtonBox::Ok | QDialogButtonBox::Cancel, Qt::Horizontal );
-  connect( bbox, &QDialogButtonBox::accepted, this, &QDialog::accept );
-  connect( bbox, &QDialogButtonBox::rejected, this, &QDialog::reject );
-  vLayout->addWidget( bbox );
+  mButtonBox = new QDialogButtonBox( QDialogButtonBox::Cancel | QDialogButtonBox::Help | QDialogButtonBox::Ok, Qt::Horizontal );
+  connect( mButtonBox, &QDialogButtonBox::accepted, this, &QDialog::accept );
+  connect( mButtonBox, &QDialogButtonBox::rejected, this, &QDialog::reject );
+  connect( mButtonBox, &QDialogButtonBox::helpRequested, this, &QgsPresetColorRampDialog::showHelp );
+  vLayout->addWidget( mButtonBox );
   setLayout( vLayout );
+  setWindowTitle( tr( "Color Presets Ramp" ) );
   connect( mWidget, &QgsPresetColorRampWidget::changed, this, &QgsPresetColorRampDialog::changed );
+}
+
+QDialogButtonBox *QgsPresetColorRampDialog::buttonBox() const
+{
+  return mButtonBox;
+}
+
+void QgsPresetColorRampDialog::showHelp()
+{
+  QgsHelp::openHelp( QStringLiteral( "working_with_vector/style_library.html#color-ramp" ) );
 }

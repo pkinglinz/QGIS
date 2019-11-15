@@ -25,6 +25,8 @@
 #include "qgslogger.h"
 #include "qgsrenderer.h"
 #include "qgsvectorlayereditbuffer.h"
+#include "qgsexpressioncontextutils.h"
+
 //////////////////
 // Filter Model //
 //////////////////
@@ -32,8 +34,6 @@
 QgsAttributeTableFilterModel::QgsAttributeTableFilterModel( QgsMapCanvas *canvas, QgsAttributeTableModel *sourceModel, QObject *parent )
   : QSortFilterProxyModel( parent )
   , mCanvas( canvas )
-  , mFilterMode( ShowAll )
-  , mSelectedOnTop( false )
 {
   setSourceModel( sourceModel );
   setDynamicSortFilter( true );
@@ -125,18 +125,24 @@ int QgsAttributeTableFilterModel::actionColumnIndex() const
 
 int QgsAttributeTableFilterModel::columnCount( const QModelIndex &parent ) const
 {
-  Q_UNUSED( parent );
+  Q_UNUSED( parent )
   return mColumnMapping.count();
 }
 
 void QgsAttributeTableFilterModel::setAttributeTableConfig( const QgsAttributeTableConfig &config )
 {
+  QgsAttributeTableConfig oldConfig = mConfig;
   mConfig = config;
   mConfig.update( layer()->fields() );
 
-  QVector<int> newColumnMapping;
+  if ( mConfig.hasSameColumns( oldConfig ) )
+  {
+    return;
+  }
 
-  Q_FOREACH ( const QgsAttributeTableConfig::ColumnConfig &columnConfig, mConfig.columns() )
+  QVector<int> newColumnMapping;
+  const auto constColumns = mConfig.columns();
+  for ( const QgsAttributeTableConfig::ColumnConfig &columnConfig : constColumns )
   {
     // Hidden? Forget about this column
     if ( columnConfig.hidden )
@@ -227,7 +233,7 @@ void QgsAttributeTableFilterModel::sort( const QString &expression, Qt::SortOrde
 
   QSortFilterProxyModel::sort( -1 );
   masterModel()->prefetchSortData( expression );
-  QSortFilterProxyModel::sort( 0, order ) ;
+  QSortFilterProxyModel::sort( 0, order );
 }
 
 QString QgsAttributeTableFilterModel::sortExpression() const
@@ -250,7 +256,7 @@ void QgsAttributeTableFilterModel::setSelectedOnTop( bool selectedOnTop )
     if ( order != Qt::AscendingOrder && order != Qt::DescendingOrder )
       order = Qt::AscendingOrder;
 
-    sort( column, order );
+    sort( 0, Qt::AscendingOrder );
     invalidate();
   }
 }
@@ -322,7 +328,7 @@ void QgsAttributeTableFilterModel::setFilterMode( FilterMode filterMode )
 
 bool QgsAttributeTableFilterModel::filterAcceptsRow( int sourceRow, const QModelIndex &sourceParent ) const
 {
-  Q_UNUSED( sourceParent );
+  Q_UNUSED( sourceParent )
   switch ( mFilterMode )
   {
     case ShowAll:
@@ -379,7 +385,6 @@ void QgsAttributeTableFilterModel::selectionChanged()
   }
   else if ( mSelectedOnTop )
   {
-    sort( sortColumn(), sortOrder() );
     invalidate();
   }
 }
@@ -399,6 +404,14 @@ int QgsAttributeTableFilterModel::mapColumnToSource( int column ) const
     return mColumnMapping.at( column );
 }
 
+int QgsAttributeTableFilterModel::mapColumnFromSource( int column ) const
+{
+  if ( mColumnMapping.isEmpty() )
+    return column;
+  else
+    return mColumnMapping.indexOf( column );
+}
+
 void QgsAttributeTableFilterModel::generateListOfVisibleFeatures()
 {
   if ( !layer() )
@@ -408,24 +421,24 @@ void QgsAttributeTableFilterModel::generateListOfVisibleFeatures()
   QgsRectangle rect = mCanvas->mapSettings().mapToLayerCoordinates( layer(), mCanvas->extent() );
   QgsRenderContext renderContext;
   renderContext.expressionContext().appendScopes( QgsExpressionContextUtils::globalProjectLayerScopes( layer() ) );
-  QgsFeatureRenderer *renderer = layer()->renderer();
 
   mFilteredFeatures.clear();
-
-  if ( !renderer )
+  if ( !layer()->renderer() )
   {
-    QgsDebugMsg( "Cannot get renderer" );
+    QgsDebugMsg( QStringLiteral( "Cannot get renderer" ) );
     return;
   }
+
+  std::unique_ptr< QgsFeatureRenderer > renderer( layer()->renderer()->clone() );
 
   const QgsMapSettings &ms = mCanvas->mapSettings();
   if ( !layer()->isInScaleRange( ms.scale() ) )
   {
-    QgsDebugMsg( "Out of scale limits" );
+    QgsDebugMsg( QStringLiteral( "Out of scale limits" ) );
   }
   else
   {
-    if ( renderer && renderer->capabilities() & QgsFeatureRenderer::ScaleDependent )
+    if ( renderer->capabilities() & QgsFeatureRenderer::ScaleDependent )
     {
       // setup scale
       // mapRenderer()->renderContext()->scale is not automatically updated when
@@ -436,7 +449,7 @@ void QgsAttributeTableFilterModel::generateListOfVisibleFeatures()
       renderContext.setRendererScale( ms.scale() );
     }
 
-    filter = renderer && renderer->capabilities() & QgsFeatureRenderer::Filter;
+    filter = renderer->capabilities() & QgsFeatureRenderer::Filter;
   }
 
   renderer->startRender( renderContext, layer()->fields() );
@@ -444,7 +457,7 @@ void QgsAttributeTableFilterModel::generateListOfVisibleFeatures()
   QgsFeatureRequest r( masterModel()->request() );
   if ( !r.filterRect().isNull() )
   {
-    r.setFilterRect( r.filterRect().intersect( &rect ) );
+    r.setFilterRect( r.filterRect().intersect( rect ) );
   }
   else
   {
@@ -476,7 +489,7 @@ void QgsAttributeTableFilterModel::generateListOfVisibleFeatures()
 
   features.close();
 
-  if ( renderer && renderer->capabilities() & QgsFeatureRenderer::ScaleDependent )
+  if ( renderer->capabilities() & QgsFeatureRenderer::ScaleDependent )
   {
     renderer->stopRender( renderContext );
   }
@@ -495,7 +508,8 @@ QModelIndex QgsAttributeTableFilterModel::fidToIndex( QgsFeatureId fid )
 QModelIndexList QgsAttributeTableFilterModel::fidToIndexList( QgsFeatureId fid )
 {
   QModelIndexList indexes;
-  Q_FOREACH ( const QModelIndex &idx, masterModel()->idToIndexList( fid ) )
+  const auto constIdToIndexList = masterModel()->idToIndexList( fid );
+  for ( const QModelIndex &idx : constIdToIndexList )
   {
     indexes.append( mapFromMaster( idx ) );
   }
@@ -525,7 +539,8 @@ QModelIndex QgsAttributeTableFilterModel::mapFromSource( const QModelIndex &sour
   if ( proxyIndex.column() < 0 )
     return QModelIndex();
 
-  int col = mapColumnToSource( proxyIndex.column() );
+  int col = mapColumnFromSource( proxyIndex.column() );
+
   if ( col == -1 )
     col = 0;
 
@@ -541,4 +556,3 @@ Qt::ItemFlags QgsAttributeTableFilterModel::flags( const QModelIndex &index ) co
   QModelIndex source_index = mapToSource( index );
   return masterModel()->flags( source_index );
 }
-

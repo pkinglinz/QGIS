@@ -25,10 +25,13 @@
 #include "qgis_gui.h"
 
 
-/** \class QgsNewOgrConnection
+/**
+ * \class QgsNewOgrConnection
+ * \ingroup gui
  * \brief Dialog to allow the user to define, test and save connection
  * information for OGR databases
  * \note not available in python bindings
+ * \since QGIS 1.0
  */
 class GUI_EXPORT QgsNewOgrConnection : public QDialog, private Ui::QgsNewOgrConnectionBase
 {
@@ -38,13 +41,20 @@ class GUI_EXPORT QgsNewOgrConnection : public QDialog, private Ui::QgsNewOgrConn
     //! Constructor
     QgsNewOgrConnection( QWidget *parent = nullptr, const QString &connType = QString(), const QString &connName = QString(), Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags );
 
-    ~QgsNewOgrConnection();
     //! Tests the connection using the parameters supplied
     void testConnection();
-    void showHelp();
+
+    /**
+     * Show the help
+     * \deprecated will be made private with QGIS 4
+     */
+    Q_DECL_DEPRECATED void showHelp() SIP_DEPRECATED;
+
   public slots:
     void accept() override;
-    void on_btnConnect_clicked();
+
+  private slots:
+    void btnConnect_clicked();
 
   private:
     QString mOriginalConnName;

@@ -16,7 +16,7 @@
 #ifndef QGSLAYOUTNEWITEMPROPERTIESDIALOG_H
 #define QGSLAYOUTNEWITEMPROPERTIESDIALOG_H
 
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgis_gui.h"
 #include "ui_qgslayoutnewitemproperties.h"
 
@@ -42,7 +42,7 @@ class GUI_EXPORT QgsLayoutItemPropertiesDialog : public QDialog, private Ui::Qgs
     /**
      * Constructor for QgsLayoutNewItemPropertiesDialog.
      */
-    QgsLayoutItemPropertiesDialog( QWidget *parent = nullptr, Qt::WindowFlags flags = 0 );
+    QgsLayoutItemPropertiesDialog( QWidget *parent = nullptr, Qt::WindowFlags flags = nullptr );
 
     /**
      * Sets the item \a position to show in the dialog.
@@ -55,6 +55,11 @@ class GUI_EXPORT QgsLayoutItemPropertiesDialog : public QDialog, private Ui::Qgs
      * \see setItemPosition()
      */
     QgsLayoutPoint itemPosition() const;
+
+    /**
+     * Returns the page number for the new item.
+     */
+    int page() const;
 
     /**
      * Sets the item \a size to show in the dialog.
@@ -86,6 +91,13 @@ class GUI_EXPORT QgsLayoutItemPropertiesDialog : public QDialog, private Ui::Qgs
      * conversion of units.
      */
     void setLayout( QgsLayout *layout );
+
+  private:
+
+    QgsLayout *mLayout = nullptr;
+
+  private slots:
+    void showHelp();
 
 };
 

@@ -16,16 +16,10 @@
 *                                                                         *
 ***************************************************************************
 """
-from builtins import str
-from builtins import range
 
 __author__ = 'Alexander Bruy'
 __date__ = 'August 2013'
 __copyright__ = '(C) 2013, Alexander Bruy'
-
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
 
 from osgeo import gdal
 from qgis.PyQt.QtCore import QVariant
@@ -37,13 +31,13 @@ from qgis.core import (QgsFeature,
                        QgsPointXY,
                        QgsWkbTypes,
                        QgsProcessing,
+                       QgsProcessingException,
                        QgsFeatureRequest,
                        QgsProcessingParameterRasterLayer,
                        QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterFeatureSink)
 from processing.tools import raster
 from processing.algs.qgis.QgisAlgorithm import QgisAlgorithm
-from processing.tools.dataobjects import exportRasterLayer
 
 
 class PointsFromLines(QgisAlgorithm):
@@ -56,6 +50,9 @@ class PointsFromLines(QgisAlgorithm):
     def group(self):
         return self.tr('Vector creation')
 
+    def groupId(self):
+        return 'vectorcreation'
+
     def __init__(self):
         super().__init__()
 
@@ -64,7 +61,7 @@ class PointsFromLines(QgisAlgorithm):
                                                             self.tr('Raster layer')))
         self.addParameter(QgsProcessingParameterFeatureSource(self.INPUT_VECTOR,
                                                               self.tr('Vector layer'), [QgsProcessing.TypeVectorLine]))
-        self.addParameter(QgsProcessingParameterFeatureSink(self.OUTPUT, self.tr('Points from polygons'), QgsProcessing.TypeVectorPoint))
+        self.addParameter(QgsProcessingParameterFeatureSink(self.OUTPUT, self.tr('Points along lines'), QgsProcessing.TypeVectorPoint))
 
     def name(self):
         return 'generatepointspixelcentroidsalongline'
@@ -74,9 +71,11 @@ class PointsFromLines(QgisAlgorithm):
 
     def processAlgorithm(self, parameters, context, feedback):
         source = self.parameterAsSource(parameters, self.INPUT_VECTOR, context)
+        if source is None:
+            raise QgsProcessingException(self.invalidSourceError(parameters, self.INPUT_VECTOR))
 
         raster_layer = self.parameterAsRasterLayer(parameters, self.INPUT_RASTER, context)
-        rasterPath = exportRasterLayer(raster_layer)
+        rasterPath = raster_layer.source()
 
         rasterDS = gdal.Open(rasterPath, gdal.GA_ReadOnly)
         geoTransform = rasterDS.GetGeoTransform()
@@ -89,6 +88,8 @@ class PointsFromLines(QgisAlgorithm):
 
         (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT, context,
                                                fields, QgsWkbTypes.Point, raster_layer.crs())
+        if sink is None:
+            raise QgsProcessingException(self.invalidSinkError(parameters, self.OUTPUT))
 
         outFeature = QgsFeature()
         outFeature.setFields(fields)
@@ -97,11 +98,15 @@ class PointsFromLines(QgisAlgorithm):
         self.lineId = 0
         self.pointId = 0
 
-        features = source.getFeatures(QgsFeatureRequest().setDestinationCrs(raster_layer.crs()))
+        features = source.getFeatures(QgsFeatureRequest().setDestinationCrs(raster_layer.crs(), context.transformContext()))
         total = 100.0 / source.featureCount() if source.featureCount() else 0
         for current, f in enumerate(features):
             if feedback.isCanceled():
                 break
+
+            if not f.hasGeometry():
+                continue
+
             geom = f.geometry()
             if geom.isMultipart():
                 lines = geom.asMultiPolyline()
@@ -192,7 +197,7 @@ class PointsFromLines(QgisAlgorithm):
     def createPoint(self, pX, pY, geoTransform, writer, feature):
         (x, y) = raster.pixelToMap(pX, pY, geoTransform)
 
-        feature.setGeometry(QgsGeometry.fromPoint(QgsPointXY(x, y)))
+        feature.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(x, y)))
         feature['id'] = self.fid
         feature['line_id'] = self.lineId
         feature['point_id'] = self.pointId

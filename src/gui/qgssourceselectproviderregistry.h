@@ -16,21 +16,25 @@
 #ifndef QGSSOURCESELECTPROVIDERREGISTRY_H
 #define QGSSOURCESELECTPROVIDERREGISTRY_H
 
+#include <QList>
+#include <QWidget>
+
 #include "qgis_gui.h"
-#include "qgis.h"
+#include "qgis_sip.h"
+
+#include "qgsproviderregistry.h"
 
 class QgsSourceSelectProvider;
+class QgsProviderGuiRegistry;
+class QgsAbstractDataSourceWidget;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * This class keeps a list of source select providers that may add items to the QgsDataSourceManagerDialog
  * When created, it automatically adds providers from data provider plugins (e.g. PostGIS, WMS, ...)
  *
  * QgsSourceSelectProviderRegistry is not usually directly created, but rather accessed through
  * QgsGui::sourceSelectProviderRegistry().
- *
- * \note This class access to QgsProviderRegistry instance to initialize, but QgsProviderRegistry is
- * typically initialized after QgsGui is constructed, for this reason a delayed initialization has been
- * implemented in the class.
  *
  * \since QGIS 3.0
  */
@@ -38,11 +42,7 @@ class GUI_EXPORT QgsSourceSelectProviderRegistry
 {
   public:
 
-    /**
-     * Constructor for QgsSourceSelectProviderRegistry.
-     */
-    QgsSourceSelectProviderRegistry() = default;
-
+    QgsSourceSelectProviderRegistry();
     ~QgsSourceSelectProviderRegistry();
 
     //! QgsDataItemProviderRegistry cannot be copied.
@@ -50,28 +50,46 @@ class GUI_EXPORT QgsSourceSelectProviderRegistry
     //! QgsDataItemProviderRegistry cannot be copied.
     QgsSourceSelectProviderRegistry &operator=( const QgsSourceSelectProviderRegistry &rh ) = delete;
 
-    //! Get list of available providers
+    //! Gets list of available providers
     QList< QgsSourceSelectProvider *> providers();
 
     //! Add a \a provider implementation. Takes ownership of the object.
     void addProvider( QgsSourceSelectProvider *provider SIP_TRANSFER );
 
-    //! Remove \a provider implementation from the list (\a provider object is deleted)
-    //! \returns true if the provider was actually removed and deleted
+    /**
+     * Remove \a provider implementation from the list (\a provider object is deleted)
+     * \returns TRUE if the provider was actually removed and deleted
+     */
     bool removeProvider( QgsSourceSelectProvider *provider SIP_TRANSFER );
 
-    //! Return a provider by \a name or nullptr if not found
+    /**
+     * Initializes the registry. The registry needs to be passed explicitly
+     * (instead of using singleton) because this gets called from QgsGui constructor.
+     * \since QGIS 3.10
+     */
+    void initializeFromProviderGuiRegistry( QgsProviderGuiRegistry *providerGuiRegistry );
+
+    //! Returns a provider by \a name or NULLPTR if not found
     QgsSourceSelectProvider *providerByName( const QString &name );
 
-    //! Return a (possibly empty) list of providers by data \a providerkey
+    //! Returns a (possibly empty) list of providers by data \a providerkey
     QList<QgsSourceSelectProvider *> providersByKey( const QString &providerKey );
 
+    /**
+     * Gets select widget from provider with \a name
+     *
+     * The function is replacement of  QgsProviderRegistry::createSelectionWidget() from QGIS 3.8
+     *
+     * \since QGIS 3.10
+     */
+    QgsAbstractDataSourceWidget *createSelectionWidget(
+      const QString &name,
+      QWidget *parent,
+      Qt::WindowFlags fl,
+      QgsProviderRegistry::WidgetMode widgetMode
+    );
 
   private:
-    //! Populate the providers list, this needs to happen after the data provider
-    //! registry has been initialized.
-    void init();
-    bool mInitialized = false;
 #ifdef SIP_RUN
     QgsSourceSelectProviderRegistry( const QgsSourceSelectProviderRegistry &rh );
 #endif

@@ -2,7 +2,7 @@
 
 """
 ***************************************************************************
-    SpatialJoin.py
+    SpatialJoinSummary.py
     ---------------------
     Date                 : September 2017
     Copyright            : (C) 2017 by Nyall Dawson
@@ -16,23 +16,20 @@
 *                                                                         *
 ***************************************************************************
 """
-from builtins import range
 
 __author__ = 'Nyall Dawson'
 __date__ = 'September 2017'
 __copyright__ = '(C) 2017, Nyall Dawson'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 import os
+import math
 
 from collections import defaultdict
 
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtCore import QVariant
 from qgis.core import (NULL,
+                       QgsApplication,
                        QgsField,
                        QgsFields,
                        QgsFeatureSink,
@@ -44,6 +41,7 @@ from qgis.core import (NULL,
                        QgsStringStatisticalSummary,
                        QgsProcessing,
                        QgsProcessingUtils,
+                       QgsProcessingException,
                        QgsProcessingParameterBoolean,
                        QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterEnum,
@@ -65,20 +63,26 @@ class SpatialJoinSummary(QgisAlgorithm):
     DISCARD_NONMATCHING = "DISCARD_NONMATCHING"
     OUTPUT = "OUTPUT"
 
-    def icon(self):
-        return QIcon(os.path.join(pluginPath, 'images', 'ftools', 'join_location.png'))
-
     def group(self):
         return self.tr('Vector general')
 
+    def groupId(self):
+        return 'vectorgeneral'
+
     def __init__(self):
         super().__init__()
+
+    def icon(self):
+        return QgsApplication.getThemeIcon("/algorithms/mAlgorithmBasicStatistics.svg")
+
+    def svgIconPath(self):
+        return QgsApplication.iconPath("/algorithms/mAlgorithmBasicStatistics.svg")
 
     def initAlgorithm(self, config=None):
         self.predicates = (
             ('intersects', self.tr('intersects')),
             ('contains', self.tr('contains')),
-            ('equals', self.tr('equals')),
+            ('isEqual', self.tr('equals')),
             ('touches', self.tr('touches')),
             ('overlaps', self.tr('overlaps')),
             ('within', self.tr('within')),
@@ -117,7 +121,6 @@ class SpatialJoinSummary(QgisAlgorithm):
                                                allowMultiple=True, defaultValue=[0])
         predicate.setMetadata({
             'widget_wrapper': {
-                'class': 'processing.gui.wrappers.EnumWidgetWrapper',
                 'useCheckBoxes': True,
                 'columns': 2}})
         self.addParameter(predicate)
@@ -144,14 +147,21 @@ class SpatialJoinSummary(QgisAlgorithm):
 
     def tags(self):
         return self.tr(
-            "summary,aggregate,join,intersects,intersecting,touching,within,contains,overlaps,relation,spatial").split(
-            ',')
+            "summary,aggregate,join,intersects,intersecting,touching,within,contains,overlaps,relation,spatial,"
+            "stats,statistics,sum,maximum,minimum,mean,average,standard,deviation,"
+            "count,distinct,unique,variance,median,quartile,range,majority,minority,histogram,distinct").split(',')
 
     def processAlgorithm(self, parameters, context, feedback):
         source = self.parameterAsSource(parameters, self.INPUT, context)
+        if source is None:
+            raise QgsProcessingException(self.invalidSourceError(parameters, self.INPUT))
+
         join_source = self.parameterAsSource(parameters, self.JOIN, context)
+        if join_source is None:
+            raise QgsProcessingException(self.invalidSourceError(parameters, self.JOIN))
+
         join_fields = self.parameterAsFields(parameters, self.JOIN_FIELDS, context)
-        discard_nomatch = self.parameterAsBool(parameters, self.DISCARD_NONMATCHING, context)
+        discard_nomatch = self.parameterAsBoolean(parameters, self.DISCARD_NONMATCHING, context)
         summaries = [self.statistics[i][0] for i in
                      sorted(self.parameterAsEnums(parameters, self.SUMMARIES, context))]
 
@@ -252,6 +262,8 @@ class SpatialJoinSummary(QgisAlgorithm):
 
         (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT, context,
                                                out_fields, source.wkbType(), source.sourceCrs())
+        if sink is None:
+            raise QgsProcessingException(self.invalidSinkError(parameters, self.OUTPUT))
 
         # do the join
         predicates = [self.predicates[i][0] for i in self.parameterAsEnums(parameters, self.PREDICATE, context)]
@@ -259,38 +271,41 @@ class SpatialJoinSummary(QgisAlgorithm):
         features = source.getFeatures()
         total = 100.0 / source.featureCount() if source.featureCount() else 0
 
-        # bounding box transform
-        bbox_transform = QgsCoordinateTransform(source.sourceCrs(), join_source.sourceCrs())
-
         for current, f in enumerate(features):
             if feedback.isCanceled():
                 break
 
             if not f.hasGeometry():
                 if not discard_nomatch:
+                    # ensure consistent count of attributes - otherwise non matching
+                    # features will have incorrect attribute length
+                    # and provider may reject them
+                    attrs = f.attributes()
+                    if len(attrs) < len(out_fields):
+                        attrs += [NULL] * (len(out_fields) - len(attrs))
+                    f.setAttributes(attrs)
                     sink.addFeature(f, QgsFeatureSink.FastInsert)
                 continue
 
-            bbox = bbox_transform.transformBoundingBox(f.geometry().boundingBox())
             engine = None
 
             values = []
 
-            request = QgsFeatureRequest().setFilterRect(bbox).setSubsetOfAttributes(join_field_indexes).setDestinationCrs(source.sourceCrs())
+            request = QgsFeatureRequest().setFilterRect(f.geometry().boundingBox()).setSubsetOfAttributes(join_field_indexes).setDestinationCrs(source.sourceCrs(), context.transformContext())
             for test_feat in join_source.getFeatures(request):
                 if feedback.isCanceled():
                     break
 
                 join_attributes = []
                 for a in join_field_indexes:
-                    join_attributes.append(test_feat.attributes()[a])
+                    join_attributes.append(test_feat[a])
 
                 if engine is None:
-                    engine = QgsGeometry.createGeometryEngine(f.geometry().geometry())
+                    engine = QgsGeometry.createGeometryEngine(f.geometry().constGet())
                     engine.prepareGeometry()
 
                 for predicate in predicates:
-                    if getattr(engine, predicate)(test_feat.geometry().geometry()):
+                    if getattr(engine, predicate)(test_feat.geometry().constGet()):
                         values.append(join_attributes)
                         break
 
@@ -300,6 +315,13 @@ class SpatialJoinSummary(QgisAlgorithm):
                 if discard_nomatch:
                     continue
                 else:
+                    # ensure consistent count of attributes - otherwise non matching
+                    # features will have incorrect attribute length
+                    # and provider may reject them
+                    attrs = f.attributes()
+                    if len(attrs) < len(out_fields):
+                        attrs += [NULL] * (len(out_fields) - len(attrs))
+                    f.setAttributes(attrs)
                     sink.addFeature(f, QgsFeatureSink.FastInsert)
             else:
                 attrs = f.attributes()
@@ -313,7 +335,8 @@ class SpatialJoinSummary(QgisAlgorithm):
                         stat.finalize()
                         for s in numeric_fields:
                             if s[0] in summaries:
-                                attrs.append(getattr(stat, s[2])())
+                                val = getattr(stat, s[2])()
+                                attrs.append(val if not math.isnan(val) else NULL)
                     elif field_type == 'datetime':
                         stat = QgsDateTimeStatisticalSummary()
                         stat.calculate(attribute_values)

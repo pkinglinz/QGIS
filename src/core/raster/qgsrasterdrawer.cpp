@@ -25,7 +25,9 @@
 #include "qgsrendercontext.h"
 #include <QImage>
 #include <QPainter>
+#ifndef QT_NO_PRINTER
 #include <QPrinter>
+#endif
 
 QgsRasterDrawer::QgsRasterDrawer( QgsRasterIterator *iterator ): mIterator( iterator )
 {
@@ -33,7 +35,7 @@ QgsRasterDrawer::QgsRasterDrawer( QgsRasterIterator *iterator ): mIterator( iter
 
 void QgsRasterDrawer::draw( QPainter *p, QgsRasterViewPort *viewPort, const QgsMapToPixel *qgsMapToPixel, QgsRasterBlockFeedback *feedback )
 {
-  QgsDebugMsgLevel( "Entered", 4 );
+  QgsDebugMsgLevel( QStringLiteral( "Entered" ), 4 );
   if ( !p || !mIterator || !viewPort || !qgsMapToPixel )
   {
     return;
@@ -52,15 +54,15 @@ void QgsRasterDrawer::draw( QPainter *p, QgsRasterViewPort *viewPort, const QgsM
 
   // We know that the output data type of last pipe filter is QImage data
 
-  QgsRasterBlock *block = nullptr;
+  std::unique_ptr< QgsRasterBlock > block;
 
   // readNextRasterPart calcs and resets  nCols, nRows, topLeftCol, topLeftRow
   while ( mIterator->readNextRasterPart( bandNumber, nCols, nRows,
-                                         &block, topLeftCol, topLeftRow ) )
+                                         block, topLeftCol, topLeftRow ) )
   {
     if ( !block )
     {
-      QgsDebugMsg( "Cannot get block" );
+      QgsDebugMsg( QStringLiteral( "Cannot get block" ) );
       continue;
     }
 
@@ -72,7 +74,7 @@ void QgsRasterDrawer::draw( QPainter *p, QgsRasterViewPort *viewPort, const QgsM
     QPrinter *printer = dynamic_cast<QPrinter *>( p->device() );
     if ( printer && printer->outputFormat() == QPrinter::PdfFormat )
     {
-      QgsDebugMsgLevel( "PdfFormat", 4 );
+      QgsDebugMsgLevel( QStringLiteral( "PdfFormat" ), 4 );
 
       img = img.convertToFormat( QImage::Format_ARGB32 );
       QRgb transparentBlack = qRgba( 0, 0, 0, 0 );
@@ -99,8 +101,6 @@ void QgsRasterDrawer::draw( QPainter *p, QgsRasterViewPort *viewPort, const QgsM
     }
 
     drawImage( p, viewPort, img, topLeftCol, topLeftRow, qgsMapToPixel );
-
-    delete block;
 
     if ( feedback && feedback->renderPartialOutput() )
     {

@@ -21,11 +21,10 @@
 
 QgsScaleWidget::QgsScaleWidget( QWidget *parent )
   : QWidget( parent )
-  , mShowCurrentScaleButton( false )
 {
   QHBoxLayout *layout = new QHBoxLayout( this );
   layout->setContentsMargins( 0, 0, 0, 0 );
-  layout->setSpacing( 2 );
+  layout->setSpacing( 6 );
 
   mScaleComboBox = new QgsScaleComboBox( this );
   layout->addWidget( mScaleComboBox );
@@ -52,6 +51,21 @@ void QgsScaleWidget::setMapCanvas( QgsMapCanvas *canvas )
   mCurrentScaleButton->setVisible( mShowCurrentScaleButton && mCanvas );
 }
 
+bool QgsScaleWidget::isNull() const
+{
+  return mScaleComboBox->isNull();
+}
+
+void QgsScaleWidget::setAllowNull( bool allowNull )
+{
+  mScaleComboBox->setAllowNull( allowNull );
+}
+
+bool QgsScaleWidget::allowNull() const
+{
+  return mScaleComboBox->allowNull();
+}
+
 void QgsScaleWidget::setScaleFromCanvas()
 {
   if ( !mCanvas )
@@ -60,7 +74,12 @@ void QgsScaleWidget::setScaleFromCanvas()
   setScale( mCanvas->scale() );
 }
 
+void QgsScaleWidget::setNull()
+{
+  mScaleComboBox->setNull();
+}
+
 void QgsScaleWidget::setScale( double scale )
 {
-  return mScaleComboBox->setScale( scale );
+  mScaleComboBox->setScale( scale );
 }

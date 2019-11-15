@@ -42,7 +42,6 @@
 
 QgsGraduatedHistogramWidget::QgsGraduatedHistogramWidget( QWidget *parent )
   : QgsHistogramWidget( parent )
-  , mPressedValue( 0 )
 {
   //clear x axis title to make more room for graph
   setXAxisTitle( QString() );
@@ -142,6 +141,8 @@ void QgsGraduatedHistogramWidget::mouseRelease( double value )
   {
     //if distance from markers is too big, add a break
     mRenderer->addBreak( value );
+    // to fix the deprecated call to reset() in QgsGraduatedSymbolRendererWidget::refreshRanges,
+    // this class should work on the model in the widget rather than adding break via the renderer.
     emit rangesModified( true );
   }
 
@@ -152,7 +153,7 @@ void QgsGraduatedHistogramWidget::findClosestRange( double value, int &closestRa
 {
   const QgsRangeList &ranges = mRenderer->ranges();
 
-  double minDistance = DBL_MAX;
+  double minDistance = std::numeric_limits<double>::max();
   int pressedPixel = mPlot->canvasMap( QwtPlot::xBottom ).transform( value );
   for ( int i = 0; i < ranges.count() - 1; ++i )
   {

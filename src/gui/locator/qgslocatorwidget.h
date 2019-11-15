@@ -29,10 +29,9 @@
 
 class QgsLocator;
 class QgsFilterLineEdit;
-class QgsLocatorModel;
 class QgsLocatorResultsView;
 class QgsMapCanvas;
-class QgsLocatorProxyModel;
+class QgsLocatorModelBridge;
 
 /**
  * \class QgsLocatorWidget
@@ -60,7 +59,7 @@ class GUI_EXPORT QgsLocatorWidget : public QWidget
 
     /**
      * Sets a map \a canvas to associate with the widget. This allows the
-     * widget to customise the searches performed by its locator(), such
+     * widget to customize the searches performed by its locator(), such
      * as prioritizing results which are near the current canvas extent.
      */
     void setMapCanvas( QgsMapCanvas *canvas );
@@ -86,40 +85,31 @@ class GUI_EXPORT QgsLocatorWidget : public QWidget
     void configTriggered();
 
   protected:
-
     bool eventFilter( QObject *obj, QEvent *event ) override;
 
   private slots:
-
-    void scheduleDelayedPopup();
     void performSearch();
     void showList();
     void triggerSearchAndShowList();
-    void searchFinished();
-    void addResult( const QgsLocatorResult &result );
     void configMenuAboutToShow();
+    void scheduleDelayedPopup();
+    void resultAdded();
+    void showContextMenu( const QPoint &point );
 
   private:
-
-    QgsLocator *mLocator = nullptr;
+    QgsLocatorModelBridge *mModelBridge = nullptr;
     QgsFilterLineEdit *mLineEdit = nullptr;
-    QgsLocatorModel *mLocatorModel = nullptr;
-    QgsLocatorProxyModel *mProxyModel = nullptr;
     QgsFloatingWidget *mResultsContainer = nullptr;
     QgsLocatorResultsView *mResultsView = nullptr;
     QgsMapCanvas *mMapCanvas = nullptr;
+    QList<QMetaObject::Connection> mCanvasConnections;
     QMenu *mMenu = nullptr;
 
-    QString mNextRequestedString;
-    bool mHasQueuedRequest = false;
-    bool mHasSelectedResult = false;
-    QTimer mPopupTimer;
     QTimer mFocusTimer;
+    QTimer mPopupTimer;
+    bool mHasSelectedResult = false;
 
-    void updateResults( const QString &text );
     void acceptCurrentEntry();
-    QgsLocatorContext createContext();
-
 };
 
 #ifndef SIP_RUN
@@ -134,14 +124,16 @@ class QgsLocatorFilterFilter : public QgsLocatorFilter
 
     QgsLocatorFilterFilter( QgsLocatorWidget *widget, QObject *parent = nullptr );
 
-    virtual QString name() const override { return QStringLiteral( "filters" );}
-    virtual QString displayName() const override { return QString(); }
-    virtual Priority priority() const override { return static_cast< QgsLocatorFilter::Priority>( -1 ); /** shh, we cheat!**/ }
-    virtual void fetchResults( const QString &string, const QgsLocatorContext &context, QgsFeedback *feedback ) override;
-    virtual void triggerResult( const QgsLocatorResult &result ) override;
+    QgsLocatorFilterFilter *clone() const override SIP_FACTORY;
+    QgsLocatorFilter::Flags flags() const override;
+
+    QString name() const override { return QStringLiteral( "filters" );}
+    QString displayName() const override { return QString(); }
+    Priority priority() const override { return static_cast< QgsLocatorFilter::Priority>( -1 ); /** shh, we cheat!**/ }
+    void fetchResults( const QString &string, const QgsLocatorContext &context, QgsFeedback *feedback ) override;
+    void triggerResult( const QgsLocatorResult &result ) override;
 
   private:
-
     QgsLocatorWidget *mLocator = nullptr;
 };
 
@@ -151,7 +143,7 @@ class QgsLocatorFilterFilter : public QgsLocatorFilter
  * Custom QTreeView designed for showing the results in a QgsLocatorWidget.
  * \since QGIS 3.0
  */
-class QgsLocatorResultsView : public QTreeView
+class GUI_EXPORT QgsLocatorResultsView : public QTreeView
 {
     Q_OBJECT
 

@@ -21,10 +21,6 @@ __author__ = 'Victor Olaya'
 __date__ = 'August 2012'
 __copyright__ = '(C) 2012, Victor Olaya'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 groups = {'grid_analysis': 'Raster analysis',
           'grid_calculus': 'Raster calculus',
           'grid_calculus_bsl': 'Raster calculus',
@@ -96,7 +92,6 @@ algorithms = {'Add Grid Values to Points': 'Add raster values to points',
               'Add Grid Values to Shapes': 'Add raster values to features',
               'Change Grid Values': 'Reclassify values (simple)',
               'Clip Grid with Polygon': 'Clip raster with polygon',
-              'K-Means Clustering for Grids': 'Cluster Analysis',
               'Contour Lines from Grid': 'Contour Lines',
               'Cubic Spline Approximation': 'Interpolate (Cubic spline)',
               'Cut Shapes Layer': 'Cut vector Layer',
@@ -144,6 +139,9 @@ algorithms = {'Add Grid Values to Points': 'Add raster values to points',
               'QuadTree Structure to Shapes': 'QuadTree Structure to polygons',
               'Radius of Variance (Grid)': 'Radius of Variance (Raster)',
               'Reclassify Grid Values': 'Reclassify values',
+              'Reclassify Grid Values (Table)': 'Reclassify values (Table)',
+              'Reclassify Grid Values (Range)': 'Reclassify values (Range)',
+              'Reclassify Grid Values (Single)': 'Reclassify values (Single)',
               'Shapes Buffer (Attribute distance)': 'Variable distance buffer',
               'Shapes Buffer (Fixed distance)': 'fixed distance buffer',
               'Shapes to Grid': 'Rasterize',
@@ -155,7 +153,7 @@ algorithms = {'Add Grid Values to Points': 'Add raster values to points',
               'Threshold Buffer': 'Threshold raster buffer',
               'Transform Shapes': 'Transform vector layer',
               'Transpose Grids': 'Transpose Raster layers',
-              'Union': 'Polygon uUnion',
+              'Union': 'Polygon union',
               'Update': 'Polygon update',
               'Upslope Area': 'Upslope Area',
               'Zonal Grid Statistics': 'Zonal raster statistics'}

@@ -1,3 +1,17 @@
+/***************************************************************************
+    testqgspostgresconn.cpp
+    ---------------------
+    begin                : August 2016
+    copyright            : (C) 2016 by Patrick Valsecchi
+    email                : patrick dot valsecchi at camptocamp dot com
+ ***************************************************************************
+ *                                                                         *
+ *   This program is free software; you can redistribute it and/or modify  *
+ *   it under the terms of the GNU General Public License as published by  *
+ *   the Free Software Foundation; either version 2 of the License, or     *
+ *   (at your option) any later version.                                   *
+ *                                                                         *
+ ***************************************************************************/
 #include "qgstest.h"
 #include <QObject>
 
@@ -38,6 +52,14 @@ class TestQgsPostgresConn: public QObject
       list << 1 << -5;
       const QString actual = QgsPostgresConn::quotedValue( list );
       QCOMPARE( actual, QString( "E'{\"1\",\"-5\"}'" ) );
+    }
+
+    void quotedValue2DimArray()
+    {
+      QStringList list;
+      list << QStringLiteral( "{\"hello foo\",b}" ) << QStringLiteral( "{c,\"hello bar\"}" );
+      const QString actual = QgsPostgresConn::quotedValue( list );
+      QCOMPARE( actual, QString( "E'{{\"hello foo\",b},{c,\"hello bar\"}}'" ) );
     }
 
 };

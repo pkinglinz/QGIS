@@ -9,8 +9,6 @@ the Free Software Foundation; either version 2 of the License, or
 __author__ = 'Nyall Dawson'
 __date__ = '31/05/2017'
 __copyright__ = 'Copyright 2017, The QGIS Project'
-# This will get replaced with a git SHA1 when you do a git archive
-__revision__ = '$Format:%H$'
 
 import qgis  # NOQA
 import os
@@ -86,6 +84,15 @@ class TestQgsExtentGroupBox(unittest.TestCase):
 
     def testSetOutputCrs(self):
         w = qgis.gui.QgsExtentGroupBox()
+        w.setCheckable(True)
+
+        # ensure setting output crs doesn't change state of group box
+        w.setChecked(False)
+        w.setOutputCrs(QgsCoordinateReferenceSystem('epsg:4326'))
+        self.assertFalse(w.isChecked())
+        w.setChecked(True)
+        w.setOutputCrs(QgsCoordinateReferenceSystem('epsg:4326'))
+        self.assertTrue(w.isChecked())
 
         w.setOutputCrs(QgsCoordinateReferenceSystem('epsg:4326'))
         w.setCurrentExtent(QgsRectangle(1, 2, 3, 4), QgsCoordinateReferenceSystem('epsg:4326'))
@@ -118,7 +125,7 @@ class TestQgsExtentGroupBox(unittest.TestCase):
         self.assertEqual(w.outputExtent().toString(20), QgsRectangle(1, 2, 3, 4).toString(20))
 
         # repeat, this time using layer extent
-        layer = QgsVectorLayer("Polygon?crs=4326", 'memory', 'memory')
+        layer = QgsVectorLayer("Polygon?crs=epsg:4326", 'memory', 'memory')
         self.assertTrue(layer.isValid())
         f = QgsFeature()
         f.setGeometry(QgsGeometry.fromWkt('Polygon((1 2, 3 2, 3 4, 1 4, 1 2))'))

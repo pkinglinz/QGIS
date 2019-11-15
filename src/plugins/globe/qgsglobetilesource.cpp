@@ -18,7 +18,6 @@
 #include <osgEarth/Registry>
 #include <osgEarth/ImageUtils>
 
-#include "qgscrscache.h"
 #include "qgsglobetilesource.h"
 #include "qgscoordinatetransform.h"
 #include "qgslogger.h"
@@ -99,7 +98,7 @@ QgsMapSettings QgsGlobeTileImage::createSettings( int dpi, const QList<QgsMapLay
 {
   QgsMapSettings settings;
   settings.setBackgroundColor( QColor( Qt::transparent ) );
-  settings.setDestinationCrs( QgsCoordinateReferenceSystem::fromOgcWmsCrs( GEO_EPSG_CRS_AUTHID ) );
+  settings.setDestinationCrs( QgsCoordinateReferenceSystem::fromOgcWmsCrs( geoEpsgCrsAuthId() ) );
   settings.setExtent( mTileExtent );
   settings.setLayers( layers );
   settings.setFlag( QgsMapSettings::DrawEditingInfo, false );
@@ -156,7 +155,7 @@ void QgsGlobeTileUpdateManager::addTile( QgsGlobeTileImage *tile )
 #ifdef GLOBE_SHOW_TILE_STATS
     QgsGlobeTileStatistics::instance()->updateQueueTileCount( mTileQueue.size() );
 #endif
-    qSort( mTileQueue.begin(), mTileQueue.end(), QgsGlobeTileImage::lodSort );
+    std::sort( mTileQueue.begin(), mTileQueue.end(), QgsGlobeTileImage::lodSort );
   }
   emit startRendering();
 }
@@ -250,7 +249,7 @@ osgEarth::TileSource::Status QgsGlobeTileSource::initialize( const osgDB::Option
 
 osg::Image *QgsGlobeTileSource::createImage( const osgEarth::TileKey &key, osgEarth::ProgressCallback *progress )
 {
-  Q_UNUSED( progress );
+  Q_UNUSED( progress )
 
   int tileSize = getPixelsPerTile();
   if ( tileSize <= 0 )

@@ -16,10 +16,10 @@
 #ifndef QGSFEATURESELECTIONDLG_H
 #define QGSFEATURESELECTIONDLG_H
 
-class QgsGenericFeatureSelectionManager;
+class QgsVectorLayerSelectionManager;
 
 #include "ui_qgsfeatureselectiondlg.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgis_gui.h"
 
 #ifdef SIP_RUN
@@ -30,7 +30,8 @@ class QgsGenericFeatureSelectionManager;
 % End
 #endif
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsFeatureSelectionDlg
  */
 class GUI_EXPORT QgsFeatureSelectionDlg : public QDialog, private Ui::QgsFeatureSelectionDlg
@@ -48,10 +49,12 @@ class GUI_EXPORT QgsFeatureSelectionDlg : public QDialog, private Ui::QgsFeature
     Q_OBJECT
 
   public:
-    explicit QgsFeatureSelectionDlg( QgsVectorLayer *vl, QgsAttributeEditorContext &context, QWidget *parent SIP_TRANSFERTHIS = 0 );
+
+    //! Constructor for QgsFeatureSelectionDlg
+    explicit QgsFeatureSelectionDlg( QgsVectorLayer *vl, QgsAttributeEditorContext &context, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
     /**
-     * Get the selected features
+     * Gets the selected features
      *
      * \returns The selected feature ids
      */
@@ -64,8 +67,14 @@ class GUI_EXPORT QgsFeatureSelectionDlg : public QDialog, private Ui::QgsFeature
     void setSelectedFeatures( const QgsFeatureIds &ids );
 
   private:
-    QgsGenericFeatureSelectionManager *mFeatureSelection = nullptr;
+    QgsVectorLayerSelectionManager *mFeatureSelection = nullptr;
     QgsVectorLayer *mVectorLayer = nullptr;
+
+    // QWidget interface
+  protected:
+
+    //! Make sure the dialog does not grow too much
+    void showEvent( QShowEvent *event ) override;
 };
 
 #endif // QGSFEATURESELECTIONDLG_H

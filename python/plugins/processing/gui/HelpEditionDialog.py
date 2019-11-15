@@ -16,30 +16,30 @@
 *                                                                         *
 ***************************************************************************
 """
-from builtins import str
 
 __author__ = 'Victor Olaya'
 __date__ = 'August 2012'
 __copyright__ = '(C) 2012, Victor Olaya'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 import os
 import json
+import warnings
 
 from qgis.PyQt import uic
 from qgis.PyQt.QtWidgets import QDialog, QTreeWidgetItem
 
-from qgis.core import (QgsMessageLog,
+from qgis.core import (Qgis,
+                       QgsMessageLog,
                        QgsProcessingUtils,
                        QgsProcessingParameterDefinition,
                        QgsProcessingModelAlgorithm)
 
 pluginPath = os.path.split(os.path.dirname(__file__))[0]
-WIDGET, BASE = uic.loadUiType(
-    os.path.join(pluginPath, 'ui', 'DlgHelpEdition.ui'))
+
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
+    WIDGET, BASE = uic.loadUiType(
+        os.path.join(pluginPath, 'ui', 'DlgHelpEdition.ui'))
 
 
 class HelpEditionDialog(BASE, WIDGET):
@@ -48,6 +48,8 @@ class HelpEditionDialog(BASE, WIDGET):
     ALG_CREATOR = 'ALG_CREATOR'
     ALG_HELP_CREATOR = 'ALG_HELP_CREATOR'
     ALG_VERSION = 'ALG_VERSION'
+    SHORT_DESCRIPTION = 'SHORT_DESCRIPTION'
+    HELP_URL = 'HELP_URL'
 
     def __init__(self, alg):
         super(HelpEditionDialog, self).__init__(None)
@@ -65,7 +67,7 @@ class HelpEditionDialog(BASE, WIDGET):
                         with open(helpfile) as f:
                             self.descriptions = json.load(f)
                     except Exception:
-                        QgsMessageLog.logMessage(self.tr('Cannot open help file: {0}').format(helpfile), self.tr('Processing'), QgsMessageLog.WARNING)
+                        QgsMessageLog.logMessage(self.tr('Cannot open help file: {0}').format(helpfile), self.tr('Processing'), Qgis.Warning)
 
         self.currentName = self.ALG_DESC
         if self.ALG_DESC in self.descriptions:
@@ -99,6 +101,8 @@ class HelpEditionDialog(BASE, WIDGET):
     def fillTree(self):
         item = TreeDescriptionItem(self.tr('Algorithm description'), self.ALG_DESC)
         self.tree.addTopLevelItem(item)
+        item = TreeDescriptionItem(self.tr('Short description'), self.SHORT_DESCRIPTION)
+        self.tree.addTopLevelItem(item)
         parametersItem = TreeDescriptionItem(self.tr('Input parameters'), None)
         self.tree.addTopLevelItem(parametersItem)
         for param in self.alg.parameterDefinitions():
@@ -119,6 +123,9 @@ class HelpEditionDialog(BASE, WIDGET):
         self.tree.addTopLevelItem(item)
         item = TreeDescriptionItem(self.tr('Algorithm version'),
                                    self.ALG_VERSION)
+        self.tree.addTopLevelItem(item)
+        item = TreeDescriptionItem(self.tr('Documentation help URL'),
+                                   self.HELP_URL)
         self.tree.addTopLevelItem(item)
 
     def changeItem(self):

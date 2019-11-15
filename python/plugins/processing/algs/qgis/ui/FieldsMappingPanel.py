@@ -16,15 +16,10 @@
 *                                                                         *
 ***************************************************************************
 """
-from builtins import range
 
 __author__ = 'Arnaud Morvan'
 __date__ = 'October 2014'
 __copyright__ = '(C) 2014, Arnaud Morvan'
-
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
 
 import os
 from collections import OrderedDict
@@ -37,6 +32,7 @@ from qgis.PyQt.QtCore import (
     QVariant,
     Qt,
     pyqtSlot,
+    QCoreApplication
 )
 from qgis.PyQt.QtWidgets import (
     QComboBox,
@@ -46,6 +42,8 @@ from qgis.PyQt.QtWidgets import (
     QMessageBox,
     QSpinBox,
     QStyledItemDelegate,
+    QWidget,
+    QVBoxLayout
 )
 
 from qgis.core import (
@@ -59,8 +57,9 @@ from qgis.core import (
 )
 from qgis.gui import QgsFieldExpressionWidget
 
-from processing.gui.wrappers import WidgetWrapper, DIALOG_STANDARD, DIALOG_MODELER
+from processing.gui.wrappers import WidgetWrapper, DIALOG_STANDARD, DIALOG_MODELER, DIALOG_BATCH
 from processing.tools import dataobjects
+from processing.algs.qgis.FieldsMapper import FieldsMapper
 
 
 pluginPath = os.path.dirname(__file__)
@@ -76,13 +75,16 @@ class FieldsMappingModel(QAbstractTableModel):
         (QVariant.Double, "Double"),
         (QVariant.Int, "Integer"),
         (QVariant.LongLong, "Integer64"),
-        (QVariant.String, "String")])
+        (QVariant.String, "String"),
+        (QVariant.List, "List"),
+        (QVariant.Bool, "Boolean")])
 
     def __init__(self, parent=None):
         super(FieldsMappingModel, self).__init__(parent)
         self._mapping = []
         self._layer = None
         self.configure()
+        self._generator = None
 
     def configure(self):
         self.columns = [{
@@ -122,7 +124,12 @@ class FieldsMappingModel(QAbstractTableModel):
         self._mapping = value
         self.endResetModel()
 
+    def setContextGenerator(self, generator):
+        self._generator = generator
+
     def contextGenerator(self):
+        if self._generator:
+            return self._generator
         if self._layer:
             return self._layer
         return QgsProject.instance()
@@ -141,7 +148,10 @@ class FieldsMappingModel(QAbstractTableModel):
     def rowCount(self, parent=QModelIndex()):
         if parent.isValid():
             return 0
-        return self._mapping.__len__()
+        try:
+            return len(self._mapping)
+        except TypeError:
+            return 0
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         if role == Qt.DisplayRole:
@@ -225,8 +235,7 @@ class FieldsMappingModel(QAbstractTableModel):
 
         self._mapping = []
         if layer is not None:
-            dp = layer.dataProvider()
-            for field in dp.fields():
+            for field in layer.fields():
                 self._mapping.append(self.newField(field))
 
         self.endResetModel()
@@ -236,7 +245,7 @@ class FieldTypeDelegate(QStyledItemDelegate):
 
     def createEditor(self, parent, option, index):
         editor = QComboBox(parent)
-        for key, text in list(FieldsMappingModel.fieldTypes.items()):
+        for key, text in FieldsMappingModel.fieldTypes.items():
             editor.addItem(text, key)
         return editor
 
@@ -263,6 +272,7 @@ class ExpressionDelegate(QStyledItemDelegate):
         editor.registerExpressionContextGenerator(index.model().contextGenerator())
         editor.fieldChanged.connect(self.on_expression_fieldChange)
         editor.setAutoFillBackground(True)
+        editor.setAllowEvalErrors(self.parent().dialogType == DIALOG_MODELER)
         return editor
 
     def setEditorData(self, editor, index):
@@ -303,6 +313,7 @@ class FieldsMappingPanel(BASE, WIDGET):
 
         self.layerCombo.setAllowEmptyLayer(True)
         self.layerCombo.setFilters(QgsMapLayerProxyModel.VectorLayer)
+        self.dialogType = None
 
     def configure(self):
         self.model = FieldsMappingModel()
@@ -311,12 +322,17 @@ class FieldsMappingPanel(BASE, WIDGET):
         self.setDelegate('expression', ExpressionDelegate(self))
         self.setDelegate('type', FieldTypeDelegate(self))
 
+    def setContextGenerator(self, generator):
+        self.model.setContextGenerator(generator)
+
     def setDelegate(self, column_name, delegate):
         self.fieldsView.setItemDelegateForColumn(
             self.model.columnIndex(column_name),
             delegate)
 
     def setLayer(self, layer):
+        if self.model.layer() == layer:
+            return
         self.model.setLayer(layer)
         if layer is None:
             return
@@ -324,7 +340,7 @@ class FieldsMappingPanel(BASE, WIDGET):
             self.on_resetButton_clicked()
             return
         dlg = QMessageBox(self)
-        dlg.setText("Do you want to reset the field mapping?")
+        dlg.setText(self.tr("Do you want to reset the field mapping?"))
         dlg.setStandardButtons(
             QMessageBox.StandardButtons(QMessageBox.Yes |
                                         QMessageBox.No))
@@ -471,13 +487,43 @@ class FieldsMappingWidgetWrapper(WidgetWrapper):
         super(FieldsMappingWidgetWrapper, self).__init__(*args, **kwargs)
         self._layer = None
 
-    def createWidget(self):
+    def createPanel(self):
         return FieldsMappingPanel()
+
+    def createWidget(self):
+        self.panel = self.createPanel()
+        self.panel.dialogType = self.dialogType
+
+        self.panel.setContextGenerator(self)
+
+        if self.dialogType == DIALOG_MODELER:
+            self.combobox = QComboBox()
+            self.combobox.addItem(QCoreApplication.translate('Processing', '[Preconfigure]'), None)
+            fieldsMappingInputs = self.dialog.getAvailableValuesOfType(FieldsMapper.ParameterFieldsMapping)
+            for input in fieldsMappingInputs:
+                self.combobox.addItem(self.dialog.resolveValueDescription(input), input)
+
+            def updatePanelEnabledState():
+                if self.combobox.currentData() is None:
+                    self.panel.setEnabled(True)
+                else:
+                    self.panel.setEnabled(False)
+
+            self.combobox.currentIndexChanged.connect(updatePanelEnabledState)
+
+            widget = QWidget()
+            widget.setLayout(QVBoxLayout())
+            widget.layout().addWidget(self.combobox)
+            widget.layout().addWidget(self.panel)
+            return widget
+        else:
+            return self.panel
 
     def postInitialize(self, wrappers):
         for wrapper in wrappers:
-            if wrapper.param.name() == self.param.parentLayerParameter():
-                self.setLayer(wrapper.value())
+            if wrapper.parameterDefinition().name() == self.parameterDefinition().parentLayerParameter():
+                if wrapper.parameterValue():
+                    self.setLayer(wrapper.parameterValue())
                 wrapper.widgetValueHasChanged.connect(self.parentLayerChanged)
                 break
 
@@ -502,10 +548,19 @@ class FieldsMappingWidgetWrapper(WidgetWrapper):
         if not isinstance(layer, QgsVectorLayer):
             layer = None
         self._layer = layer
-        self.widget.setLayer(self._layer)
+        self.panel.setLayer(self._layer)
+
+    def linkedVectorLayer(self):
+        return self._layer
 
     def setValue(self, value):
-        self.widget.setValue(value)
+        self.panel.setValue(value)
 
     def value(self):
-        return self.widget.value()
+        if self.dialogType == DIALOG_MODELER:
+            if self.combobox.currentData() is None:
+                return self.panel.value()
+            else:
+                return self.comboValue(combobox=self.combobox)
+        else:
+            return self.panel.value()

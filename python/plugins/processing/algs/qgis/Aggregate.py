@@ -21,10 +21,6 @@ __author__ = 'Arnaud Morvan'
 __date__ = 'February 2017'
 __copyright__ = '(C) 2017, Arnaud Morvan'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 from qgis.core import (
     QgsDistanceArea,
     QgsExpression,
@@ -34,6 +30,7 @@ from qgis.core import (
     QgsField,
     QgsFields,
     QgsGeometry,
+    QgsProcessing,
     QgsProcessingParameterDefinition,
     QgsProcessingParameterExpression,
     QgsProcessingParameterFeatureSink,
@@ -57,6 +54,9 @@ class Aggregate(QgisAlgorithm):
     def group(self):
         return self.tr('Vector geometry')
 
+    def groupId(self):
+        return 'vectorgeometry'
+
     def name(self):
         return 'aggregate'
 
@@ -65,7 +65,8 @@ class Aggregate(QgisAlgorithm):
 
     def initAlgorithm(self, config=None):
         self.addParameter(QgsProcessingParameterFeatureSource(self.INPUT,
-                                                              self.tr('Input layer')))
+                                                              self.tr('Input layer'),
+                                                              types=[QgsProcessing.TypeVector]))
         self.addParameter(QgsProcessingParameterExpression(self.GROUP_BY,
                                                            self.tr('Group by expression (NULL to group all features)'),
                                                            defaultValue='NULL',
@@ -128,11 +129,14 @@ class Aggregate(QgisAlgorithm):
 
     def prepareAlgorithm(self, parameters, context, feedback):
         source = self.parameterAsSource(parameters, self.INPUT, context)
+        if source is None:
+            raise QgsProcessingException(self.invalidSourceError(parameters, self.INPUT))
+
         group_by = self.parameterAsExpression(parameters, self.GROUP_BY, context)
         aggregates = self.parameterAsAggregates(parameters, self.AGGREGATES, context)
 
         da = QgsDistanceArea()
-        da.setSourceCrs(source.sourceCrs())
+        da.setSourceCrs(source.sourceCrs(), context.transformContext())
         da.setEllipsoid(context.project().ellipsoid())
 
         self.source = source
@@ -151,7 +155,7 @@ class Aggregate(QgisAlgorithm):
             aggregate = field_def['aggregate']
             if aggregate == 'first_value':
                 expression = field_def['input']
-            elif aggregate == 'concatenate':
+            elif aggregate == 'concatenate' or aggregate == 'concatenate_unique':
                 expression = ('{}({}, {}, {}, \'{}\')'
                               .format(field_def['aggregate'],
                                       field_def['input'],
@@ -167,7 +171,7 @@ class Aggregate(QgisAlgorithm):
         return True
 
     def processAlgorithm(self, parameters, context, feedback):
-        expr_context = self.createExpressionContext(parameters, context)
+        expr_context = self.createExpressionContext(parameters, context, self.source)
         self.group_by_expr.prepare(expr_context)
 
         # Group features in memory layers
@@ -218,6 +222,8 @@ class Aggregate(QgisAlgorithm):
                                                self.fields,
                                                QgsWkbTypes.multiType(source.wkbType()),
                                                source.sourceCrs())
+        if sink is None:
+            raise QgsProcessingException(self.invalidSinkError(parameters, self.OUTPUT))
 
         # Calculate aggregates on memory layers
         if len(keys):

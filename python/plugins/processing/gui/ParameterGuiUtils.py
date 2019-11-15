@@ -22,14 +22,11 @@ __author__ = 'Nyall Dawson'
 __date__ = 'June 2017'
 __copyright__ = '(C) 2017, Nyall Dawson'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 from qgis.core import (QgsProcessing,
                        QgsProviderRegistry,
                        QgsProcessingFeatureSourceDefinition,
-                       QgsVectorFileWriter)
+                       QgsVectorFileWriter,
+                       QgsRasterFileWriter)
 from qgis.PyQt.QtCore import QCoreApplication
 from processing.tools import dataobjects
 
@@ -46,9 +43,17 @@ def getFileFilter(param):
     :param param:
     :return:
     """
-    if param.type() == 'multilayer':
+    if param.type() == 'layer':
+        vectors = QgsProviderRegistry.instance().fileVectorFilters().split(';;')
+        vectors.pop(0)
+        rasters = QgsProviderRegistry.instance().fileRasterFilters().split(';;')
+        rasters.pop(0)
+        filters = set(vectors + rasters)
+        filters = sorted(filters)
+        return tr('All files (*.*)') + ';;' + ";;".join(filters)
+    elif param.type() == 'multilayer':
         if param.layerType() == QgsProcessing.TypeRaster:
-            exts = dataobjects.getSupportedOutputRasterLayerExtensions()
+            exts = QgsRasterFileWriter.supportedFormatExtensions()
         elif param.layerType() == QgsProcessing.TypeFile:
             return tr('All files (*.*)', 'QgsProcessingParameterMultipleLayers')
         else:
@@ -59,17 +64,12 @@ def getFileFilter(param):
     elif param.type() == 'raster':
         return QgsProviderRegistry.instance().fileRasterFilters()
     elif param.type() == 'rasterDestination':
-        exts = dataobjects.getSupportedOutputRasterLayerExtensions()
+        exts = param.supportedOutputRasterLayerExtensions()
         for i in range(len(exts)):
-            exts[i] = tr('{0} files (*.{1})', 'QgsProcessingParameterRasterDestination').format(exts[i].upper(), exts[i].lower())
+            exts[i] = tr('{0} files (*.{1})', 'ParameterRaster').format(exts[i].upper(), exts[i].lower())
         return ';;'.join(exts) + ';;' + tr('All files (*.*)')
-    elif param.type() == 'table':
-        exts = ['csv', 'dbf']
-        for i in range(len(exts)):
-            exts[i] = tr('{0} files (*.{1})', 'ParameterTable').format(exts[i].upper(), exts[i].lower())
-        return tr('All files (*.*)') + ';;' + ';;'.join(exts)
-    elif param.type() == 'sink':
-        exts = QgsVectorFileWriter.supportedFormatExtensions()
+    elif param.type() in ('sink', 'vectorDestination'):
+        exts = param.supportedOutputVectorLayerExtensions()
         for i in range(len(exts)):
             exts[i] = tr('{0} files (*.{1})', 'ParameterVector').format(exts[i].upper(), exts[i].lower())
         return ';;'.join(exts) + ';;' + tr('All files (*.*)')
@@ -79,5 +79,9 @@ def getFileFilter(param):
         return QgsProviderRegistry.instance().fileVectorFilters()
     elif param.type() == 'fileDestination':
         return param.fileFilter() + ';;' + tr('All files (*.*)')
-
-    return ''
+    elif param.type() == 'mesh':
+        return tr('All files (*.*)')
+    if param.defaultFileExtension():
+        return tr('Default extension') + ' (*.' + param.defaultFileExtension() + ')'
+    else:
+        return ''

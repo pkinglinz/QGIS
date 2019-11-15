@@ -1,10 +1,10 @@
 /***************************************************************************
-                              qgstextannotation.cpp
-                              ------------------------
-  begin                : February 9, 2010
-  copyright            : (C) 2010 by Marco Hugentobler
-  email                : marco dot hugentobler at hugis dot net
- ***************************************************************************/
+                          qgstextannotation.cpp
+                          ------------------------
+begin                : February 9, 2010
+copyright            : (C) 2010 by Marco Hugentobler
+email                : marco dot hugentobler at hugis dot net
+***************************************************************************/
 
 /***************************************************************************
  *                                                                         *
@@ -56,6 +56,12 @@ void QgsTextAnnotation::renderAnnotation( QgsRenderContext &context, QSizeF size
     return;
   }
 
+  // scale painter back to 96 dpi, so layout prints match screen rendering
+  context.painter()->save();
+  const double scaleFactor = context.painter()->device()->logicalDpiX() / 96.0;
+  context.painter()->scale( scaleFactor, scaleFactor );
+  size /= scaleFactor;
+
   mDocument->setTextWidth( size.width() );
 
   QRectF clipRect = QRectF( 0, 0, size.width(), size.height() );
@@ -63,11 +69,13 @@ void QgsTextAnnotation::renderAnnotation( QgsRenderContext &context, QSizeF size
   {
     //QTextDocument::drawContents will draw text outside of the painter's clip region
     //when it is passed a clip rectangle. So, we need to intersect it with the
-    //painter's clip region to prevent text drawn outside clipped region (e.g., outside composer maps, see #10400)
+    //painter's clip region to prevent text drawn outside clipped region (e.g., outside layout maps, see #10400)
     clipRect = clipRect.intersected( painter->clipRegion().boundingRect() );
   }
   //draw text document
   mDocument->drawContents( painter, clipRect );
+
+  painter->restore();
 }
 
 void QgsTextAnnotation::writeXml( QDomElement &elem, QDomDocument &doc, const QgsReadWriteContext &context ) const

@@ -40,9 +40,9 @@ class CORE_EXPORT QgsLayoutGridSettings : public QgsLayoutSerializableObject
     //! Style for drawing the page/snapping grid
     enum Style
     {
-      StyleLines, //! Solid lines
-      StyleDots, //! Dots
-      StyleCrosses //! Crosses
+      StyleLines, //!< Solid lines
+      StyleDots, //!< Dots
+      StyleCrosses //!< Crosses
     };
 
     /**
@@ -58,7 +58,7 @@ class CORE_EXPORT QgsLayoutGridSettings : public QgsLayoutSerializableObject
      * \see resolution()
      * \see setOffset()
      */
-    void setResolution( const QgsLayoutMeasurement &resolution );
+    void setResolution( QgsLayoutMeasurement resolution );
 
     /**
      * Returns the page/snap grid resolution.
@@ -72,7 +72,7 @@ class CORE_EXPORT QgsLayoutGridSettings : public QgsLayoutSerializableObject
      * \see offset()
      * \see setResolution()
      */
-    void setOffset( const QgsLayoutPoint offset );
+    void setOffset( const QgsLayoutPoint &offset );
 
     /**
      * Returns the offset of the page/snap grid.
@@ -108,6 +108,11 @@ class CORE_EXPORT QgsLayoutGridSettings : public QgsLayoutSerializableObject
      * \see pen()
      */
     Style style() const { return mGridStyle; }
+
+    /**
+     * Loads grid settings from the application layout settings.
+     */
+    void loadFromSettings();
 
     /**
      * Stores the grid's state in a DOM element. The \a parentElement should refer to the parent layout's DOM element.

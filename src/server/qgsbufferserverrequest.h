@@ -22,14 +22,11 @@
 #include "qgis_server.h"
 #include "qgsserverrequest.h"
 
-#include <QBuffer>
-#include <QByteArray>
-#include <QMap>
-
 /**
  * \ingroup server
- * QgsBufferServerRequest
- * Class defining request with  data
+ * \class QgsBufferServerRequest
+ * \brief Class defining request with data
+ * \since QGIS 3.0
  */
 class SERVER_EXPORT QgsBufferServerRequest : public QgsServerRequest
 {
@@ -55,9 +52,7 @@ class SERVER_EXPORT QgsBufferServerRequest : public QgsServerRequest
      */
     QgsBufferServerRequest( const QUrl &url, QgsServerRequest::Method method = QgsServerRequest::GetMethod, const QgsServerRequest::Headers &headers = QgsServerRequest::Headers(), QByteArray *data = nullptr );
 
-    ~QgsBufferServerRequest();
-
-    virtual QByteArray data() const override { return mData; }
+    QByteArray data() const override { return mData; }
 
   private:
     QByteArray mData;

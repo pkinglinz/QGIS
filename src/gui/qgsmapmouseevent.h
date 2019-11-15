@@ -25,7 +25,8 @@
 class QgsMapCanvas;
 class QgsMapToolAdvancedDigitizing;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * A QgsMapMouseEvent is the result of a user interaction with the mouse on a QgsMapCanvas.
  * It is sent whenever the user moves, clicks, releases or double clicks the mouse.
  * In addition to the coordinates in pixel space it also knows the coordinates in the mapcanvas' CRS
@@ -73,10 +74,10 @@ class GUI_EXPORT QgsMapMouseEvent : public QMouseEvent
     QgsPointXY snapPoint();
 
     /**
-     * Returns true if there is a snapped point cached.
+     * Returns TRUE if there is a snapped point cached.
      * Will only be useful after snapPoint has previously been called.
      *
-     * \returns True if there is a snapped point cached.
+     * \returns TRUE if there is a snapped point cached.
      */
     bool isSnapped() const { return mSnapMatch.isValid(); }
 
@@ -89,6 +90,8 @@ class GUI_EXPORT QgsMapMouseEvent : public QMouseEvent
     /**
       * Returns the matching data from the most recently snapped point.
       * \returns the snapping data structure
+      * \note This method returns the most recent snap match. It must
+      * follow a call to snapPoint() in order to have a recent snap result available.
       * \since QGIS 2.14
       */
     QgsPointLocator::Match mapPointMatch() const { return mSnapMatch; }
@@ -123,6 +126,15 @@ class GUI_EXPORT QgsMapMouseEvent : public QMouseEvent
      */
     QPoint originalPixelPoint() const { return pos(); }
 
+    /**
+     * Snaps the mapPoint to a grid with the given \a precision.
+     * The snapping will be done in the specified \a crs. If this crs is
+     * different from the mapCanvas crs, it will be reprojected on the fly.
+     *
+     * \since QGIS 3.4
+     */
+    void snapToGrid( double precision, const QgsCoordinateReferenceSystem &crs );
+
   private:
 
     QPoint mapToPixelCoordinates( const QgsPointXY &point );
@@ -136,8 +148,10 @@ class GUI_EXPORT QgsMapMouseEvent : public QMouseEvent
     //! Location in map coordinates. May be snapped.
     QgsPointXY mMapPoint;
 
-    //! Location in pixel coordinates. May be snapped.
-    //! Original pixel point available through the parent QMouseEvent.
+    /**
+     * Location in pixel coordinates. May be snapped.
+     * Original pixel point available through the parent QMouseEvent.
+     */
     QPoint mPixelPoint;
 
     //! The map canvas on which the event was triggered.

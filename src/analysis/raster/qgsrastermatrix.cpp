@@ -18,13 +18,7 @@
 #include "qgsrastermatrix.h"
 #include <cstring>
 #include <cmath>
-
-QgsRasterMatrix::QgsRasterMatrix()
-  : mColumns( 0 )
-  , mRows( 0 )
-  , mNodataValue( -1 )
-{
-}
+#include <algorithm>
 
 QgsRasterMatrix::QgsRasterMatrix( int nCols, int nRows, double *data, double nodataValue )
   : mColumns( nCols )
@@ -35,8 +29,6 @@ QgsRasterMatrix::QgsRasterMatrix( int nCols, int nRows, double *data, double nod
 }
 
 QgsRasterMatrix::QgsRasterMatrix( const QgsRasterMatrix &m )
-  : mColumns( 0 )
-  , mRows( 0 )
 {
   operator=( m );
 }
@@ -141,6 +133,16 @@ bool QgsRasterMatrix::logicalOr( const QgsRasterMatrix &other )
   return twoArgumentOperation( opOR, other );
 }
 
+bool QgsRasterMatrix::max( const QgsRasterMatrix &other )
+{
+  return twoArgumentOperation( opMAX, other );
+}
+
+bool QgsRasterMatrix::min( const QgsRasterMatrix &other )
+{
+  return twoArgumentOperation( opMIN, other );
+}
+
 bool QgsRasterMatrix::squareRoot()
 {
   return oneArgumentOperation( opSQRT );
@@ -189,6 +191,11 @@ bool QgsRasterMatrix::log()
 bool QgsRasterMatrix::log10()
 {
   return oneArgumentOperation( opLOG10 );
+}
+
+bool QgsRasterMatrix::absoluteValue()
+{
+  return oneArgumentOperation( opABS );
 }
 
 bool QgsRasterMatrix::oneArgumentOperation( OneArgOperator op )
@@ -258,6 +265,9 @@ bool QgsRasterMatrix::oneArgumentOperation( OneArgOperator op )
             mData[i] = ::log10( value );
           }
           break;
+        case opABS:
+          mData[i] = ::fabs( value );
+          break;
       }
     }
   }
@@ -308,6 +318,10 @@ double QgsRasterMatrix::calculateTwoArgumentOp( TwoArgOperator op, double arg1, 
       return ( arg1 && arg2 ? 1.0 : 0.0 );
     case opOR:
       return ( arg1 || arg2 ? 1.0 : 0.0 );
+    case opMAX:
+      return std::max( arg1, arg2 );
+    case opMIN:
+      return std::min( arg1, arg2 );
   }
   return mNodataValue;
 }

@@ -21,6 +21,7 @@
 #include "qgsnetworkaccessmanager.h"
 #include "qgsmessagelog.h"
 #include "qgssymbollayerutils.h"
+#include "qgsnetworkcontentfetchertask.h"
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -36,39 +37,38 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 
-QgsSvgCacheEntry::QgsSvgCacheEntry()
-  : path( QString() )
-  , size( 0.0 )
-  , strokeWidth( 0 )
-  , widthScaleFactor( 1.0 )
-  , fill( Qt::black )
-  , stroke( Qt::black )
+///@cond PRIVATE
 
+//
+// QgsSvgCacheEntry
+//
+
+QgsSvgCacheEntry::QgsSvgCacheEntry( const QString &path, double size, double strokeWidth, double widthScaleFactor, const QColor &fill, const QColor &stroke, double fixedAspectRatio )
+  : QgsAbstractContentCacheEntry( path )
+  , size( size )
+  , strokeWidth( strokeWidth )
+  , widthScaleFactor( widthScaleFactor )
+  , fixedAspectRatio( fixedAspectRatio )
+  , fill( fill )
+  , stroke( stroke )
 {
 }
 
-QgsSvgCacheEntry::QgsSvgCacheEntry( const QString &p, double s, double ow, double wsf, const QColor &fi, const QColor &ou )
-  : path( p )
-  , size( s )
-  , strokeWidth( ow )
-  , widthScaleFactor( wsf )
-  , fill( fi )
-  , stroke( ou )
-
+bool QgsSvgCacheEntry::isEqual( const QgsAbstractContentCacheEntry *other ) const
 {
-}
+  const QgsSvgCacheEntry *otherSvg = dynamic_cast< const QgsSvgCacheEntry * >( other );
+  // cheapest checks first!
+  if ( !otherSvg
+       || !qgsDoubleNear( otherSvg->fixedAspectRatio, fixedAspectRatio )
+       || !qgsDoubleNear( otherSvg->size, size )
+       || !qgsDoubleNear( otherSvg->strokeWidth, strokeWidth )
+       || !qgsDoubleNear( otherSvg->widthScaleFactor, widthScaleFactor )
+       || otherSvg->fill != fill
+       || otherSvg->stroke != stroke
+       || otherSvg->path != path )
+    return false;
 
-
-QgsSvgCacheEntry::~QgsSvgCacheEntry()
-{
-  delete image;
-  delete picture;
-}
-
-bool QgsSvgCacheEntry::operator==( const QgsSvgCacheEntry &other ) const
-{
-  return other.path == path && qgsDoubleNear( other.size, size ) && qgsDoubleNear( other.strokeWidth, strokeWidth ) && qgsDoubleNear( other.widthScaleFactor, widthScaleFactor )
-         && other.fill == fill && other.stroke == stroke;
+  return true;
 }
 
 int QgsSvgCacheEntry::dataSize() const
@@ -85,27 +85,49 @@ int QgsSvgCacheEntry::dataSize() const
   return size;
 }
 
-QgsSvgCache::QgsSvgCache( QObject *parent )
-  : QObject( parent )
-  , mTotalSize( 0 )
+void QgsSvgCacheEntry::dump() const
+{
+  QgsDebugMsg( QStringLiteral( "path: %1, size %2, width scale factor %3" ).arg( path ).arg( size ).arg( widthScaleFactor ) );
+}
+///@endcond
 
+
+//
+// QgsSvgCache
+//
+
+QgsSvgCache::QgsSvgCache( QObject *parent )
+  : QgsAbstractContentCache< QgsSvgCacheEntry >( parent, QObject::tr( "SVG" ) )
 {
   mMissingSvg = QStringLiteral( "<svg width='10' height='10'><text x='5' y='10' font-size='10' text-anchor='middle'>?</text></svg>" ).toLatin1();
-}
 
-QgsSvgCache::~QgsSvgCache()
-{
-  qDeleteAll( mEntryLookup );
-}
+  const QString downloadingSvgPath = QgsApplication::defaultThemePath() + QStringLiteral( "downloading_svg.svg" );
+  if ( QFile::exists( downloadingSvgPath ) )
+  {
+    QFile file( downloadingSvgPath );
+    if ( file.open( QIODevice::ReadOnly ) )
+    {
+      mFetchingSvg = file.readAll();
+    }
+  }
 
+  if ( mFetchingSvg.isEmpty() )
+  {
+    mFetchingSvg = QStringLiteral( "<svg width='10' height='10'><text x='5' y='10' font-size='10' text-anchor='middle'>?</text></svg>" ).toLatin1();
+  }
+
+  connect( this, &QgsAbstractContentCacheBase::remoteContentFetched, this, &QgsSvgCache::remoteSvgFetched );
+}
 
 QImage QgsSvgCache::svgAsImage( const QString &file, double size, const QColor &fill, const QColor &stroke, double strokeWidth,
-                                double widthScaleFactor, bool &fitsInCache )
+                                double widthScaleFactor, bool &fitsInCache, double fixedAspectRatio, bool blocking )
 {
   QMutexLocker locker( &mMutex );
 
   fitsInCache = true;
-  QgsSvgCacheEntry *currentEntry = cacheEntry( file, size, fill, stroke, strokeWidth, widthScaleFactor );
+  QgsSvgCacheEntry *currentEntry = cacheEntry( file, size, fill, stroke, strokeWidth, widthScaleFactor, fixedAspectRatio, blocking );
+
+  QImage result;
 
   //if current entry image is 0: cache image for entry
   // checks to see if image will fit into cache
@@ -116,40 +138,53 @@ QImage QgsSvgCache::svgAsImage( const QString &file, double size, const QColor &
     double hwRatio = 1.0;
     if ( r.viewBoxF().width() > 0 )
     {
-      hwRatio = r.viewBoxF().height() / r.viewBoxF().width();
+      if ( currentEntry->fixedAspectRatio > 0 )
+      {
+        hwRatio = currentEntry->fixedAspectRatio;
+      }
+      else
+      {
+        hwRatio = r.viewBoxF().height() / r.viewBoxF().width();
+      }
     }
     long cachedDataSize = 0;
     cachedDataSize += currentEntry->svgContent.size();
     cachedDataSize += static_cast< int >( currentEntry->size * currentEntry->size * hwRatio * 32 );
-    if ( cachedDataSize > MAXIMUM_SIZE / 2 )
+    if ( cachedDataSize > mMaxCacheSize / 2 )
     {
       fitsInCache = false;
-      delete currentEntry->image;
-      currentEntry->image = nullptr;
-      //currentEntry->image = new QImage( 0, 0 );
+      currentEntry->image.reset();
 
       // instead cache picture
       if ( !currentEntry->picture )
       {
         cachePicture( currentEntry, false );
       }
+
+      // ...and render cached picture to result image
+      result = imageFromCachedPicture( *currentEntry );
     }
     else
     {
       cacheImage( currentEntry );
+      result = *( currentEntry->image );
     }
     trimToMaximumSize();
   }
+  else
+  {
+    result = *( currentEntry->image );
+  }
 
-  return *( currentEntry->image );
+  return result;
 }
 
 QPicture QgsSvgCache::svgAsPicture( const QString &path, double size, const QColor &fill, const QColor &stroke, double strokeWidth,
-                                    double widthScaleFactor, bool forceVectorOutput )
+                                    double widthScaleFactor, bool forceVectorOutput, double fixedAspectRatio, bool blocking )
 {
   QMutexLocker locker( &mMutex );
 
-  QgsSvgCacheEntry *currentEntry = cacheEntry( path, size, fill, stroke, strokeWidth, widthScaleFactor );
+  QgsSvgCacheEntry *currentEntry = cacheEntry( path, size, fill, stroke, strokeWidth, widthScaleFactor, fixedAspectRatio, blocking );
 
   //if current entry picture is 0: cache picture for entry
   //update stats for memory usage
@@ -159,59 +194,36 @@ QPicture QgsSvgCache::svgAsPicture( const QString &path, double size, const QCol
     trimToMaximumSize();
   }
 
-  return *( currentEntry->picture );
+  QPicture p;
+  // For some reason p.detach() doesn't seem to always work as intended, at
+  // least with QT 5.5 on Ubuntu 16.04
+  // Serialization/deserialization is a safe way to be ensured we don't
+  // share a copy.
+  p.setData( currentEntry->picture->data(), currentEntry->picture->size() );
+  return p;
 }
 
 QByteArray QgsSvgCache::svgContent( const QString &path, double size, const QColor &fill, const QColor &stroke, double strokeWidth,
-                                    double widthScaleFactor )
+                                    double widthScaleFactor, double fixedAspectRatio, bool blocking )
 {
   QMutexLocker locker( &mMutex );
 
-  QgsSvgCacheEntry *currentEntry = cacheEntry( path, size, fill, stroke, strokeWidth, widthScaleFactor );
+  QgsSvgCacheEntry *currentEntry = cacheEntry( path, size, fill, stroke, strokeWidth, widthScaleFactor, fixedAspectRatio, blocking );
 
   return currentEntry->svgContent;
 }
 
-QSizeF QgsSvgCache::svgViewboxSize( const QString &path, double size, const QColor &fill, const QColor &stroke, double strokeWidth, double widthScaleFactor )
+QSizeF QgsSvgCache::svgViewboxSize( const QString &path, double size, const QColor &fill, const QColor &stroke, double strokeWidth,
+                                    double widthScaleFactor, double fixedAspectRatio, bool blocking )
 {
   QMutexLocker locker( &mMutex );
 
-  QgsSvgCacheEntry *currentEntry = cacheEntry( path, size, fill, stroke, strokeWidth, widthScaleFactor );
-
+  QgsSvgCacheEntry *currentEntry = cacheEntry( path, size, fill, stroke, strokeWidth, widthScaleFactor, fixedAspectRatio, blocking );
   return currentEntry->viewboxSize;
 }
 
-QgsSvgCacheEntry *QgsSvgCache::insertSvg( const QString &path, double size, const QColor &fill, const QColor &stroke, double strokeWidth,
-    double widthScaleFactor )
-{
-  QgsSvgCacheEntry *entry = new QgsSvgCacheEntry( path, size, strokeWidth, widthScaleFactor, fill, stroke );
-
-  replaceParamsAndCacheSvg( entry );
-
-  mEntryLookup.insert( path, entry );
-
-  //insert to most recent place in entry list
-  if ( !mMostRecentEntry ) //inserting first entry
-  {
-    mLeastRecentEntry = entry;
-    mMostRecentEntry = entry;
-    entry->previousEntry = nullptr;
-    entry->nextEntry = nullptr;
-  }
-  else
-  {
-    entry->previousEntry = mMostRecentEntry;
-    entry->nextEntry = nullptr;
-    mMostRecentEntry->nextEntry = entry;
-    mMostRecentEntry = entry;
-  }
-
-  trimToMaximumSize();
-  return entry;
-}
-
 void QgsSvgCache::containsParams( const QString &path, bool &hasFillParam, QColor &defaultFillColor, bool &hasStrokeParam, QColor &defaultStrokeColor,
-                                  bool &hasStrokeWidthParam, double &defaultStrokeWidth ) const
+                                  bool &hasStrokeWidthParam, double &defaultStrokeWidth, bool blocking ) const
 {
   bool hasDefaultFillColor = false;
   bool hasFillOpacityParam = false;
@@ -227,7 +239,8 @@ void QgsSvgCache::containsParams( const QString &path, bool &hasFillParam, QColo
                   hasFillOpacityParam, hasDefaultFillOpacity, defaultFillOpacity,
                   hasStrokeParam, hasDefaultStrokeColor, defaultStrokeColor,
                   hasStrokeWidthParam, hasDefaultStrokeWidth, defaultStrokeWidth,
-                  hasStrokeOpacityParam, hasDefaultStrokeOpacity, defaultStrokeOpacity );
+                  hasStrokeOpacityParam, hasDefaultStrokeOpacity, defaultStrokeOpacity,
+                  blocking );
 }
 
 void QgsSvgCache::containsParams( const QString &path,
@@ -235,7 +248,8 @@ void QgsSvgCache::containsParams( const QString &path,
                                   bool &hasFillOpacityParam, bool &hasDefaultFillOpacity, double &defaultFillOpacity,
                                   bool &hasStrokeParam, bool &hasDefaultStrokeColor, QColor &defaultStrokeColor,
                                   bool &hasStrokeWidthParam, bool &hasDefaultStrokeWidth, double &defaultStrokeWidth,
-                                  bool &hasStrokeOpacityParam, bool &hasDefaultStrokeOpacity, double &defaultStrokeOpacity ) const
+                                  bool &hasStrokeOpacityParam, bool &hasDefaultStrokeOpacity, double &defaultStrokeOpacity,
+                                  bool blocking ) const
 {
   hasFillParam = false;
   hasFillOpacityParam = false;
@@ -255,7 +269,7 @@ void QgsSvgCache::containsParams( const QString &path,
   hasDefaultStrokeOpacity = false;
 
   QDomDocument svgDoc;
-  if ( !svgDoc.setContent( getImageData( path ) ) )
+  if ( !svgDoc.setContent( getContent( path, mMissingSvg, mFetchingSvg, blocking ) ) )
   {
     return;
   }
@@ -268,7 +282,7 @@ void QgsSvgCache::containsParams( const QString &path,
                       hasStrokeOpacityParam, hasDefaultStrokeOpacity, defaultStrokeOpacity );
 }
 
-void QgsSvgCache::replaceParamsAndCacheSvg( QgsSvgCacheEntry *entry )
+void QgsSvgCache::replaceParamsAndCacheSvg( QgsSvgCacheEntry *entry, bool blocking )
 {
   if ( !entry )
   {
@@ -276,7 +290,7 @@ void QgsSvgCache::replaceParamsAndCacheSvg( QgsSvgCacheEntry *entry )
   }
 
   QDomDocument svgDoc;
-  if ( !svgDoc.setContent( getImageData( entry->path ) ) )
+  if ( !svgDoc.setContent( getContent( entry->path, mMissingSvg, mFetchingSvg, blocking ) ) )
   {
     return;
   }
@@ -319,7 +333,7 @@ double QgsSvgCache::calcSizeScaleFactor( QgsSvgCacheEntry *entry, const QDomElem
   }
   else
   {
-    QDomElement svgElem = docElem.firstChildElement( QStringLiteral( "svg" ) ) ;
+    QDomElement svgElem = docElem.firstChildElement( QStringLiteral( "svg" ) );
     if ( !svgElem.isNull() )
     {
       if ( svgElem.hasAttribute( QStringLiteral( "viewBox" ) ) )
@@ -353,119 +367,24 @@ double QgsSvgCache::calcSizeScaleFactor( QgsSvgCacheEntry *entry, const QDomElem
   return 1.0;
 }
 
-QByteArray QgsSvgCache::getImageData( const QString &path ) const
+
+QByteArray QgsSvgCache::getImageData( const QString &path, bool blocking ) const
 {
-  // is it a path to local file?
-  QFile svgFile( path );
-  if ( svgFile.exists() )
-  {
-    if ( svgFile.open( QIODevice::ReadOnly ) )
-    {
-      return svgFile.readAll();
-    }
-    else
-    {
-      return mMissingSvg;
-    }
-  }
+  return getContent( path, mMissingSvg, mFetchingSvg, blocking );
+};
 
-  // maybe it's a url...
-  if ( !path.contains( QLatin1String( "://" ) ) ) // otherwise short, relative SVG paths might be considered URLs
-  {
-    return mMissingSvg;
-  }
-
-  QUrl svgUrl( path );
-  if ( !svgUrl.isValid() )
-  {
-    return mMissingSvg;
-  }
-
-  // check whether it's a url pointing to a local file
-  if ( svgUrl.scheme().compare( QLatin1String( "file" ), Qt::CaseInsensitive ) == 0 )
-  {
-    svgFile.setFileName( svgUrl.toLocalFile() );
-    if ( svgFile.exists() )
-    {
-      if ( svgFile.open( QIODevice::ReadOnly ) )
-      {
-        return svgFile.readAll();
-      }
-    }
-
-    // not found...
-    return mMissingSvg;
-  }
-
-  // the url points to a remote resource, download it!
-  QNetworkReply *reply = nullptr;
-
-  // The following code blocks until the file is downloaded...
-  // TODO: use signals to get reply finished notification, in this moment
-  // it's executed while rendering.
-  while ( true )
-  {
-    QgsDebugMsg( QString( "get svg: %1" ).arg( svgUrl.toString() ) );
-    QNetworkRequest request( svgUrl );
-    request.setAttribute( QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::PreferCache );
-    request.setAttribute( QNetworkRequest::CacheSaveControlAttribute, true );
-
-    reply = QgsNetworkAccessManager::instance()->get( request );
-    connect( reply, &QNetworkReply::downloadProgress, this, &QgsSvgCache::downloadProgress );
-
-    //emit statusChanged( tr( "Downloading svg." ) );
-
-    // wait until the image download finished
-    // TODO: connect to the reply->finished() signal
-    while ( !reply->isFinished() )
-    {
-      QCoreApplication::processEvents( QEventLoop::ExcludeUserInputEvents, 500 );
-    }
-
-    if ( reply->error() != QNetworkReply::NoError )
-    {
-      QgsMessageLog::logMessage( tr( "SVG request failed [error: %1 - url: %2]" ).arg( reply->errorString(), reply->url().toString() ), tr( "SVG" ) );
-
-      reply->deleteLater();
-      return QByteArray();
-    }
-
-    QVariant redirect = reply->attribute( QNetworkRequest::RedirectionTargetAttribute );
-    if ( redirect.isNull() )
-    {
-      // neither network error nor redirection
-      // TODO: cache the image
-      break;
-    }
-
-    // do a new request to the redirect url
-    svgUrl = redirect.toUrl();
-    reply->deleteLater();
-  }
-
-  QVariant status = reply->attribute( QNetworkRequest::HttpStatusCodeAttribute );
-  if ( !status.isNull() && status.toInt() >= 400 )
-  {
-    QVariant phrase = reply->attribute( QNetworkRequest::HttpReasonPhraseAttribute );
-    QgsMessageLog::logMessage( tr( "SVG request error [status: %1 - reason phrase: %2]" ).arg( status.toInt() ).arg( phrase.toString() ), tr( "SVG" ) );
-
-    reply->deleteLater();
-    return mMissingSvg;
-  }
-
+bool QgsSvgCache::checkReply( QNetworkReply *reply, const QString &path ) const
+{
+  // we accept both real SVG mime types AND plain text types - because some sites
+  // (notably github) serve up svgs as raw text
   QString contentType = reply->header( QNetworkRequest::ContentTypeHeader ).toString();
-  QgsDebugMsg( "contentType: " + contentType );
-  if ( !contentType.startsWith( QLatin1String( "image/svg+xml" ), Qt::CaseInsensitive ) )
+  if ( !contentType.startsWith( QLatin1String( "image/svg+xml" ), Qt::CaseInsensitive )
+       && !contentType.startsWith( QLatin1String( "text/plain" ), Qt::CaseInsensitive ) )
   {
-    reply->deleteLater();
-    return mMissingSvg;
+    QgsMessageLog::logMessage( tr( "Unexpected MIME type %1 received for %2" ).arg( contentType, path ), tr( "SVG" ) );
+    return false;
   }
-
-  // read the image data
-  QByteArray ba = reply->readAll();
-  reply->deleteLater();
-
-  return ba;
+  return true;
 }
 
 void QgsSvgCache::cacheImage( QgsSvgCacheEntry *entry )
@@ -475,128 +394,89 @@ void QgsSvgCache::cacheImage( QgsSvgCacheEntry *entry )
     return;
   }
 
-  delete entry->image;
-  entry->image = nullptr;
+  entry->image.reset();
 
-  QSvgRenderer r( entry->svgContent );
-  double hwRatio = 1.0;
-  if ( r.viewBoxF().width() > 0 )
-  {
-    hwRatio = r.viewBoxF().height() / r.viewBoxF().width();
-  }
-  double wSize = entry->size;
-  int wImgSize = static_cast< int >( wSize );
-  if ( wImgSize < 1 )
-  {
-    wImgSize = 1;
-  }
-  double hSize = wSize * hwRatio;
-  int hImgSize = static_cast< int >( hSize );
-  if ( hImgSize < 1 )
-  {
-    hImgSize = 1;
-  }
+  QSizeF viewBoxSize;
+  QSizeF scaledSize;
+  QSize imageSize = sizeForImage( *entry, viewBoxSize, scaledSize );
+
   // cast double image sizes to int for QImage
-  QImage *image = new QImage( wImgSize, hImgSize, QImage::Format_ARGB32_Premultiplied );
+  std::unique_ptr< QImage > image = qgis::make_unique< QImage >( imageSize, QImage::Format_ARGB32_Premultiplied );
   image->fill( 0 ); // transparent background
 
-  QPainter p( image );
-  if ( qgsDoubleNear( r.viewBoxF().width(), r.viewBoxF().height() ) )
+  QPainter p( image.get() );
+  QSvgRenderer r( entry->svgContent );
+  if ( qgsDoubleNear( viewBoxSize.width(), viewBoxSize.height() ) )
   {
     r.render( &p );
   }
   else
   {
-    QSizeF s( r.viewBoxF().size() );
-    s.scale( wSize, hSize, Qt::KeepAspectRatio );
-    QRectF rect( ( wImgSize - s.width() ) / 2, ( hImgSize - s.height() ) / 2, s.width(), s.height() );
+    QSizeF s( viewBoxSize );
+    s.scale( scaledSize.width(), scaledSize.height(), Qt::KeepAspectRatio );
+    QRectF rect( ( imageSize.width() - s.width() ) / 2, ( imageSize.height() - s.height() ) / 2, s.width(), s.height() );
     r.render( &p, rect );
   }
 
-  entry->image = image;
   mTotalSize += ( image->width() * image->height() * 32 );
+  entry->image = std::move( image );
 }
 
 void QgsSvgCache::cachePicture( QgsSvgCacheEntry *entry, bool forceVectorOutput )
 {
-  Q_UNUSED( forceVectorOutput );
+  Q_UNUSED( forceVectorOutput )
   if ( !entry )
   {
     return;
   }
 
-  delete entry->picture;
-  entry->picture = nullptr;
+  entry->picture.reset();
+
+  bool isFixedAR = entry->fixedAspectRatio > 0;
 
   //correct QPictures dpi correction
-  QPicture *picture = new QPicture();
+  std::unique_ptr< QPicture > picture = qgis::make_unique< QPicture >();
   QRectF rect;
   QSvgRenderer r( entry->svgContent );
   double hwRatio = 1.0;
   if ( r.viewBoxF().width() > 0 )
   {
-    hwRatio = r.viewBoxF().height() / r.viewBoxF().width();
+    if ( isFixedAR )
+    {
+      hwRatio = entry->fixedAspectRatio;
+    }
+    else
+    {
+      hwRatio = r.viewBoxF().height() / r.viewBoxF().width();
+    }
   }
 
   double wSize = entry->size;
   double hSize = wSize * hwRatio;
+
   QSizeF s( r.viewBoxF().size() );
-  s.scale( wSize, hSize, Qt::KeepAspectRatio );
+  s.scale( wSize, hSize, isFixedAR ? Qt::IgnoreAspectRatio : Qt::KeepAspectRatio );
   rect = QRectF( -s.width() / 2.0, -s.height() / 2.0, s.width(), s.height() );
 
-  QPainter p( picture );
+  QPainter p( picture.get() );
   r.render( &p, rect );
-  entry->picture = picture;
+  entry->picture = std::move( picture );
   mTotalSize += entry->picture->size();
 }
 
 QgsSvgCacheEntry *QgsSvgCache::cacheEntry( const QString &path, double size, const QColor &fill, const QColor &stroke, double strokeWidth,
-    double widthScaleFactor )
+    double widthScaleFactor, double fixedAspectRatio, bool blocking )
 {
-  //search entries in mEntryLookup
-  QgsSvgCacheEntry *currentEntry = nullptr;
-  QList<QgsSvgCacheEntry *> entries = mEntryLookup.values( path );
+  QgsSvgCacheEntry *currentEntry = findExistingEntry( new QgsSvgCacheEntry( path, size, strokeWidth, widthScaleFactor, fill, stroke, fixedAspectRatio ) );
 
-  QList<QgsSvgCacheEntry *>::iterator entryIt = entries.begin();
-  for ( ; entryIt != entries.end(); ++entryIt )
+  if ( currentEntry->svgContent.isEmpty() )
   {
-    QgsSvgCacheEntry *cacheEntry = *entryIt;
-    if ( qgsDoubleNear( cacheEntry->size, size ) && cacheEntry->fill == fill && cacheEntry->stroke == stroke &&
-         qgsDoubleNear( cacheEntry->strokeWidth, strokeWidth ) && qgsDoubleNear( cacheEntry->widthScaleFactor, widthScaleFactor ) )
-    {
-      currentEntry = cacheEntry;
-      break;
-    }
+    replaceParamsAndCacheSvg( currentEntry, blocking );
   }
-
-  //if not found: create new entry
-  //cache and replace params in svg content
-  if ( !currentEntry )
-  {
-    currentEntry = insertSvg( path, size, fill, stroke, strokeWidth, widthScaleFactor );
-  }
-  else
-  {
-    takeEntryFromList( currentEntry );
-    if ( !mMostRecentEntry ) //list is empty
-    {
-      mMostRecentEntry = currentEntry;
-      mLeastRecentEntry = currentEntry;
-    }
-    else
-    {
-      mMostRecentEntry->nextEntry = currentEntry;
-      currentEntry->previousEntry = mMostRecentEntry;
-      currentEntry->nextEntry = nullptr;
-      mMostRecentEntry = currentEntry;
-    }
-  }
-
-  //debugging
-  //printEntryList();
 
   return currentEntry;
 }
+
 
 void QgsSvgCache::replaceElemParams( QDomElement &elem, const QColor &fill, const QColor &stroke, double strokeWidth )
 {
@@ -626,40 +506,43 @@ void QgsSvgCache::replaceElemParams( QDomElement &elem, const QColor &fill, cons
         {
           continue;
         }
-        QString key = keyValueSplit.at( 0 );
+        const QString key = keyValueSplit.at( 0 );
         QString value = keyValueSplit.at( 1 );
+        QString newValue = value;
+        value = value.trimmed().toLower();
+
         if ( value.startsWith( QLatin1String( "param(fill)" ) ) )
         {
-          value = fill.name();
+          newValue = fill.name();
         }
         else if ( value.startsWith( QLatin1String( "param(fill-opacity)" ) ) )
         {
-          value = fill.alphaF();
+          newValue = QString::number( fill.alphaF() );
         }
         else if ( value.startsWith( QLatin1String( "param(outline)" ) ) )
         {
-          value = stroke.name();
+          newValue = stroke.name();
         }
         else if ( value.startsWith( QLatin1String( "param(outline-opacity)" ) ) )
         {
-          value = stroke.alphaF();
+          newValue = QString::number( stroke.alphaF() );
         }
         else if ( value.startsWith( QLatin1String( "param(outline-width)" ) ) )
         {
-          value = QString::number( strokeWidth );
+          newValue = QString::number( strokeWidth );
         }
 
         if ( entryIt != entryList.constBegin() )
         {
           newAttributeString.append( ';' );
         }
-        newAttributeString.append( key + ':' + value );
+        newAttributeString.append( key + ':' + newValue );
       }
       elem.setAttribute( attribute.name(), newAttributeString );
     }
     else
     {
-      QString value = attribute.value();
+      const QString value = attribute.value().trimmed().toLower();
       if ( value.startsWith( QLatin1String( "param(fill)" ) ) )
       {
         elem.setAttribute( attribute.name(), fill.name() );
@@ -864,75 +747,50 @@ void QgsSvgCache::containsElemParams( const QDomElement &elem, bool &hasFillPara
   }
 }
 
-void QgsSvgCache::removeCacheEntry( const QString &s, QgsSvgCacheEntry *entry )
+QSize QgsSvgCache::sizeForImage( const QgsSvgCacheEntry &entry, QSizeF &viewBoxSize, QSizeF &scaledSize ) const
 {
-  delete entry;
-  mEntryLookup.remove( s, entry );
+  bool isFixedAR = entry.fixedAspectRatio > 0;
+
+  QSvgRenderer r( entry.svgContent );
+  double hwRatio = 1.0;
+  viewBoxSize = r.viewBoxF().size();
+  if ( viewBoxSize.width() > 0 )
+  {
+    if ( isFixedAR )
+    {
+      hwRatio = entry.fixedAspectRatio;
+    }
+    else
+    {
+      hwRatio = viewBoxSize.height() / viewBoxSize.width();
+    }
+  }
+
+  // cast double image sizes to int for QImage
+  scaledSize.setWidth( entry.size );
+  int wImgSize = static_cast< int >( scaledSize.width() );
+  if ( wImgSize < 1 )
+  {
+    wImgSize = 1;
+  }
+  scaledSize.setHeight( scaledSize.width() * hwRatio );
+  int hImgSize = static_cast< int >( scaledSize.height() );
+  if ( hImgSize < 1 )
+  {
+    hImgSize = 1;
+  }
+  return QSize( wImgSize, hImgSize );
 }
 
-void QgsSvgCache::printEntryList()
+QImage QgsSvgCache::imageFromCachedPicture( const QgsSvgCacheEntry &entry ) const
 {
-  QgsDebugMsg( "****************svg cache entry list*************************" );
-  QgsDebugMsg( "Cache size: " + QString::number( mTotalSize ) );
-  QgsSvgCacheEntry *entry = mLeastRecentEntry;
-  while ( entry )
-  {
-    QgsDebugMsg( "***Entry:" );
-    QgsDebugMsg( "File:" + entry->path );
-    QgsDebugMsg( "Size:" + QString::number( entry->size ) );
-    QgsDebugMsg( "Width scale factor" + QString::number( entry->widthScaleFactor ) );
-    entry = entry->nextEntry;
-  }
+  QSizeF viewBoxSize;
+  QSizeF scaledSize;
+  QImage image( sizeForImage( entry, viewBoxSize, scaledSize ), QImage::Format_ARGB32_Premultiplied );
+  image.fill( 0 ); // transparent background
+
+  QPainter p( &image );
+  p.drawPicture( QPoint( 0, 0 ), *entry.picture );
+  return image;
 }
 
-void QgsSvgCache::trimToMaximumSize()
-{
-  //only one entry in cache
-  if ( mLeastRecentEntry == mMostRecentEntry )
-  {
-    return;
-  }
-  QgsSvgCacheEntry *entry = mLeastRecentEntry;
-  while ( entry && ( mTotalSize > MAXIMUM_SIZE ) )
-  {
-    QgsSvgCacheEntry *bkEntry = entry;
-    entry = entry->nextEntry;
-
-    takeEntryFromList( bkEntry );
-    mEntryLookup.remove( bkEntry->path, bkEntry );
-    mTotalSize -= bkEntry->dataSize();
-    delete bkEntry;
-  }
-}
-
-void QgsSvgCache::takeEntryFromList( QgsSvgCacheEntry *entry )
-{
-  if ( !entry )
-  {
-    return;
-  }
-
-  if ( entry->previousEntry )
-  {
-    entry->previousEntry->nextEntry = entry->nextEntry;
-  }
-  else
-  {
-    mLeastRecentEntry = entry->nextEntry;
-  }
-  if ( entry->nextEntry )
-  {
-    entry->nextEntry->previousEntry = entry->previousEntry;
-  }
-  else
-  {
-    mMostRecentEntry = entry->previousEntry;
-  }
-}
-
-void QgsSvgCache::downloadProgress( qint64 bytesReceived, qint64 bytesTotal )
-{
-  QString msg = tr( "%1 of %2 bytes of svg image downloaded." ).arg( bytesReceived ).arg( bytesTotal < 0 ? QStringLiteral( "unknown number of" ) : QString::number( bytesTotal ) );
-  QgsDebugMsg( msg );
-  emit statusChanged( msg );
-}

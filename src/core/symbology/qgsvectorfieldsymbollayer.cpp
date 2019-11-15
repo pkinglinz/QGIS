@@ -18,18 +18,9 @@
 #include "qgsvectorfieldsymbollayer.h"
 #include "qgsvectorlayer.h"
 #include "qgsunittypes.h"
+#include "qgssymbollayerutils.h"
 
 QgsVectorFieldSymbolLayer::QgsVectorFieldSymbolLayer()
-  : mXAttribute( QLatin1String( "" ) )
-  , mYAttribute( QLatin1String( "" ) )
-  , mDistanceUnit( QgsUnitTypes::RenderMillimeters )
-  , mScale( 1.0 )
-  , mVectorFieldType( Cartesian )
-  , mAngleOrientation( ClockwiseFromNorth )
-  , mAngleUnits( Degrees )
-  , mLineSymbol( nullptr )
-  , mXIndex( -1 )
-  , mYIndex( -1 )
 {
   setSubSymbol( new QgsLineSymbol() );
 }
@@ -263,7 +254,7 @@ void QgsVectorFieldSymbolLayer::toSld( QDomDocument &doc, QDomElement &element, 
 
 QgsSymbolLayer *QgsVectorFieldSymbolLayer::createFromSld( QDomElement &element )
 {
-  Q_UNUSED( element );
+  Q_UNUSED( element )
   return nullptr;
 }
 
@@ -291,6 +282,15 @@ QSet<QString> QgsVectorFieldSymbolLayer::usedAttributes( const QgsRenderContext 
     attributes.unite( mLineSymbol->usedAttributes( context ) );
   }
   return attributes;
+}
+
+bool QgsVectorFieldSymbolLayer::hasDataDefinedProperties() const
+{
+  if ( QgsSymbolLayer::hasDataDefinedProperties() )
+    return true;
+  if ( mLineSymbol && mLineSymbol->hasDataDefinedProperties() )
+    return true;
+  return false;
 }
 
 void QgsVectorFieldSymbolLayer::convertPolarToCartesian( double length, double angle, double &x, double &y ) const

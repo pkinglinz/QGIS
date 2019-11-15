@@ -62,7 +62,7 @@
 #include "eviseventidtool.h"
 
 //
-// Qt4 Related Includes
+// Qt Related Includes
 //
 #include <QMessageBox>
 #include <QToolBar>
@@ -85,15 +85,8 @@ static const QString sIcon = QStringLiteral( ":/evis/eVisEventBrowser.png" );
 eVis::eVis( QgisInterface *qgisInterface )
   : QgisPlugin( sName, sDescription, sCategory, sPluginVersion, sPluginType )
   , mQGisIface( qgisInterface )
-  , mDatabaseConnectionActionPointer( nullptr )
-  , mEventIdToolActionPointer( nullptr )
-  , mEventBrowserActionPointer( nullptr )
 {
   mIdTool = nullptr;
-}
-
-eVis::~eVis()
-{
 }
 
 void eVis::initGui()
@@ -187,10 +180,7 @@ void eVis::unload()
     delete ( mTemporaryFileList.takeLast() );
   }
 
-  if ( mIdTool )
-  {
-    delete mIdTool;
-  }
+  delete mIdTool;
 }
 
 void eVis::drawVectorLayer( const QString &pathNameQString, const QString &baseNameQString, const QString &providerQString )

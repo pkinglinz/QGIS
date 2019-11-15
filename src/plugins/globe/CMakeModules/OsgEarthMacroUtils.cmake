@@ -79,7 +79,7 @@ ENDMACRO(DETECT_OSG_VERSION)
 #  full path of the library name. in order to differentiate release and debug, this macro get the
 #  NAME of the variables, so the macro gets as arguments the target name and the following list of parameters
 #  is intended as a list of variable names each one containing  the path of the libraries to link to
-#  The existence of a variable name with _DEBUG appended is tested and, in case it' s value is used
+#  The existence of a variable name with _DEBUG appended is tested and, in case it's value is used
 #  for linking to when in debug mode
 #  the content of this library for linking when in debugging
 #######################################################################################################
@@ -138,7 +138,7 @@ ENDMACRO(LINK_CORELIB_DEFAULT CORELIB_NAME)
 #  macro for common setup of plugins, examples and applications it expect some variables to be set:
 #  either within the local CMakeLists or higher in hierarchy
 #  TARGET_NAME is the name of the folder and of the actually .exe or .so or .dll
-#  TARGET_TARGETNAME  is the name of the target , this get buit out of a prefix, if present and TARGET_TARGETNAME
+#  TARGET_TARGETNAME  is the name of the target, this get built out of a prefix, if present and TARGET_TARGETNAME
 #  TARGET_SRC  are the sources of the target
 #  TARGET_H are the eventual headers of the target
 #  TARGET_LIBRARIES are the libraries to link to that are internal to the project and have d suffix for debug

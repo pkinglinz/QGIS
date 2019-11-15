@@ -176,7 +176,7 @@ void QgsLeastSquares::affine( QVector<QgsPointXY> mapCoords,
 /**
  * Scales the given coordinates so that the center of gravity is at the origin and the mean distance to the origin is sqrt(2).
  *
- * Also returns 3x3 homogenous matrices which can be used to normalize and de-normalize coordinates.
+ * Also returns 3x3 homogeneous matrices which can be used to normalize and de-normalize coordinates.
  */
 void normalizeCoordinates( const QVector<QgsPointXY> &coords, QVector<QgsPointXY> &normalizedCoords,
                            double normalizeMatrix[9], double denormalizeMatrix[9] )
@@ -209,15 +209,15 @@ void normalizeCoordinates( const QVector<QgsPointXY> &coords, QVector<QgsPointXY
     normalizedCoords[i] = QgsPointXY( ( coords[i].x() - cogX ) * D, ( coords[i].y() - cogY ) * D );
   }
 
-  normalizeMatrix[0] =   D;
+  normalizeMatrix[0] = D;
   normalizeMatrix[1] = 0.0;
   normalizeMatrix[2] = -cogX * D;
   normalizeMatrix[3] = 0.0;
-  normalizeMatrix[4] =   D;
+  normalizeMatrix[4] = D;
   normalizeMatrix[5] = -cogY * D;
   normalizeMatrix[6] = 0.0;
   normalizeMatrix[7] = 0.0;
-  normalizeMatrix[8] =   1.0;
+  normalizeMatrix[8] = 1.0;
 
   denormalizeMatrix[0] = OOD;
   denormalizeMatrix[1] = 0.0;
@@ -227,7 +227,7 @@ void normalizeCoordinates( const QVector<QgsPointXY> &coords, QVector<QgsPointXY
   denormalizeMatrix[5] = cogY;
   denormalizeMatrix[6] = 0.0;
   denormalizeMatrix[7] = 0.0;
-  denormalizeMatrix[8] =  1.0;
+  denormalizeMatrix[8] = 1.0;
 }
 
 // Fits a homography to the given corresponding points, and

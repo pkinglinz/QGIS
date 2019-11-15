@@ -16,6 +16,7 @@
 #include "qgssublayersdialog.h"
 #include "qgslogger.h"
 #include "qgssettings.h"
+#include "qgsgui.h"
 
 #include <QTableWidgetItem>
 #include <QPushButton>
@@ -47,23 +48,25 @@ QgsSublayersDialog::QgsSublayersDialog( ProviderType providerType, const QString
   , mName( name )
 {
   setupUi( this );
+  QgsGui::enableAutoGeometryRestore( this );
 
   if ( providerType == QgsSublayersDialog::Ogr )
   {
-    setWindowTitle( tr( "Select Vector Layers to Add..." ) );
+    setWindowTitle( tr( "Select Vector Layers to Add…" ) );
     layersTable->setHeaderLabels( QStringList() << tr( "Layer ID" ) << tr( "Layer name" )
-                                  << tr( "Number of features" ) << tr( "Geometry type" ) );
+                                  << tr( "Number of features" ) << tr( "Geometry type" ) << tr( "Description" ) );
     mShowCount = true;
     mShowType = true;
+    mShowDescription = true;
   }
   else if ( providerType == QgsSublayersDialog::Gdal )
   {
-    setWindowTitle( tr( "Select Raster Layers to Add..." ) );
+    setWindowTitle( tr( "Select Raster Layers to Add…" ) );
     layersTable->setHeaderLabels( QStringList() << tr( "Layer ID" ) << tr( "Layer name" ) );
   }
   else
   {
-    setWindowTitle( tr( "Select Layers to Add..." ) );
+    setWindowTitle( tr( "Select Layers to Add…" ) );
     layersTable->setHeaderLabels( QStringList() << tr( "Layer ID" ) << tr( "Layer name" )
                                   << tr( "Type" ) );
     mShowType = true;
@@ -75,9 +78,6 @@ QgsSublayersDialog::QgsSublayersDialog( ProviderType providerType, const QString
   connect( button, &QAbstractButton::pressed, layersTable, &QTreeView::selectAll );
   // connect( pbnSelectNone, SIGNAL( pressed() ), SLOT( layersTable->selectNone() ) );
 
-  QgsSettings settings;
-  restoreGeometry( settings.value( "/Windows/" + mName + "SubLayers/geometry" ).toByteArray() );
-
   // Checkbox about adding sublayers to a group
   mCheckboxAddToGroup = new QCheckBox( tr( "Add layers to a group" ), this );
   buttonBox->addButton( mCheckboxAddToGroup, QDialogButtonBox::ActionRole );
@@ -87,7 +87,8 @@ QgsSublayersDialog::QgsSublayersDialog( ProviderType providerType, const QString
 QgsSublayersDialog::~QgsSublayersDialog()
 {
   QgsSettings settings;
-  settings.setValue( "/Windows/" + mName + "SubLayers/geometry", saveGeometry() );
+  settings.setValue( "/Windows/" + mName + "SubLayers/headerColumnCount",
+                     layersTable->columnCount() );
   settings.setValue( "/Windows/" + mName + "SubLayers/headerState",
                      layersTable->header()->saveState() );
 }
@@ -131,21 +132,25 @@ QgsSublayersDialog::LayerDefinitionList QgsSublayersDialog::selection()
 
 void QgsSublayersDialog::populateLayerTable( const QgsSublayersDialog::LayerDefinitionList &list )
 {
-  Q_FOREACH ( const LayerDefinition &item, list )
+  const auto constList = list;
+  for ( const LayerDefinition &item : constList )
   {
     QStringList elements;
     elements << QString::number( item.layerId ) << item.layerName;
     if ( mShowCount )
-      elements << QString::number( item.count );
+      elements << ( item.count == -1 ? tr( "Unknown" ) : QString::number( item.count ) );
     if ( mShowType )
       elements << item.type;
+    if ( mShowDescription )
+      elements << item.description;
     layersTable->addTopLevelItem( new SubLayerItem( elements ) );
   }
 
   // resize columns
   QgsSettings settings;
   QByteArray ba = settings.value( "/Windows/" + mName + "SubLayers/headerState" ).toByteArray();
-  if ( ! ba.isNull() )
+  int savedColumnCount = settings.value( "/Windows/" + mName + "SubLayers/headerColumnCount" ).toInt();
+  if ( ! ba.isNull() && savedColumnCount == layersTable->columnCount() )
   {
     layersTable->header()->restoreState( ba );
   }

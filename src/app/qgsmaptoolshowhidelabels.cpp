@@ -22,12 +22,11 @@
 #include "qgsfeatureiterator.h"
 #include "qgsmapcanvas.h"
 #include "qgsvectorlayer.h"
-
+#include "qgsmapmouseevent.h"
 #include "qgsmaptoolselectutils.h"
 #include "qgsrubberband.h"
 #include "qgslogger.h"
 
-#include <QMouseEvent>
 
 QgsMapToolShowHideLabels::QgsMapToolShowHideLabels( QgsMapCanvas *canvas )
   : QgsMapToolLabel( canvas )
@@ -35,6 +34,9 @@ QgsMapToolShowHideLabels::QgsMapToolShowHideLabels( QgsMapCanvas *canvas )
 {
   mToolName = tr( "Show/hide labels" );
   mRubberBand = nullptr;
+
+  mPalProperties << QgsPalLayerSettings::Show;
+  mDiagramProperties << QgsDiagramLayerSettings::Show;
 }
 
 QgsMapToolShowHideLabels::~QgsMapToolShowHideLabels()
@@ -44,7 +46,25 @@ QgsMapToolShowHideLabels::~QgsMapToolShowHideLabels()
 
 void QgsMapToolShowHideLabels::canvasPressEvent( QgsMapMouseEvent *e )
 {
-  Q_UNUSED( e );
+  Q_UNUSED( e )
+
+  QgsMapLayer *layer = mCanvas->currentLayer();
+  QgsVectorLayer *vlayer = qobject_cast<QgsVectorLayer *>( layer );
+  if ( !vlayer )
+    return;
+
+  int showCol;
+  if ( !labelCanShowHide( vlayer, showCol )
+       || !diagramCanShowHide( vlayer, showCol ) )
+  {
+    if ( !vlayer->auxiliaryLayer() )
+    {
+      QgsNewAuxiliaryLayerDialog dlg( vlayer );
+      dlg.exec();
+      return;
+    }
+  }
+
   mSelectRect.setRect( 0, 0, 0, 0 );
   mSelectRect.setTopLeft( e->pos() );
   mSelectRect.setBottomRight( e->pos() );
@@ -107,72 +127,78 @@ void QgsMapToolShowHideLabels::canvasReleaseEvent( QgsMapMouseEvent *e )
 void QgsMapToolShowHideLabels::showHideLabels( QMouseEvent *e )
 {
   QgsMapLayer *layer = mCanvas->currentLayer();
-
-  QgsVectorLayer *vlayer = dynamic_cast<QgsVectorLayer *>( layer );
+  QgsVectorLayer *vlayer = qobject_cast<QgsVectorLayer *>( layer );
   if ( !vlayer )
-  {
-    QgsDebugMsg( "Failed to cast label layer to vector layer" );
     return;
-  }
-  if ( !vlayer->isEditable() )
-  {
-    QgsDebugMsg( "Vector layer not editable, skipping label" );
-    return;
-  }
 
   bool doHide = e->modifiers() & Qt::ShiftModifier;
-  bool labelChanged = false;
   QString editTxt = doHide ? tr( "Hid labels" ) : tr( "Showed labels" );
   vlayer->beginEditCommand( editTxt );
 
-  if ( !doHide )
+  bool labelChanged = false;
+  if ( !mDragging )
   {
-    QgsDebugMsg( "Showing labels operation" );
-
-    QgsFeatureIds selectedFeatIds;
-    if ( !selectedFeatures( vlayer, selectedFeatIds ) )
+    // if single click only, clicking on an existing label hides it, while clicking on a feature shows it
+    QList<QgsLabelPosition> positions;
+    if ( selectedLabelFeatures( vlayer, positions ) )
     {
-      vlayer->destroyEditCommand();
-      return;
-    }
-
-    QgsDebugMsg( "Number of selected labels or features: " + QString::number( selectedFeatIds.size() ) );
-
-    if ( selectedFeatIds.isEmpty() )
-    {
-      vlayer->destroyEditCommand();
-      return;
-    }
-
-    Q_FOREACH ( QgsFeatureId fid, selectedFeatIds )
-    {
-      mCurrentLabel.pos.featureId = fid;
-
-      mCurrentLabel.pos.isDiagram = false;
-      bool labChanged = showHide( vlayer, true );
-
-      mCurrentLabel.pos.isDiagram = true;
-      bool diagChanged = showHide( vlayer, true );
-
-      if ( labChanged || diagChanged )
-      {
-        // TODO: highlight features (maybe with QTimer?)
+      // clicked on a label
+      if ( showHide( positions.at( 0 ), false ) )
         labelChanged = true;
+    }
+    else
+    {
+      // clicked on a feature
+      QgsFeatureIds fids;
+      if ( selectedFeatures( vlayer, fids ) )
+      {
+        QgsLabelPosition pos;
+        pos.featureId = *fids.constBegin();
+        pos.layerID = vlayer->id();
+
+        // we want to show labels...
+        pos.isDiagram = false;
+        if ( showHide( pos, true ) )
+          labelChanged = true;
+
+        // ... and diagrams
+        pos.isDiagram = true;
+        if ( showHide( pos, true ) )
+          labelChanged = true;
+      }
+    }
+  }
+  else if ( doHide )
+  {
+    QList<QgsLabelPosition> positions;
+    if ( selectedLabelFeatures( vlayer, positions ) )
+    {
+      for ( const QgsLabelPosition &pos : qgis::as_const( positions ) )
+      {
+        if ( showHide( pos, false ) )
+          labelChanged = true;
       }
     }
   }
   else
   {
-    QgsDebugMsg( "Hiding labels operation" );
-
-    QList<QgsLabelPosition> positions;
-    if ( selectedLabelFeatures( vlayer, positions ) )
+    QgsFeatureIds fids;
+    if ( selectedFeatures( vlayer, fids ) )
     {
-      Q_FOREACH ( const QgsLabelPosition &pos, positions )
+      for ( const QgsFeatureId &fid : qgis::as_const( fids ) )
       {
-        mCurrentLabel.pos = pos;
+        QgsLabelPosition pos;
+        pos.featureId = fid;
+        pos.layerID = vlayer->id();
 
-        if ( showHide( vlayer, false ) )
+        // we want to show labels...
+        pos.isDiagram = false;
+        if ( showHide( pos, true ) )
+          labelChanged = true;
+
+        // ... and diagrams
+        pos.isDiagram = true;
+        if ( showHide( pos, true ) )
           labelChanged = true;
       }
     }
@@ -194,7 +220,15 @@ bool QgsMapToolShowHideLabels::selectedFeatures( QgsVectorLayer *vlayer,
 {
   // culled from QgsMapToolSelectUtils::setSelectFeatures()
 
-  QgsGeometry selectGeometry = mRubberBand->asGeometry();
+  QgsGeometry selectGeometry;
+  if ( mDragging )
+  {
+    selectGeometry = mRubberBand->asGeometry();
+  }
+  else
+  {
+    selectGeometry = QgsGeometry::fromRect( QgsMapToolSelectUtils::expandSelectRectangle( mRubberBand->asGeometry().centroid().asPoint(), canvas(), vlayer ) );
+  }
 
   // toLayerCoordinates will throw an exception for any 'invalid' points in
   // the rubber band.
@@ -204,27 +238,27 @@ bool QgsMapToolShowHideLabels::selectedFeatures( QgsVectorLayer *vlayer,
 
   try
   {
-    QgsCoordinateTransform ct( mCanvas->mapSettings().destinationCrs(), vlayer->crs() );
+    QgsCoordinateTransform ct( mCanvas->mapSettings().destinationCrs(), vlayer->crs(), QgsProject::instance() );
     selectGeomTrans.transform( ct );
   }
   catch ( QgsCsException &cse )
   {
-    Q_UNUSED( cse );
+    Q_UNUSED( cse )
     // catch exception for 'invalid' point and leave existing selection unchanged
     QgsLogger::warning( "Caught CRS exception " + QStringLiteral( __FILE__ ) + ": " + QString::number( __LINE__ ) );
-    emit messageEmitted( tr( "CRS Exception: selection extends beyond layer's coordinate system." ), QgsMessageBar::WARNING );
+    emit messageEmitted( tr( "CRS Exception: selection extends beyond layer's coordinate system." ), Qgis::Warning );
     return false;
   }
 
   QApplication::setOverrideCursor( Qt::WaitCursor );
 
   QgsDebugMsg( "Selection layer: " + vlayer->name() );
-  QgsDebugMsg( "Selection polygon: " + selectGeomTrans.exportToWkt() );
+  QgsDebugMsg( "Selection polygon: " + selectGeomTrans.asWkt() );
 
   QgsFeatureIterator fit = vlayer->getFeatures( QgsFeatureRequest()
                            .setFilterRect( selectGeomTrans.boundingBox() )
                            .setFlags( QgsFeatureRequest::NoGeometry | QgsFeatureRequest::ExactIntersect )
-                           .setSubsetOfAttributes( QgsAttributeList() ) );
+                           .setNoAttributes() );
 
   QgsFeature f;
   while ( fit.nextFeature( f ) )
@@ -234,7 +268,7 @@ bool QgsMapToolShowHideLabels::selectedFeatures( QgsVectorLayer *vlayer,
 
   QApplication::restoreOverrideCursor();
 
-  return true;
+  return !selectedFeatIds.empty();
 }
 
 bool QgsMapToolShowHideLabels::selectedLabelFeatures( QgsVectorLayer *vlayer,
@@ -246,7 +280,7 @@ bool QgsMapToolShowHideLabels::selectedLabelFeatures( QgsVectorLayer *vlayer,
   const QgsLabelingResults *labelingResults = mCanvas->labelingResults();
   if ( !labelingResults )
   {
-    QgsDebugMsg( "No labeling engine" );
+    QgsDebugMsg( QStringLiteral( "No labeling engine" ) );
     return false;
   }
 
@@ -271,45 +305,48 @@ bool QgsMapToolShowHideLabels::selectedLabelFeatures( QgsVectorLayer *vlayer,
 
   QApplication::restoreOverrideCursor();
 
-  return true;
+  return !listPos.empty();
 }
 
-bool QgsMapToolShowHideLabels::showHide( QgsVectorLayer *vl, const bool show )
+bool QgsMapToolShowHideLabels::showHide( const QgsLabelPosition &pos, bool show )
 {
-  // verify attribute table has proper field setup
-  bool showSuccess;
-  int showCol;
-  int showVal;
+  LabelDetails details = LabelDetails( pos );
 
-  if ( !dataDefinedShowHide( vl, mCurrentLabel.pos.featureId, showVal,
-                             showSuccess, showCol ) )
-  {
+  if ( !details.valid )
     return false;
+
+  QgsVectorLayer *vlayer = details.layer;
+  if ( !vlayer )
+    return false;
+
+  int showCol = -1;
+  if ( pos.isDiagram )
+  {
+    if ( !diagramCanShowHide( vlayer, showCol ) )
+    {
+      QgsDiagramIndexes indexes;
+      createAuxiliaryFields( details, indexes );
+
+      showCol = indexes[ QgsDiagramLayerSettings::Show ];
+    }
+  }
+  else
+  {
+    if ( !labelCanShowHide( vlayer, showCol ) )
+    {
+      QgsPalIndexes indexes;
+      createAuxiliaryFields( details, indexes );
+
+      showCol = indexes[ QgsPalLayerSettings::Show ];
+    }
   }
 
-  // we need to pass int value to the provider
-  // (committing bool value would fail on int field)
-  int curVal = show ? 1 : 0;
-
-  // check if attribute value is already the same
-  if ( showSuccess && showVal == curVal )
+  if ( showCol >= 0 )
   {
-    return false;
+    int showVal = show ? 1 : 0;
+    vlayer->changeAttributeValue( pos.featureId, showCol, showVal );
+    return true;
   }
 
-  // allow NULL (maybe default) value to stand for show label (i.e. 1)
-  // skip NULL attributes if trying to show label
-  if ( !showSuccess && curVal == 1 )
-  {
-    return false;
-  }
-
-  // different attribute value, edit table
-  if ( ! vl->changeAttributeValue( mCurrentLabel.pos.featureId, showCol, curVal ) )
-  {
-    QgsDebugMsg( "Failed write to attribute table" );
-    return false;
-  }
-
-  return true;
+  return false;
 }

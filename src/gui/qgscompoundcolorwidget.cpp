@@ -17,10 +17,10 @@
 #include "qgscolorscheme.h"
 #include "qgscolorschemeregistry.h"
 #include "qgssymbollayerutils.h"
-#include "qgscursors.h"
 #include "qgsapplication.h"
 #include "qgssettings.h"
 
+#include <QHeaderView>
 #include <QPushButton>
 #include <QMenu>
 #include <QToolButton>
@@ -28,17 +28,25 @@
 #include <QMessageBox>
 #include <QDesktopWidget>
 #include <QMouseEvent>
+#include <QScreen>
 #include <QInputDialog>
 #include <QVBoxLayout>
 
 QgsCompoundColorWidget::QgsCompoundColorWidget( QWidget *parent, const QColor &color, Layout widgetLayout )
   : QgsPanelWidget( parent )
-  , mAllowAlpha( true )
-  , mLastCustomColorIndex( 0 )
-  , mPickingColor( false )
-  , mDiscarded( false )
 {
   setupUi( this );
+  connect( mHueRadio, &QRadioButton::toggled, this, &QgsCompoundColorWidget::mHueRadio_toggled );
+  connect( mSaturationRadio, &QRadioButton::toggled, this, &QgsCompoundColorWidget::mSaturationRadio_toggled );
+  connect( mValueRadio, &QRadioButton::toggled, this, &QgsCompoundColorWidget::mValueRadio_toggled );
+  connect( mRedRadio, &QRadioButton::toggled, this, &QgsCompoundColorWidget::mRedRadio_toggled );
+  connect( mGreenRadio, &QRadioButton::toggled, this, &QgsCompoundColorWidget::mGreenRadio_toggled );
+  connect( mBlueRadio, &QRadioButton::toggled, this, &QgsCompoundColorWidget::mBlueRadio_toggled );
+  connect( mAddColorToSchemeButton, &QPushButton::clicked, this, &QgsCompoundColorWidget::mAddColorToSchemeButton_clicked );
+  connect( mAddCustomColorButton, &QPushButton::clicked, this, &QgsCompoundColorWidget::mAddCustomColorButton_clicked );
+  connect( mSampleButton, &QPushButton::clicked, this, &QgsCompoundColorWidget::mSampleButton_clicked );
+  connect( mTabWidget, &QTabWidget::currentChanged, this, &QgsCompoundColorWidget::mTabWidget_currentChanged );
+  connect( mActionShowInButtons, &QAction::toggled, this, &QgsCompoundColorWidget::mActionShowInButtons_toggled );
 
   if ( widgetLayout == LayoutVertical )
   {
@@ -57,7 +65,7 @@ QgsCompoundColorWidget::QgsCompoundColorWidget( QWidget *parent, const QColor &c
   QgsSettings settings;
 
   mSchemeList->header()->hide();
-  mSchemeList->setColumnWidth( 0, 44 );
+  mSchemeList->setColumnWidth( 0, static_cast< int >( Qgis::UI_SCALE_FACTOR * fontMetrics().width( 'X' ) * 6 ) );
 
   //get schemes with ShowInColorDialog set
   refreshSchemeComboBox();
@@ -170,6 +178,51 @@ QgsCompoundColorWidget::QgsCompoundColorWidget( QWidget *parent, const QColor &c
   mSpinBoxRadius->setValue( settings.value( QStringLiteral( "Windows/ColorDialog/sampleRadius" ), 1 ).toInt() );
   mSamplePreview->setColor( QColor() );
 
+  // hidpi friendly sizes
+  const int swatchWidth = static_cast< int >( std::round( std::max( Qgis::UI_SCALE_FACTOR * 1.9 * mSwatchButton1->fontMetrics().height(), 38.0 ) ) );
+  const int swatchHeight = static_cast< int >( std::round( std::max( Qgis::UI_SCALE_FACTOR * 1.5 * mSwatchButton1->fontMetrics().height(), 30.0 ) ) );
+  mSwatchButton1->setMinimumSize( swatchWidth, swatchHeight );
+  mSwatchButton1->setMaximumSize( swatchWidth, swatchHeight );
+  mSwatchButton2->setMinimumSize( swatchWidth, swatchHeight );
+  mSwatchButton2->setMaximumSize( swatchWidth, swatchHeight );
+  mSwatchButton3->setMinimumSize( swatchWidth, swatchHeight );
+  mSwatchButton3->setMaximumSize( swatchWidth, swatchHeight );
+  mSwatchButton4->setMinimumSize( swatchWidth, swatchHeight );
+  mSwatchButton4->setMaximumSize( swatchWidth, swatchHeight );
+  mSwatchButton5->setMinimumSize( swatchWidth, swatchHeight );
+  mSwatchButton5->setMaximumSize( swatchWidth, swatchHeight );
+  mSwatchButton6->setMinimumSize( swatchWidth, swatchHeight );
+  mSwatchButton6->setMaximumSize( swatchWidth, swatchHeight );
+  mSwatchButton7->setMinimumSize( swatchWidth, swatchHeight );
+  mSwatchButton7->setMaximumSize( swatchWidth, swatchHeight );
+  mSwatchButton8->setMinimumSize( swatchWidth, swatchHeight );
+  mSwatchButton8->setMaximumSize( swatchWidth, swatchHeight );
+  mSwatchButton9->setMinimumSize( swatchWidth, swatchHeight );
+  mSwatchButton9->setMaximumSize( swatchWidth, swatchHeight );
+  mSwatchButton10->setMinimumSize( swatchWidth, swatchHeight );
+  mSwatchButton10->setMaximumSize( swatchWidth, swatchHeight );
+  mSwatchButton11->setMinimumSize( swatchWidth, swatchHeight );
+  mSwatchButton11->setMaximumSize( swatchWidth, swatchHeight );
+  mSwatchButton12->setMinimumSize( swatchWidth, swatchHeight );
+  mSwatchButton12->setMaximumSize( swatchWidth, swatchHeight );
+  mSwatchButton13->setMinimumSize( swatchWidth, swatchHeight );
+  mSwatchButton13->setMaximumSize( swatchWidth, swatchHeight );
+  mSwatchButton14->setMinimumSize( swatchWidth, swatchHeight );
+  mSwatchButton14->setMaximumSize( swatchWidth, swatchHeight );
+  mSwatchButton15->setMinimumSize( swatchWidth, swatchHeight );
+  mSwatchButton15->setMaximumSize( swatchWidth, swatchHeight );
+  mSwatchButton16->setMinimumSize( swatchWidth, swatchHeight );
+  mSwatchButton16->setMaximumSize( swatchWidth, swatchHeight );
+  const int previewHeight = static_cast< int >( std::round( std::max( Qgis::UI_SCALE_FACTOR * 2.0 * mSwatchButton1->fontMetrics().height(), 40.0 ) ) );
+  mColorPreview->setMinimumSize( 0, previewHeight );
+  mPreviewWidget->setMaximumHeight( previewHeight * 2 );
+  const int swatchAddSize = static_cast< int >( std::round( std::max( Qgis::UI_SCALE_FACTOR * 1.4 * mSwatchButton1->fontMetrics().height(), 28.0 ) ) );
+  mAddCustomColorButton->setMinimumWidth( swatchAddSize );
+  mAddCustomColorButton->setMaximumWidth( swatchAddSize );
+
+  const int iconSize = QgsGuiUtils::scaleIconSize( 16 );
+  mTabWidget->setIconSize( QSize( iconSize, iconSize ) );
+
   if ( color.isValid() )
   {
     setColor( color );
@@ -273,23 +326,25 @@ void QgsCompoundColorWidget::refreshSchemeComboBox()
   mSchemeComboBox->blockSignals( false );
 }
 
-void QgsCompoundColorWidget::importPalette()
+
+QgsUserColorScheme *QgsCompoundColorWidget::importUserPaletteFromFile( QWidget *parent )
 {
   QgsSettings s;
   QString lastDir = s.value( QStringLiteral( "/UI/lastGplPaletteDir" ), QDir::homePath() ).toString();
-  QString filePath = QFileDialog::getOpenFileName( this, tr( "Select palette file" ), lastDir, QStringLiteral( "GPL (*.gpl);;All files (*.*)" ) );
-  activateWindow();
+  QString filePath = QFileDialog::getOpenFileName( parent, tr( "Select Palette File" ), lastDir, QStringLiteral( "GPL (*.gpl);;All files (*.*)" ) );
+  if ( parent )
+    parent->activateWindow();
   if ( filePath.isEmpty() )
   {
-    return;
+    return nullptr;
   }
 
   //check if file exists
   QFileInfo fileInfo( filePath );
   if ( !fileInfo.exists() || !fileInfo.isReadable() )
   {
-    QMessageBox::critical( nullptr, tr( "Invalid file" ), tr( "Error, file does not exist or is not readable" ) );
-    return;
+    QMessageBox::critical( nullptr, tr( "Import Color Palette" ), tr( "Error, file does not exist or is not readable." ) );
+    return nullptr;
   }
 
   s.setValue( QStringLiteral( "/UI/lastGplPaletteDir" ), fileInfo.absolutePath() );
@@ -301,15 +356,15 @@ void QgsCompoundColorWidget::importPalette()
   importedColors = QgsSymbolLayerUtils::importColorsFromGpl( file, ok, paletteName );
   if ( !ok )
   {
-    QMessageBox::critical( nullptr, tr( "Invalid file" ), tr( "Palette file is not readable" ) );
-    return;
+    QMessageBox::critical( nullptr, tr( "Import Color Palette" ), tr( "Palette file is not readable." ) );
+    return nullptr;
   }
 
   if ( importedColors.length() == 0 )
   {
     //no imported colors
-    QMessageBox::critical( nullptr, tr( "Invalid file" ), tr( "No colors found in palette file" ) );
-    return;
+    QMessageBox::critical( nullptr, tr( "Import Color Palette" ), tr( "No colors found in palette file." ) );
+    return nullptr;
   }
 
   //TODO - handle conflicting file names, name for new palette
@@ -318,10 +373,40 @@ void QgsCompoundColorWidget::importPalette()
   importedScheme->setColors( importedColors );
 
   QgsApplication::colorSchemeRegistry()->addColorScheme( importedScheme );
+  return importedScheme;
+}
 
-  //refresh combobox
-  refreshSchemeComboBox();
-  mSchemeComboBox->setCurrentIndex( mSchemeComboBox->count() - 1 );
+void QgsCompoundColorWidget::importPalette()
+{
+  if ( importUserPaletteFromFile( this ) )
+  {
+    //refresh combobox
+    refreshSchemeComboBox();
+    mSchemeComboBox->setCurrentIndex( mSchemeComboBox->count() - 1 );
+  }
+}
+
+
+bool QgsCompoundColorWidget::removeUserPalette( QgsUserColorScheme *scheme, QWidget *parent )
+{
+  if ( QMessageBox::question( parent, tr( "Remove Color Palette" ),
+                              QString( tr( "Are you sure you want to remove %1?" ) ).arg( scheme->schemeName() ),
+                              QMessageBox::Yes | QMessageBox::No, QMessageBox::No ) != QMessageBox::Yes )
+  {
+    //user canceled
+    return false;
+  }
+
+  //remove palette and associated gpl file
+  if ( !scheme->erase() )
+  {
+    //something went wrong
+    return false;
+  }
+
+  //remove scheme from registry
+  QgsApplication::colorSchemeRegistry()->removeColorScheme( scheme );
+  return true;
 }
 
 void QgsCompoundColorWidget::removePalette()
@@ -341,41 +426,27 @@ void QgsCompoundColorWidget::removePalette()
     return;
   }
 
-  if ( QMessageBox::question( this, tr( "Remove Color Palette" ),
-                              QString( tr( "Are you sure you want to remove %1?" ) ).arg( userScheme->schemeName() ),
-                              QMessageBox::Yes | QMessageBox::No, QMessageBox::No ) != QMessageBox::Yes )
+  if ( removeUserPalette( userScheme, this ) )
   {
-    //user canceled
-    return;
+    refreshSchemeComboBox();
+    prevIndex = std::max( std::min( prevIndex, mSchemeComboBox->count() - 1 ), 0 );
+    mSchemeComboBox->setCurrentIndex( prevIndex );
   }
-
-  //remove palette and associated gpl file
-  if ( !userScheme->erase() )
-  {
-    //something went wrong
-    return;
-  }
-
-  //remove scheme from registry
-  QgsApplication::colorSchemeRegistry()->removeColorScheme( userScheme );
-  refreshSchemeComboBox();
-  prevIndex = std::max( std::min( prevIndex, mSchemeComboBox->count() - 1 ), 0 );
-  mSchemeComboBox->setCurrentIndex( prevIndex );
 }
 
-void QgsCompoundColorWidget::newPalette()
+QgsUserColorScheme *QgsCompoundColorWidget::createNewUserPalette( QWidget *parent )
 {
   bool ok = false;
-  QString name = QInputDialog::getText( this, tr( "Create New Palette" ), tr( "Enter a name for the new palette:" ),
+  QString name = QInputDialog::getText( parent, tr( "Create New Palette" ), tr( "Enter a name for the new palette:" ),
                                         QLineEdit::Normal, tr( "New palette" ), &ok );
 
   if ( !ok || name.isEmpty() )
   {
     //user canceled
-    return;
+    return nullptr;
   }
 
-  //generate file name for new palette
+//generate file name for new palette
   QDir palettePath( gplFilePath() );
   QRegExp badChars( "[,^@={}\\[\\]~!?:&*\"|#%<>$\"'();`' /\\\\]" );
   QString filename = name.simplified().toLower().replace( badChars, QStringLiteral( "_" ) );
@@ -396,15 +467,22 @@ void QgsCompoundColorWidget::newPalette()
   newScheme->setName( name );
 
   QgsApplication::colorSchemeRegistry()->addColorScheme( newScheme );
+  return newScheme;
+}
 
-  //refresh combobox and set new scheme as active
-  refreshSchemeComboBox();
-  mSchemeComboBox->setCurrentIndex( mSchemeComboBox->count() - 1 );
+void QgsCompoundColorWidget::newPalette()
+{
+  if ( createNewUserPalette( this ) )
+  {
+    //refresh combobox and set new scheme as active
+    refreshSchemeComboBox();
+    mSchemeComboBox->setCurrentIndex( mSchemeComboBox->count() - 1 );
+  }
 }
 
 QString QgsCompoundColorWidget::gplFilePath()
 {
-  QString palettesDir = QgsApplication::qgisSettingsDirPath() + "/palettes";
+  QString palettesDir = QgsApplication::qgisSettingsDirPath() + "palettes";
 
   QDir localDir;
   if ( !localDir.mkpath( palettesDir ) )
@@ -441,11 +519,11 @@ void QgsCompoundColorWidget::schemeIndexChanged( int index )
 
 void QgsCompoundColorWidget::listSelectionChanged( const QItemSelection &selected, const QItemSelection &deselected )
 {
-  Q_UNUSED( deselected );
+  Q_UNUSED( deselected )
   mActionCopyColors->setEnabled( selected.length() > 0 );
 }
 
-void QgsCompoundColorWidget::on_mAddCustomColorButton_clicked()
+void QgsCompoundColorWidget::mAddCustomColorButton_clicked()
 {
   switch ( mLastCustomColorIndex )
   {
@@ -505,18 +583,17 @@ void QgsCompoundColorWidget::on_mAddCustomColorButton_clicked()
   }
 }
 
-void QgsCompoundColorWidget::on_mSampleButton_clicked()
+void QgsCompoundColorWidget::mSampleButton_clicked()
 {
   //activate picker color
-  QPixmap samplerPixmap = QPixmap( ( const char ** ) sampler_cursor );
-  setCursor( QCursor( samplerPixmap, 0, 0 ) );
+  setCursor( QgsApplication::getThemeCursor( QgsApplication::Cursor::Sampler ) );
   grabMouse();
   grabKeyboard();
   mPickingColor = true;
   setMouseTracking( true );
 }
 
-void QgsCompoundColorWidget::on_mTabWidget_currentChanged( int index )
+void QgsCompoundColorWidget::mTabWidget_currentChanged( int index )
 {
   //disable radio buttons if not using the first tab, as they have no meaning for other tabs
   bool enabled = index == 0;
@@ -528,13 +605,26 @@ void QgsCompoundColorWidget::on_mTabWidget_currentChanged( int index )
   mValueRadio->setEnabled( enabled );
 }
 
-void QgsCompoundColorWidget::on_mActionShowInButtons_toggled( bool state )
+void QgsCompoundColorWidget::mActionShowInButtons_toggled( bool state )
 {
   QgsUserColorScheme *scheme = dynamic_cast< QgsUserColorScheme * >( mSchemeList->scheme() );
   if ( scheme )
   {
     scheme->setShowSchemeInMenu( state );
   }
+}
+
+QScreen *QgsCompoundColorWidget::findScreenAt( QPoint pos )
+{
+  const QList< QScreen * > screens = QGuiApplication::screens();
+  for ( QScreen *screen : screens )
+  {
+    if ( screen->geometry().contains( pos ) )
+    {
+      return screen;
+    }
+  }
+  return nullptr;
 }
 
 void QgsCompoundColorWidget::saveSettings()
@@ -626,7 +716,8 @@ void QgsCompoundColorWidget::setColor( const QColor &color )
     fixedColor.setAlpha( 255 );
   }
   QList<QgsColorWidget *> colorWidgets = this->findChildren<QgsColorWidget *>();
-  Q_FOREACH ( QgsColorWidget *widget, colorWidgets )
+  const auto constColorWidgets = colorWidgets;
+  for ( QgsColorWidget *widget : constColorWidgets )
   {
     if ( widget == mSamplePreview )
     {
@@ -667,7 +758,7 @@ QColor QgsCompoundColorWidget::averageColor( const QImage &image ) const
   //scan through image and sum rgb components
   for ( int heightIndex = 0; heightIndex < image.height(); ++heightIndex )
   {
-    QRgb *scanLine = ( QRgb * )image.constScanLine( heightIndex );
+    const QRgb *scanLine = reinterpret_cast< const QRgb * >( image.constScanLine( heightIndex ) );
     for ( int widthIndex = 0; widthIndex < image.width(); ++widthIndex )
     {
       tmpRgb = scanLine[widthIndex];
@@ -678,9 +769,9 @@ QColor QgsCompoundColorWidget::averageColor( const QImage &image ) const
     }
   }
   //calculate average components as floats
-  double avgRed = ( double )sumRed / ( 255.0 * colorCount );
-  double avgGreen = ( double )sumGreen / ( 255.0 * colorCount );
-  double avgBlue = ( double )sumBlue / ( 255.0 * colorCount );
+  double avgRed = static_cast<double>( sumRed ) / ( 255.0 * colorCount );
+  double avgGreen = static_cast<double>( sumGreen ) / ( 255.0 * colorCount );
+  double avgBlue = static_cast<double>( sumBlue ) / ( 255.0 * colorCount );
 
   //create a new color representing the average
   return QColor::fromRgbF( avgRed, avgGreen, avgBlue );
@@ -689,8 +780,16 @@ QColor QgsCompoundColorWidget::averageColor( const QImage &image ) const
 QColor QgsCompoundColorWidget::sampleColor( QPoint point ) const
 {
   int sampleRadius = mSpinBoxRadius->value() - 1;
-  QPixmap snappedPixmap = QPixmap::grabWindow( QApplication::desktop()->winId(), point.x() - sampleRadius, point.y() - sampleRadius,
-                          1 + sampleRadius * 2, 1 + sampleRadius * 2 );
+  QScreen *screen = findScreenAt( point );
+  if ( ! screen )
+  {
+    return QColor();
+  }
+  QPixmap snappedPixmap = screen->grabWindow( QApplication::desktop()->winId(),
+                          point.x() - sampleRadius,
+                          point.y() - sampleRadius,
+                          1 + sampleRadius * 2,
+                          1 + sampleRadius * 2 );
   QImage snappedImage = snappedPixmap.toImage();
   //scan all pixels and take average color
   return averageColor( snappedImage );
@@ -730,7 +829,7 @@ void QgsCompoundColorWidget::keyPressEvent( QKeyEvent *e )
   if ( !mPickingColor )
   {
     //if not picking a color, use default tool button behavior
-    QWidget::keyPressEvent( e );
+    QgsPanelWidget::keyPressEvent( e );
     return;
   }
 
@@ -738,7 +837,7 @@ void QgsCompoundColorWidget::keyPressEvent( QKeyEvent *e )
   stopPicking( QCursor::pos(), e->key() == Qt::Key_Space );
 }
 
-void QgsCompoundColorWidget::on_mHueRadio_toggled( bool checked )
+void QgsCompoundColorWidget::mHueRadio_toggled( bool checked )
 {
   if ( checked )
   {
@@ -747,7 +846,7 @@ void QgsCompoundColorWidget::on_mHueRadio_toggled( bool checked )
   }
 }
 
-void QgsCompoundColorWidget::on_mSaturationRadio_toggled( bool checked )
+void QgsCompoundColorWidget::mSaturationRadio_toggled( bool checked )
 {
   if ( checked )
   {
@@ -756,7 +855,7 @@ void QgsCompoundColorWidget::on_mSaturationRadio_toggled( bool checked )
   }
 }
 
-void QgsCompoundColorWidget::on_mValueRadio_toggled( bool checked )
+void QgsCompoundColorWidget::mValueRadio_toggled( bool checked )
 {
   if ( checked )
   {
@@ -765,7 +864,7 @@ void QgsCompoundColorWidget::on_mValueRadio_toggled( bool checked )
   }
 }
 
-void QgsCompoundColorWidget::on_mRedRadio_toggled( bool checked )
+void QgsCompoundColorWidget::mRedRadio_toggled( bool checked )
 {
   if ( checked )
   {
@@ -774,7 +873,7 @@ void QgsCompoundColorWidget::on_mRedRadio_toggled( bool checked )
   }
 }
 
-void QgsCompoundColorWidget::on_mGreenRadio_toggled( bool checked )
+void QgsCompoundColorWidget::mGreenRadio_toggled( bool checked )
 {
   if ( checked )
   {
@@ -783,7 +882,7 @@ void QgsCompoundColorWidget::on_mGreenRadio_toggled( bool checked )
   }
 }
 
-void QgsCompoundColorWidget::on_mBlueRadio_toggled( bool checked )
+void QgsCompoundColorWidget::mBlueRadio_toggled( bool checked )
 {
   if ( checked )
   {
@@ -792,7 +891,7 @@ void QgsCompoundColorWidget::on_mBlueRadio_toggled( bool checked )
   }
 }
 
-void QgsCompoundColorWidget::on_mAddColorToSchemeButton_clicked()
+void QgsCompoundColorWidget::mAddColorToSchemeButton_clicked()
 {
   mSchemeList->addColor( mColorPreview->color(), QgsSymbolLayerUtils::colorToName( mColorPreview->color() ) );
 }

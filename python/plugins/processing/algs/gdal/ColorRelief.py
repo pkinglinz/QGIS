@@ -16,21 +16,21 @@
 *                                                                         *
 ***************************************************************************
 """
-from builtins import str
 
 __author__ = 'Alexander Bruy'
 __date__ = 'October 2013'
 __copyright__ = '(C) 2013, Alexander Bruy'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
-from qgis.core import (QgsProcessingParameterRasterLayer,
+import os
+from qgis.core import (QgsRasterFileWriter,
+                       QgsProcessingException,
+                       QgsProcessingParameterDefinition,
+                       QgsProcessingParameterRasterLayer,
                        QgsProcessingParameterBand,
                        QgsProcessingParameterBoolean,
                        QgsProcessingParameterEnum,
                        QgsProcessingParameterFile,
+                       QgsProcessingParameterString,
                        QgsProcessingParameterRasterDestination)
 from processing.algs.gdal.GdalAlgorithm import GdalAlgorithm
 from processing.algs.gdal.GdalUtils import GdalUtils
@@ -43,23 +43,50 @@ class ColorRelief(GdalAlgorithm):
     COMPUTE_EDGES = 'COMPUTE_EDGES'
     COLOR_TABLE = 'COLOR_TABLE'
     MATCH_MODE = 'MATCH_MODE'
+    OPTIONS = 'OPTIONS'
+    EXTRA = 'EXTRA'
     OUTPUT = 'OUTPUT'
-
-    MATCHING_MODES = ['"0,0,0,0" RGBA', 'Exact color', 'Nearest color']
 
     def __init__(self):
         super().__init__()
 
     def initAlgorithm(self, config=None):
-        self.addParameter(QgsProcessingParameterRasterLayer(self.INPUT, self.tr('Input layer')))
-        self.addParameter(QgsProcessingParameterBand(
-            self.BAND, self.tr('Band number'), parentLayerParameterName=self.INPUT))
+        self.modes = ((self.tr('Use strict color matching'), '-exact_color_entry'),
+                      (self.tr('Use closest RGBA quadruplet'), '-nearest_color_entry'),
+                      (self.tr('Use smoothly blended colors'), ''))
+
+        self.addParameter(QgsProcessingParameterRasterLayer(self.INPUT,
+                                                            self.tr('Input layer')))
+        self.addParameter(QgsProcessingParameterBand(self.BAND,
+                                                     self.tr('Band number'),
+                                                     1,
+                                                     parentLayerParameterName=self.INPUT))
         self.addParameter(QgsProcessingParameterBoolean(self.COMPUTE_EDGES,
-                                                        self.tr('Compute edges'), defaultValue=False))
+                                                        self.tr('Compute edges'),
+                                                        defaultValue=False))
         self.addParameter(QgsProcessingParameterFile(self.COLOR_TABLE,
-                                                     self.tr('Color configuration file'), optional=False))
+                                                     self.tr('Color configuration file')))
         self.addParameter(QgsProcessingParameterEnum(self.MATCH_MODE,
-                                                     self.tr('Matching mode'), options=self.MATCHING_MODES, defaultValue=0))
+                                                     self.tr('Matching mode'),
+                                                     options=[i[0] for i in self.modes],
+                                                     defaultValue=2))
+
+        options_param = QgsProcessingParameterString(self.OPTIONS,
+                                                     self.tr('Additional creation options'),
+                                                     defaultValue='',
+                                                     optional=True)
+        options_param.setFlags(options_param.flags() | QgsProcessingParameterDefinition.FlagAdvanced)
+        options_param.setMetadata({
+            'widget_wrapper': {
+                'class': 'processing.algs.gdal.ui.RasterOptionsWidget.RasterOptionsWidgetWrapper'}})
+        self.addParameter(options_param)
+
+        extra_param = QgsProcessingParameterString(self.EXTRA,
+                                                   self.tr('Additional command-line parameters'),
+                                                   defaultValue=None,
+                                                   optional=True)
+        extra_param.setFlags(extra_param.flags() | QgsProcessingParameterDefinition.FlagAdvanced)
+        self.addParameter(extra_param)
 
         self.addParameter(QgsProcessingParameterRasterDestination(self.OUTPUT, self.tr('Color relief')))
 
@@ -72,28 +99,44 @@ class ColorRelief(GdalAlgorithm):
     def group(self):
         return self.tr('Raster analysis')
 
-    def getConsoleCommands(self, parameters, context, feedback):
+    def groupId(self):
+        return 'rasteranalysis'
+
+    def commandName(self):
+        return 'gdaldem'
+
+    def getConsoleCommands(self, parameters, context, feedback, executing=True):
         arguments = ['color-relief']
         inLayer = self.parameterAsRasterLayer(parameters, self.INPUT, context)
+        if inLayer is None:
+            raise QgsProcessingException(self.invalidRasterError(parameters, self.INPUT))
+
         arguments.append(inLayer.source())
         arguments.append(self.parameterAsFile(parameters, self.COLOR_TABLE, context))
-        #filePath = unicode(self.getParameterValue(self.COLOR_TABLE))
-        #if filePath is None or filePath == '':
-        #    filePath = os.path.join(os.path.dirname(__file__), 'terrain.txt')
-        #arguments.append(filePath)
+
         out = self.parameterAsOutputLayer(parameters, self.OUTPUT, context)
+        self.setOutputValue(self.OUTPUT, out)
         arguments.append(out)
+
+        arguments.append('-of')
+        arguments.append(QgsRasterFileWriter.driverForExtension(os.path.splitext(out)[1]))
 
         arguments.append('-b')
         arguments.append(str(self.parameterAsInt(parameters, self.BAND, context)))
 
-        if self.parameterAsBool(parameters, self.COMPUTE_EDGES, context):
+        if self.parameterAsBoolean(parameters, self.COMPUTE_EDGES, context):
             arguments.append('-compute_edges')
 
-        mode = self.parameterAsEnum(parameters, self.MATCH_MODE, context)
-        if mode == 1:
-            arguments.append('-exact_color_entry')
-        elif mode == 2:
-            arguments.append('-nearest_color_entry')
+        mode = self.modes[self.parameterAsEnum(parameters, self.MATCH_MODE, context)][1]
+        if mode != '':
+            arguments.append(mode)
 
-        return ['gdaldem', GdalUtils.escapeAndJoin(arguments)]
+        options = self.parameterAsString(parameters, self.OPTIONS, context)
+        if options:
+            arguments.extend(GdalUtils.parseCreationOptions(options))
+
+        if self.EXTRA in parameters and parameters[self.EXTRA] not in (None, ''):
+            extra = self.parameterAsString(parameters, self.EXTRA, context)
+            arguments.append(extra)
+
+        return [self.commandName(), GdalUtils.escapeAndJoin(arguments)]

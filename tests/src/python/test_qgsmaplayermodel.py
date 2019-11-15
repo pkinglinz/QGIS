@@ -9,8 +9,6 @@ the Free Software Foundation; either version 2 of the License, or
 __author__ = 'Nyall Dawson'
 __date__ = '16/11/2016'
 __copyright__ = 'Copyright 2016, The QGIS Project'
-# This will get replaced with a git SHA1 when you do a git archive
-__revision__ = '$Format:%H$'
 
 import qgis  # NOQA
 
@@ -63,11 +61,15 @@ class TestQgsMapLayerModel(unittest.TestCase):
         l1 = create_layer('l1')
         QgsProject.instance().addMapLayer(l1)
         self.assertEqual(m.rowCount(QModelIndex()), 1)
+        self.assertEqual(m.layerFromIndex(m.index(0, 0)), l1)
         l2 = create_layer('l2')
         QgsProject.instance().addMapLayer(l2)
         self.assertEqual(m.rowCount(QModelIndex()), 2)
+        self.assertEqual(m.layerFromIndex(m.index(0, 0)), l1)
+        self.assertEqual(m.layerFromIndex(m.index(1, 0)), l2)
         QgsProject.instance().removeMapLayer(l1)
         self.assertEqual(m.rowCount(QModelIndex()), 1)
+        self.assertEqual(m.layerFromIndex(m.index(0, 0)), l2)
         QgsProject.instance().removeMapLayer(l2)
         self.assertEqual(m.rowCount(QModelIndex()), 0)
 
@@ -162,7 +164,9 @@ class TestQgsMapLayerModel(unittest.TestCase):
         l3 = create_layer('l3')  # not in registry
 
         self.assertEqual(m.indexFromLayer(l1).row(), 0)
+        self.assertEqual(m.layerFromIndex(m.indexFromLayer(l1)), l1)
         self.assertEqual(m.indexFromLayer(l2).row(), 1)
+        self.assertEqual(m.layerFromIndex(m.indexFromLayer(l2)), l2)
         self.assertFalse(m.indexFromLayer(l3).isValid())
 
         m.setAllowEmptyLayer(True)
@@ -188,20 +192,26 @@ class TestQgsMapLayerModel(unittest.TestCase):
     def testDisplayRoleShowCrs(self):
         l1 = create_layer('l1')
         l2 = create_layer('l2')
-        QgsProject.instance().addMapLayers([l1, l2])
+        l3 = QgsVectorLayer("NoGeometry?field=fldtxt:string&field=fldint:integer",
+                            'no geom', "memory")
+
+        QgsProject.instance().addMapLayers([l1, l2, l3])
         m = QgsMapLayerModel()
         m.setShowCrs(True)
         self.assertEqual(m.data(m.index(0, 0), Qt.DisplayRole), 'l1 [EPSG:3111]')
         self.assertEqual(m.data(m.index(1, 0), Qt.DisplayRole), 'l2 [EPSG:3111]')
+        self.assertEqual(m.data(m.index(2, 0), Qt.DisplayRole), 'no geom')
+
         m.setAllowEmptyLayer(True)
         self.assertFalse(m.data(m.index(0, 0), Qt.DisplayRole))
         self.assertEqual(m.data(m.index(1, 0), Qt.DisplayRole), 'l1 [EPSG:3111]')
         self.assertEqual(m.data(m.index(2, 0), Qt.DisplayRole), 'l2 [EPSG:3111]')
+        self.assertEqual(m.data(m.index(3, 0), Qt.DisplayRole), 'no geom')
 
         m.setAdditionalItems(['a'])
-        self.assertEqual(m.data(m.index(3, 0), Qt.DisplayRole), 'a')
+        self.assertEqual(m.data(m.index(4, 0), Qt.DisplayRole), 'a')
 
-        QgsProject.instance().removeMapLayers([l1.id(), l2.id()])
+        QgsProject.instance().removeMapLayers([l1.id(), l2.id(), l3.id()])
 
     def testLayerIdRole(self):
         l1 = create_layer('l1')

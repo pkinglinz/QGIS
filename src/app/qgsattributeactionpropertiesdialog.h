@@ -17,6 +17,7 @@
 #define QGSATTRIBUTEACTIONPROPERTIESDIALOG_H
 
 #include "ui_qgsattributeactionpropertiesdialogbase.h"
+#include "qgsexpressioncontextgenerator.h"
 
 #include "qgsaction.h"
 #include "qgshelp.h"
@@ -28,7 +29,7 @@ class QgsAttributeActionPropertiesDialog: public QDialog, private Ui::QgsAttribu
     Q_OBJECT
 
   public:
-    QgsAttributeActionPropertiesDialog( QgsAction::ActionType type, const QString &description, const QString &shortTitle, const QString &iconPath, const QString &actionText, bool capture, const QSet<QString> &actionScopes, const QString &notificationMessage, QgsVectorLayer *layer, QWidget *parent = nullptr );
+    QgsAttributeActionPropertiesDialog( QgsAction::ActionType type, const QString &description, const QString &shortTitle, const QString &iconPath, const QString &actionText, bool capture, const QSet<QString> &actionScopes, const QString &notificationMessage, bool isEnabledOnlyWhenEditable, QgsVectorLayer *layer, QWidget *parent = nullptr );
 
     QgsAttributeActionPropertiesDialog( QgsVectorLayer *layer, QWidget *parent = nullptr );
 
@@ -46,9 +47,11 @@ class QgsAttributeActionPropertiesDialog: public QDialog, private Ui::QgsAttribu
 
     QString notificationMessage() const;
 
+    bool isEnabledOnlyWhenEditable() const;
+
     bool capture() const;
 
-    virtual QgsExpressionContext createExpressionContext() const override;
+    QgsExpressionContext createExpressionContext() const override;
 
   private slots:
     void browse();

@@ -15,12 +15,18 @@
  *                                                                         *
  ***************************************************************************/
 
-#include "qgslayoutcontext.h"
+#include "qgslayoutrendercontext.h"
+#include "qgslayoutreportcontext.h"
 #include "qgis.h"
 #include "qgsfeature.h"
 #include "qgsvectorlayer.h"
+#include "qgsgeometry.h"
+#include "qgsproject.h"
+#include "qgslayout.h"
+#include "qgsexpressionutils.h"
 #include <QObject>
 #include "qgstest.h"
+#include <QtTest/QSignalSpy>
 
 class TestQgsLayoutContext: public QObject
 {
@@ -37,6 +43,11 @@ class TestQgsLayoutContext: public QObject
     void layer();
     void dpi();
     void renderContextFlags();
+    void textFormat();
+    void boundingBoxes();
+    void geometry();
+    void scales();
+    void simplifyMethod();
 
   private:
     QString mReport;
@@ -72,29 +83,40 @@ void TestQgsLayoutContext::cleanup()
 
 void TestQgsLayoutContext::creation()
 {
-  QgsLayoutContext *context = new QgsLayoutContext();
+  QgsLayoutRenderContext *context = new QgsLayoutRenderContext( nullptr );
   QVERIFY( context );
   delete context;
 }
 
 void TestQgsLayoutContext::flags()
 {
-  QgsLayoutContext context;
+  QgsLayoutRenderContext context( nullptr );
+  QSignalSpy spyFlagsChanged( &context, &QgsLayoutRenderContext::flagsChanged );
+
   //test getting and setting flags
-  context.setFlags( QgsLayoutContext::Flags( QgsLayoutContext::FlagAntialiasing | QgsLayoutContext::FlagUseAdvancedEffects ) );
-  QVERIFY( context.flags() == ( QgsLayoutContext::FlagAntialiasing | QgsLayoutContext::FlagUseAdvancedEffects ) );
-  QVERIFY( context.testFlag( QgsLayoutContext::FlagAntialiasing ) );
-  QVERIFY( context.testFlag( QgsLayoutContext::FlagUseAdvancedEffects ) );
-  QVERIFY( ! context.testFlag( QgsLayoutContext::FlagDebug ) );
-  context.setFlag( QgsLayoutContext::FlagDebug );
-  QVERIFY( context.testFlag( QgsLayoutContext::FlagDebug ) );
-  context.setFlag( QgsLayoutContext::FlagDebug, false );
-  QVERIFY( ! context.testFlag( QgsLayoutContext::FlagDebug ) );
+  context.setFlags( QgsLayoutRenderContext::Flags( QgsLayoutRenderContext::FlagAntialiasing | QgsLayoutRenderContext::FlagUseAdvancedEffects ) );
+  // default flags, so should be no signal
+  QCOMPARE( spyFlagsChanged.count(), 0 );
+
+  QVERIFY( context.flags() == ( QgsLayoutRenderContext::FlagAntialiasing | QgsLayoutRenderContext::FlagUseAdvancedEffects ) );
+  QVERIFY( context.testFlag( QgsLayoutRenderContext::FlagAntialiasing ) );
+  QVERIFY( context.testFlag( QgsLayoutRenderContext::FlagUseAdvancedEffects ) );
+  QVERIFY( ! context.testFlag( QgsLayoutRenderContext::FlagDebug ) );
+  context.setFlag( QgsLayoutRenderContext::FlagDebug );
+  QCOMPARE( spyFlagsChanged.count(), 1 );
+  QVERIFY( context.testFlag( QgsLayoutRenderContext::FlagDebug ) );
+  context.setFlag( QgsLayoutRenderContext::FlagDebug, false );
+  QCOMPARE( spyFlagsChanged.count(), 2 );
+  QVERIFY( ! context.testFlag( QgsLayoutRenderContext::FlagDebug ) );
+  context.setFlag( QgsLayoutRenderContext::FlagDebug, false ); //no change
+  QCOMPARE( spyFlagsChanged.count(), 2 );
+  context.setFlags( QgsLayoutRenderContext::FlagDebug );
+  QCOMPARE( spyFlagsChanged.count(), 3 );
 }
 
 void TestQgsLayoutContext::feature()
 {
-  QgsLayoutContext context;
+  QgsLayoutReportContext context( nullptr );
 
   //test removing feature
   context.setFeature( QgsFeature() );
@@ -110,7 +132,7 @@ void TestQgsLayoutContext::feature()
 
 void TestQgsLayoutContext::layer()
 {
-  QgsLayoutContext context;
+  QgsLayoutReportContext context( nullptr );
 
   //test clearing layer
   context.setLayer( nullptr );
@@ -125,37 +147,139 @@ void TestQgsLayoutContext::layer()
   context.setLayer( nullptr );
   QVERIFY( !context.layer() );
 
+  QgsLayout l( QgsProject::instance() );
+  l.reportContext().setLayer( layer );
+  //test that expression context created for layout contains report context layer scope
+  QgsExpressionContext expContext  = l.createExpressionContext();
+  QCOMPARE( QgsExpressionUtils::getVectorLayer( expContext.variable( "layer" ), nullptr ), layer );
+
   delete layer;
 }
 
 void TestQgsLayoutContext::dpi()
 {
-  QgsLayoutContext context;
+  QgsLayoutRenderContext context( nullptr );
+
+  QSignalSpy spyDpiChanged( &context, &QgsLayoutRenderContext::dpiChanged );
   context.setDpi( 600 );
   QCOMPARE( context.dpi(), 600.0 );
   QCOMPARE( context.measurementConverter().dpi(), 600.0 );
+  QCOMPARE( spyDpiChanged.count(), 1 );
+
+  context.setDpi( 600 );
+  QCOMPARE( spyDpiChanged.count(), 1 );
+  context.setDpi( 6000 );
+  QCOMPARE( spyDpiChanged.count(), 2 );
 }
 
 void TestQgsLayoutContext::renderContextFlags()
 {
-  QgsLayoutContext context;
-  context.setFlags( 0 );
+  QgsLayoutRenderContext context( nullptr );
+  context.setFlags( nullptr );
   QgsRenderContext::Flags flags = context.renderContextFlags();
   QVERIFY( !( flags & QgsRenderContext::Antialiasing ) );
   QVERIFY( !( flags & QgsRenderContext::UseAdvancedEffects ) );
   QVERIFY( ( flags & QgsRenderContext::ForceVectorOutput ) );
 
-  context.setFlag( QgsLayoutContext::FlagAntialiasing );
+  context.setFlag( QgsLayoutRenderContext::FlagAntialiasing );
   flags = context.renderContextFlags();
   QVERIFY( ( flags & QgsRenderContext::Antialiasing ) );
   QVERIFY( !( flags & QgsRenderContext::UseAdvancedEffects ) );
   QVERIFY( ( flags & QgsRenderContext::ForceVectorOutput ) );
 
-  context.setFlag( QgsLayoutContext::FlagUseAdvancedEffects );
+  context.setFlag( QgsLayoutRenderContext::FlagUseAdvancedEffects );
   flags = context.renderContextFlags();
   QVERIFY( ( flags & QgsRenderContext::Antialiasing ) );
   QVERIFY( ( flags & QgsRenderContext::UseAdvancedEffects ) );
   QVERIFY( ( flags & QgsRenderContext::ForceVectorOutput ) );
+}
+
+void TestQgsLayoutContext::textFormat()
+{
+  QgsLayoutRenderContext context( nullptr );
+  context.setTextRenderFormat( QgsRenderContext::TextFormatAlwaysOutlines );
+  QCOMPARE( context.textRenderFormat(), QgsRenderContext::TextFormatAlwaysOutlines );
+  context.setTextRenderFormat( QgsRenderContext::TextFormatAlwaysText );
+  QCOMPARE( context.textRenderFormat(), QgsRenderContext::TextFormatAlwaysText );
+}
+
+void TestQgsLayoutContext::boundingBoxes()
+{
+  QgsLayoutRenderContext context( nullptr );
+  context.setBoundingBoxesVisible( false );
+  QVERIFY( !context.boundingBoxesVisible() );
+  context.setBoundingBoxesVisible( true );
+  QVERIFY( context.boundingBoxesVisible() );
+}
+
+void TestQgsLayoutContext::geometry()
+{
+  QgsProject p;
+  QgsLayout l( &p );
+  QgsLayoutReportContext context( &l );
+
+  // no feature set
+  QVERIFY( context.currentGeometry().isNull() );
+  QVERIFY( context.currentGeometry( QgsCoordinateReferenceSystem( QStringLiteral( "EPSG:3111" ) ) ).isNull() );
+
+  // no layer set
+  QgsFeature f;
+  f.setGeometry( QgsGeometry::fromWkt( QStringLiteral( "LineString( 144 -38, 145 -39 )" ) ) );
+  context.setFeature( f );
+  QCOMPARE( context.currentGeometry().asWkt(), f.geometry().asWkt() );
+  QVERIFY( context.currentGeometry( QgsCoordinateReferenceSystem( QStringLiteral( "EPSG:3111" ) ) ).isNull() );
+
+  //with layer
+  QgsVectorLayer *layer = new QgsVectorLayer( QStringLiteral( "Point?crs=EPSG:4326&field=id_a:integer" ), QStringLiteral( "A" ), QStringLiteral( "memory" ) );
+  context.setLayer( layer );
+
+  QCOMPARE( context.currentGeometry().asWkt(), f.geometry().asWkt() );
+  QVERIFY( !context.currentGeometry( QgsCoordinateReferenceSystem( QStringLiteral( "EPSG:3111" ) ) ).isNull() );
+  QCOMPARE( context.currentGeometry( QgsCoordinateReferenceSystem( QStringLiteral( "EPSG:3111" ) ) ).asWkt( 0 ), QStringLiteral( "LineString (2412169 2388563, 2500000 2277996)" ) );
+
+  // should be cached
+  QCOMPARE( context.currentGeometry( QgsCoordinateReferenceSystem( QStringLiteral( "EPSG:3111" ) ) ).asWkt( 0 ), QStringLiteral( "LineString (2412169 2388563, 2500000 2277996)" ) );
+
+  // layer crs
+  QCOMPARE( context.currentGeometry( layer->crs() ).asWkt(), f.geometry().asWkt() );
+
+  // clear cache
+  QgsFeature f2;
+  context.setFeature( f2 );
+  QVERIFY( context.currentGeometry().isNull() );
+  QVERIFY( context.currentGeometry( QgsCoordinateReferenceSystem( QStringLiteral( "EPSG:3111" ) ) ).isNull() );
+
+  delete layer;
+}
+
+void TestQgsLayoutContext::scales()
+{
+  QVector< qreal > scales;
+  scales << 1 << 15 << 5 << 10;
+
+  QgsLayoutRenderContext context( nullptr );
+  QSignalSpy spyScalesChanged( &context, &QgsLayoutRenderContext::predefinedScalesChanged );
+  context.setPredefinedScales( scales );
+
+  QCOMPARE( spyScalesChanged.count(), 1 );
+
+  // should be sorted
+  QCOMPARE( context.predefinedScales(), QVector< qreal >() << 1 << 5 << 10 << 15 );
+
+  context.setPredefinedScales( context.predefinedScales() );
+  QCOMPARE( spyScalesChanged.count(), 1 );
+}
+
+void TestQgsLayoutContext::simplifyMethod()
+{
+  QgsLayout l( QgsProject::instance() );
+  QgsLayoutRenderContext context( &l );
+  // must default to no simplification
+  QCOMPARE( context.simplifyMethod().simplifyHints(), QgsVectorSimplifyMethod::NoSimplification );
+  QgsVectorSimplifyMethod simplify;
+  simplify.setSimplifyHints( QgsVectorSimplifyMethod::GeometrySimplification );
+  context.setSimplifyMethod( simplify );
+  QCOMPARE( context.simplifyMethod().simplifyHints(), QgsVectorSimplifyMethod::GeometrySimplification );
 }
 
 QGSTEST_MAIN( TestQgsLayoutContext )

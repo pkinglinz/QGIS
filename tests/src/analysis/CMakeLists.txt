@@ -11,13 +11,25 @@ INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_SOURCE_DIR}/src/core/auth
   ${CMAKE_SOURCE_DIR}/src/core/expression
   ${CMAKE_SOURCE_DIR}/src/core/geometry
+  ${CMAKE_SOURCE_DIR}/src/core/layout
+  ${CMAKE_SOURCE_DIR}/src/core/mesh
   ${CMAKE_SOURCE_DIR}/src/core/metadata
+  ${CMAKE_SOURCE_DIR}/src/core/processing
+  ${CMAKE_SOURCE_DIR}/src/core/processing/models
+  ${CMAKE_SOURCE_DIR}/src/core/providers/meshmemory
   ${CMAKE_SOURCE_DIR}/src/core/raster
   ${CMAKE_SOURCE_DIR}/src/core/symbology
+  ${CMAKE_SOURCE_DIR}/src/core/effects
   ${CMAKE_SOURCE_DIR}/src/analysis
+  ${CMAKE_SOURCE_DIR}/src/analysis/interpolation
+  ${CMAKE_SOURCE_DIR}/src/analysis/network
+  ${CMAKE_SOURCE_DIR}/src/analysis/processing
   ${CMAKE_SOURCE_DIR}/src/analysis/vector
   ${CMAKE_SOURCE_DIR}/src/analysis/raster
+  ${CMAKE_SOURCE_DIR}/src/analysis/mesh
   ${CMAKE_SOURCE_DIR}/src/test
+  ${CMAKE_SOURCE_DIR}/external
+  ${CMAKE_SOURCE_DIR}/external/nlohmann
 
   ${CMAKE_BINARY_DIR}/src/core
   ${CMAKE_BINARY_DIR}/src/analysis
@@ -25,10 +37,13 @@ INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}
 INCLUDE_DIRECTORIES(SYSTEM
   ${QT_INCLUDE_DIR}
   ${GDAL_INCLUDE_DIR}
-  ${PROJ_INCLUDE_DIR}
   ${GEOS_INCLUDE_DIR}
   ${SQLITE3_INCLUDE_DIR}
 )
+
+IF(HAVE_OPENCL)
+    INCLUDE_DIRECTORIES(SYSTEM ${OpenCL_INCLUDE_DIRS})
+ENDIF(HAVE_OPENCL)
 
 #note for tests we should not include the moc of our
 #qtests in the executable file list as the moc is
@@ -49,10 +64,9 @@ MACRO (ADD_QGIS_TEST TESTSRC)
   SET(${TESTNAME}_SRCS ${TESTSRC} ${util_SRCS})
   SET(${TESTNAME}_MOC_CPPS ${TESTSRC})
   ADD_EXECUTABLE(${TESTNAME} ${${TESTNAME}_SRCS})
-  SET_TARGET_PROPERTIES(${TESTNAME} PROPERTIES AUTOMOC TRUE)
   TARGET_LINK_LIBRARIES(${TESTNAME}
-    ${QT_QTCORE_LIBRARY}
-    ${QT_QTTEST_LIBRARY}
+    ${Qt5Core_LIBRARIES}
+    ${Qt5Test_LIBRARIES}
     qgis_analysis)
   ADD_TEST(${TESTNAME} ${CMAKE_BINARY_DIR}/output/bin/${TESTNAME} -maxwarnings 10000)
   #SET_TARGET_PROPERTIES(qgis_${testname} PROPERTIES
@@ -64,11 +78,18 @@ ENDMACRO (ADD_QGIS_TEST)
 # Tests:
 SET(TESTS
  testqgsgeometrysnapper.cpp
- testopenstreetmap.cpp
+ testqgsinterpolator.cpp
+ testqgsprocessing.cpp
+ testqgsprocessingalgs.cpp
  testqgszonalstatistics.cpp
  testqgsrastercalculator.cpp
+ testqgsreclassifyutils.cpp
  testqgsalignraster.cpp
-    )
+ testqgsnetworkanalysis.cpp
+ testqgsninecellfilters.cpp 
+ testqgsmeshcalculator.cpp
+ testqgsmeshcontours.cpp
+)
 
 FOREACH(TESTSRC ${TESTS})
     ADD_QGIS_TEST(${TESTSRC})

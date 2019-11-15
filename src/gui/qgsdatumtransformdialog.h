@@ -19,11 +19,16 @@
 #define QGSDATUMTRANSFORMDIALOG_H
 
 #include "ui_qgsdatumtransformdialogbase.h"
+#include "qgscoordinatereferencesystem.h"
+#include "qgscoordinatetransform.h"
 #include "qgis_gui.h"
+
+class QgsTemporaryCursorRestoreOverride;
 
 #define SIP_NO_FILE
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsDatumTransformDialog
  * \note not available in Python bindings
  */
@@ -31,33 +36,131 @@ class GUI_EXPORT QgsDatumTransformDialog : public QDialog, private Ui::QgsDatumT
 {
     Q_OBJECT
   public:
-    QgsDatumTransformDialog( const QString &layerName, const QList< QList< int > > &dt, QWidget *parent = nullptr, Qt::WindowFlags f = 0 );
-    ~QgsDatumTransformDialog();
 
-    //! \since QGIS 2.4
-    void setDatumTransformInfo( const QString &srcCRSauthId, const QString &destCRSauthId );
+    //! Dialog transformation entry info
+    struct TransformInfo
+    {
+      //! Source coordinate reference system
+      QgsCoordinateReferenceSystem sourceCrs;
 
-    //! getter for selected datum transformations
-    QList< int > selectedDatumTransform();
+      //! Source transform ID
+      int sourceTransformId = -1;
 
-    //! dialog shall remember the selection
-    bool rememberSelection() const;
+      //! Destination coordinate reference system
+      QgsCoordinateReferenceSystem destinationCrs;
 
-  public slots:
-    void on_mHideDeprecatedCheckBox_stateChanged( int state );
-    void on_mDatumTransformTreeWidget_currentItemChanged( QTreeWidgetItem *, QTreeWidgetItem * );
+      //! Destination transform ID
+      int destinationTransformId = -1;
+
+      //! Proj coordinate operation description, for Proj >= 6.0 builds only
+      QString proj;
+    };
+
+    /**
+     * Runs the dialog (if required) prompting for the desired transform to use from \a sourceCrs to
+     * \a destinationCrs, updating the current project transform context as required
+     * based on the results of the run.
+     *
+     * This handles EVERYTHING, including only showing the dialog if multiple choices exist
+     * and the user has asked to be prompted, not re-adding transforms already in the current project
+     * context, etc.
+     *
+     * The optional \a mapCanvas argument can be used to refine the dialog's display based on the current
+     * map canvas extent.
+     *
+     * \since QGIS 3.8
+     */
+    static bool run( const QgsCoordinateReferenceSystem &sourceCrs = QgsCoordinateReferenceSystem(),
+                     const QgsCoordinateReferenceSystem &destinationCrs = QgsCoordinateReferenceSystem(),
+                     QWidget *parent = nullptr,
+                     QgsMapCanvas *mapCanvas = nullptr,
+                     const QString &windowTitle = QString() );
+
+    // TODO QGIS 4.0 - remove selectedDatumTransform
+
+    /**
+     * Constructor for QgsDatumTransformDialog.
+     */
+    QgsDatumTransformDialog( const QgsCoordinateReferenceSystem &sourceCrs = QgsCoordinateReferenceSystem(),
+                             const QgsCoordinateReferenceSystem &destinationCrs = QgsCoordinateReferenceSystem(),
+                             bool allowCrsChanges = false,
+                             bool showMakeDefault = true,
+                             bool forceChoice = true,
+                             QPair<int, int> selectedDatumTransforms = qMakePair( -1, -1 ),
+                             QWidget *parent = nullptr,
+                             Qt::WindowFlags f = nullptr,
+                             const QString &selectedProj = QString(),
+                             QgsMapCanvas *mapCanvas = nullptr );
+    ~QgsDatumTransformDialog() override;
+
+    void accept() override;
+    void reject() override;
+
+    /**
+     * Returns the source and destination transforms, each being a pair of QgsCoordinateReferenceSystems and datum transform code
+     * \since 3.0
+     */
+    TransformInfo selectedDatumTransform();
+
+  private slots:
+
+    void tableCurrentItemChanged( QTableWidgetItem *, QTableWidgetItem * );
+    void setSourceCrs( const QgsCoordinateReferenceSystem &sourceCrs );
+    void setDestinationCrs( const QgsCoordinateReferenceSystem &destinationCrs );
+    void showSupersededToggled( bool toggled );
 
   private:
-    QgsDatumTransformDialog();
-    void updateTitle();
-    bool gridShiftTransformation( const QString &itemText ) const;
-    //! Returns false if the location of the grid shift files is known (PROJ_LIB) and the shift file is not there
-    bool testGridShiftFileAvailability( QTreeWidgetItem *item, int col ) const;
-    void load();
 
-    const QList< QList< int > > &mDt;
-    QString mLayerName;
-    QString mSrcCRSauthId, mDestCRSauthId;
+    enum Roles
+    {
+      TransformIdRole = Qt::UserRole + 1,
+      ProjRole,
+      AvailableRole,
+      BoundsRole
+    };
+
+    bool gridShiftTransformation( const QString &itemText ) const;
+    //! Returns FALSE if the location of the grid shift files is known (PROJ_LIB) and the shift file is not there
+    bool testGridShiftFileAvailability( QTableWidgetItem *item ) const;
+    void load( QPair<int, int> selectedDatumTransforms = qMakePair( -1, -1 ), const QString &selectedProj = QString() );
+    void setOKButtonEnabled();
+
+    /**
+     * Returns true if the dialog should be shown and the user prompted to make the transformation selection.
+     *
+     * \see defaultDatumTransform()
+     */
+    bool shouldAskUserForSelection() const;
+
+    /**
+     * Returns the default transform (or only available transform). This represents the transform which
+     * should be used if the user is not being prompted to make this selection for themselves.
+     *
+     * \see shouldAskUserForSelection()
+     * \see applyDefaultTransform()
+     */
+    TransformInfo defaultDatumTransform() const;
+
+    /**
+     * Applies the defaultDatumTransform(), adding it to the current QgsProject instance.
+     */
+    void applyDefaultTransform();
+
+    /**
+     * Cleans up a PROJ scope string, adding friendly acronym descriptions.
+     */
+    QString formatScope( const QString &scope );
+
+#if PROJ_VERSION_MAJOR>=6
+    QList< QgsDatumTransform::TransformDetails > mDatumTransforms;
+#else
+    QList< QgsDatumTransform::TransformPair > mDatumTransforms;
+#endif
+    QgsCoordinateReferenceSystem mSourceCrs;
+    QgsCoordinateReferenceSystem mDestinationCrs;
+    std::unique_ptr< QgsTemporaryCursorRestoreOverride > mPreviousCursorOverride;
+
+    friend class TestQgsDatumTransformDialog;
 };
 
 #endif // QGSDATUMTRANSFORMDIALOG_H

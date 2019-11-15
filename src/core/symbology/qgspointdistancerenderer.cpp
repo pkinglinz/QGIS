@@ -21,6 +21,8 @@
 #include "qgsspatialindex.h"
 #include "qgsmultipoint.h"
 #include "qgslogger.h"
+#include "qgsstyleentityvisitor.h"
+#include "qgsexpressioncontextutils.h"
 
 #include <QDomElement>
 #include <QPainter>
@@ -45,11 +47,11 @@ void QgsPointDistanceRenderer::toSld( QDomDocument &doc, QDomElement &element, c
 }
 
 
-bool QgsPointDistanceRenderer::renderFeature( QgsFeature &feature, QgsRenderContext &context, int layer, bool selected, bool drawVertexMarker )
+bool QgsPointDistanceRenderer::renderFeature( const QgsFeature &feature, QgsRenderContext &context, int layer, bool selected, bool drawVertexMarker )
 {
-  Q_UNUSED( drawVertexMarker );
-  Q_UNUSED( context );
-  Q_UNUSED( layer );
+  Q_UNUSED( drawVertexMarker )
+  Q_UNUSED( context )
+  Q_UNUSED( layer )
 
   /*
    * IMPORTANT: This algorithm is ported to Python in the processing "Points Displacement" algorithm.
@@ -94,7 +96,7 @@ bool QgsPointDistanceRenderer::renderFeature( QgsFeature &feature, QgsRenderCont
   QList<QgsFeatureId> intersectList = mSpatialIndex->intersects( searchRect( point, searchDistance ) );
   if ( intersectList.empty() )
   {
-    mSpatialIndex->insertFeature( transformedFeature );
+    mSpatialIndex->addFeature( transformedFeature );
     // create new group
     ClusteredGroup newGroup;
     newGroup << GroupedFeature( transformedFeature, symbol->clone(), selected, label );
@@ -139,19 +141,19 @@ bool QgsPointDistanceRenderer::renderFeature( QgsFeature &feature, QgsRenderCont
 void QgsPointDistanceRenderer::drawGroup( const ClusteredGroup &group, QgsRenderContext &context )
 {
   //calculate centroid of all points, this will be center of group
-  QgsMultiPointV2 *groupMultiPoint = new QgsMultiPointV2();
-  Q_FOREACH ( const GroupedFeature &f, group )
+  QgsMultiPoint *groupMultiPoint = new QgsMultiPoint();
+  const auto constGroup = group;
+  for ( const GroupedFeature &f : constGroup )
   {
-    groupMultiPoint->addGeometry( f.feature.geometry().geometry()->clone() );
+    groupMultiPoint->addGeometry( f.feature.geometry().constGet()->clone() );
   }
   QgsGeometry groupGeom( groupMultiPoint );
   QgsGeometry centroid = groupGeom.centroid();
   QPointF pt = centroid.asQPointF();
   context.mapToPixel().transformInPlace( pt.rx(), pt.ry() );
 
-  context.expressionContext().appendScope( createGroupScope( group ) );
+  QgsExpressionContextScopePopper scopePopper( context.expressionContext(), createGroupScope( group ) );
   drawGroup( pt, context, group );
-  delete context.expressionContext().popScope();
 }
 
 void QgsPointDistanceRenderer::setEmbeddedRenderer( QgsFeatureRenderer *r )
@@ -193,7 +195,7 @@ void QgsPointDistanceRenderer::checkLegendSymbolItem( const QString &key, bool s
   if ( !mRenderer )
     return;
 
-  return mRenderer->checkLegendSymbolItem( key, state );
+  mRenderer->checkLegendSymbolItem( key, state );
 }
 
 QString QgsPointDistanceRenderer::filter( const QgsFields &fields )
@@ -202,6 +204,15 @@ QString QgsPointDistanceRenderer::filter( const QgsFields &fields )
     return QgsFeatureRenderer::filter( fields );
   else
     return mRenderer->filter( fields );
+}
+
+bool QgsPointDistanceRenderer::accept( QgsStyleEntityVisitorInterface *visitor ) const
+{
+  if ( mRenderer )
+    if ( !mRenderer->accept( visitor ) )
+      return false;
+
+  return true;
 }
 
 QSet<QString> QgsPointDistanceRenderer::usedAttributes( const QgsRenderContext &context ) const
@@ -218,16 +229,21 @@ QSet<QString> QgsPointDistanceRenderer::usedAttributes( const QgsRenderContext &
   return attributeList;
 }
 
+bool QgsPointDistanceRenderer::filterNeedsGeometry() const
+{
+  return mRenderer ? mRenderer->filterNeedsGeometry() : false;
+}
+
 QgsFeatureRenderer::Capabilities QgsPointDistanceRenderer::capabilities()
 {
   if ( !mRenderer )
   {
-    return 0;
+    return nullptr;
   }
   return mRenderer->capabilities();
 }
 
-QgsSymbolList QgsPointDistanceRenderer::symbols( QgsRenderContext &context )
+QgsSymbolList QgsPointDistanceRenderer::symbols( QgsRenderContext &context ) const
 {
   if ( !mRenderer )
   {
@@ -236,7 +252,7 @@ QgsSymbolList QgsPointDistanceRenderer::symbols( QgsRenderContext &context )
   return mRenderer->symbols( context );
 }
 
-QgsSymbol *QgsPointDistanceRenderer::symbolForFeature( QgsFeature &feature, QgsRenderContext &context )
+QgsSymbol *QgsPointDistanceRenderer::symbolForFeature( const QgsFeature &feature, QgsRenderContext &context ) const
 {
   if ( !mRenderer )
   {
@@ -245,14 +261,14 @@ QgsSymbol *QgsPointDistanceRenderer::symbolForFeature( QgsFeature &feature, QgsR
   return mRenderer->symbolForFeature( feature, context );
 }
 
-QgsSymbol *QgsPointDistanceRenderer::originalSymbolForFeature( QgsFeature &feat, QgsRenderContext &context )
+QgsSymbol *QgsPointDistanceRenderer::originalSymbolForFeature( const QgsFeature &feature, QgsRenderContext &context ) const
 {
   if ( !mRenderer )
     return nullptr;
-  return mRenderer->originalSymbolForFeature( feat, context );
+  return mRenderer->originalSymbolForFeature( feature, context );
 }
 
-QgsSymbolList QgsPointDistanceRenderer::symbolsForFeature( QgsFeature &feature, QgsRenderContext &context )
+QgsSymbolList QgsPointDistanceRenderer::symbolsForFeature( const QgsFeature &feature, QgsRenderContext &context ) const
 {
   if ( !mRenderer )
   {
@@ -261,32 +277,34 @@ QgsSymbolList QgsPointDistanceRenderer::symbolsForFeature( QgsFeature &feature, 
   return mRenderer->symbolsForFeature( feature, context );
 }
 
-QgsSymbolList QgsPointDistanceRenderer::originalSymbolsForFeature( QgsFeature &feat, QgsRenderContext &context )
+QgsSymbolList QgsPointDistanceRenderer::originalSymbolsForFeature( const QgsFeature &feature, QgsRenderContext &context ) const
 {
   if ( !mRenderer )
     return QgsSymbolList();
-  return mRenderer->originalSymbolsForFeature( feat, context );
+  return mRenderer->originalSymbolsForFeature( feature, context );
 }
 
-QSet< QString > QgsPointDistanceRenderer::legendKeysForFeature( QgsFeature &feat, QgsRenderContext &context )
+QSet< QString > QgsPointDistanceRenderer::legendKeysForFeature( const QgsFeature &feature, QgsRenderContext &context ) const
 {
   if ( !mRenderer )
     return QSet< QString >() << QString();
-  return mRenderer->legendKeysForFeature( feat, context );
+  return mRenderer->legendKeysForFeature( feature, context );
 }
 
-bool QgsPointDistanceRenderer::willRenderFeature( QgsFeature &feat, QgsRenderContext &context )
+bool QgsPointDistanceRenderer::willRenderFeature( const QgsFeature &feature, QgsRenderContext &context ) const
 {
   if ( !mRenderer )
   {
     return false;
   }
-  return mRenderer->willRenderFeature( feat, context );
+  return mRenderer->willRenderFeature( feature, context );
 }
 
 
 void QgsPointDistanceRenderer::startRender( QgsRenderContext &context, const QgsFields &fields )
 {
+  QgsFeatureRenderer::startRender( context, fields );
+
   mRenderer->startRender( context, fields );
 
   mClusteredGroups.clear();
@@ -315,11 +333,17 @@ void QgsPointDistanceRenderer::startRender( QgsRenderContext &context, const Qgs
 
 void QgsPointDistanceRenderer::stopRender( QgsRenderContext &context )
 {
+  QgsFeatureRenderer::stopRender( context );
+
   //printInfoDisplacementGroups(); //just for debugging
 
-  Q_FOREACH ( const ClusteredGroup &group, mClusteredGroups )
+  if ( !context.renderingStopped() )
   {
-    drawGroup( group, context );
+    const auto constMClusteredGroups = mClusteredGroups;
+    for ( const ClusteredGroup &group : constMClusteredGroups )
+    {
+      drawGroup( group, context );
+    }
   }
 
   mClusteredGroups.clear();
@@ -353,7 +377,8 @@ void QgsPointDistanceRenderer::printGroupInfo() const
   for ( int i = 0; i < nGroups; ++i )
   {
     QgsDebugMsg( "***************displacement group " + QString::number( i ) );
-    Q_FOREACH ( const GroupedFeature &feature, mClusteredGroups.at( i ) )
+    const auto constAt = mClusteredGroups.at( i );
+    for ( const GroupedFeature &feature : constAt )
     {
       QgsDebugMsg( FID_TO_STRING( feature.feature.id() ) );
     }
@@ -385,7 +410,9 @@ void QgsPointDistanceRenderer::drawLabels( QPointF centerPoint, QgsSymbolRenderC
 
   //scale font (for printing)
   QFont pixelSizeFont = mLabelFont;
-  pixelSizeFont.setPixelSize( context.outputLineWidth( mLabelFont.pointSizeF() * 0.3527 ) );
+
+  const double fontSizeInPixels = context.renderContext().convertToPainterUnits( mLabelFont.pointSizeF(), QgsUnitTypes::RenderPoints );
+  pixelSizeFont.setPixelSize( static_cast< int >( std::round( fontSizeInPixels ) ) );
   QFont scaledFont = pixelSizeFont;
   scaledFont.setPixelSize( pixelSizeFont.pixelSize() );
   p->setFont( scaledFont );
@@ -455,10 +482,15 @@ QgsExpressionContextScope *QgsPointDistanceRenderer::createGroupScope( const Clu
 
     clusterScope->addVariable( QgsExpressionContextScope::StaticVariable( QgsExpressionContext::EXPR_CLUSTER_SIZE, group.size(), true ) );
   }
+  if ( !group.empty() )
+  {
+    // data defined properties may require a feature in the expression context, so just use first feature in group
+    clusterScope->setFeature( group.at( 0 ).feature );
+  }
   return clusterScope;
 }
 
-QgsMarkerSymbol *QgsPointDistanceRenderer::firstSymbolForFeature( QgsFeature &feature, QgsRenderContext &context )
+QgsMarkerSymbol *QgsPointDistanceRenderer::firstSymbolForFeature( const QgsFeature &feature, QgsRenderContext &context )
 {
   if ( !mRenderer )
   {

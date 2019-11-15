@@ -1,4 +1,5 @@
 SET(MSSQL_SRCS
+  qgsmssqlconnection.cpp
   qgsmssqlprovider.cpp
   qgsmssqlgeometryparser.cpp
   qgsmssqltablemodel.cpp
@@ -8,21 +9,12 @@ SET(MSSQL_SRCS
   qgsmssqlgeomcolumntypethread.cpp
 )
 
-SET(MSSQL_MOC_HDRS
-  qgsmssqlprovider.h
-  qgsmssqltablemodel.h
-  qgsmssqldataitems.h
-  qgsmssqlgeomcolumntypethread.h
-)
-
 IF (WITH_GUI)
   SET(MSSQL_SRCS ${MSSQL_SRCS}
+    qgsmssqlprovidergui.cpp
+    qgsmssqldataitemguiprovider.cpp
     qgsmssqlsourceselect.cpp
     qgsmssqlnewconnection.cpp
-  )
-  SET(MSSQL_MOC_HDRS ${MSSQL_MOC_HDRS}
-    qgsmssqlsourceselect.h
-    qgsmssqlnewconnection.h
   )
 ENDIF ()
 
@@ -33,14 +25,15 @@ SET(MSSQL_HDRS
 ########################################################
 # Build
 
-QT5_WRAP_CPP(MSSQL_MOC_SRCS ${MSSQL_MOC_HDRS})
-
 INCLUDE_DIRECTORIES(
   ${CMAKE_SOURCE_DIR}/src/core
   ${CMAKE_SOURCE_DIR}/src/core/expression
   ${CMAKE_SOURCE_DIR}/src/core/geometry
   ${CMAKE_SOURCE_DIR}/src/core/metadata
+  ${CMAKE_SOURCE_DIR}/src/core/symbology
   ${CMAKE_SOURCE_DIR}/src/gui
+  ${CMAKE_SOURCE_DIR}/external
+  ${CMAKE_SOURCE_DIR}/external/nlohmann
 
   ${CMAKE_BINARY_DIR}/src/core
   ${CMAKE_BINARY_DIR}/src/gui
@@ -48,9 +41,7 @@ INCLUDE_DIRECTORIES(
 )
 INCLUDE_DIRECTORIES(SYSTEM
   ${GDAL_INCLUDE_DIR}
-  ${GEOS_INCLUDE_DIR}
   ${QT_INCLUDE_DIR}
-  ${PROJ_INCLUDE_DIR}
 )
 
 IF (WITH_GUI)
@@ -60,17 +51,18 @@ IF (WITH_GUI)
 ENDIF ()
 
 
-ADD_LIBRARY(mssqlprovider MODULE ${MSSQL_SRCS} ${MSSQL_MOC_SRCS} ${MSSQL_HDRS})
+ADD_LIBRARY(mssqlprovider MODULE ${MSSQL_SRCS} ${MSSQL_HDRS})
 
 TARGET_LINK_LIBRARIES(mssqlprovider
   qgis_core
-  ${QT_QTSQL_LIBRARY}
+  ${Qt5Sql_LIBRARIES}
 )
 
 IF (WITH_GUI)
   TARGET_LINK_LIBRARIES (mssqlprovider
     qgis_gui
   )
+  ADD_DEPENDENCIES(mssqlprovider ui)
 ENDIF ()
 
 ########################################################

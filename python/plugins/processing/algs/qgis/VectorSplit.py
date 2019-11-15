@@ -16,26 +16,24 @@
 *                                                                         *
 ***************************************************************************
 """
-from builtins import str
 
 __author__ = 'Alexander Bruy'
 __date__ = 'September 2014'
 __copyright__ = '(C) 2014, Alexander Bruy'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 import os
 
-from qgis.core import (QgsProcessingUtils,
+from qgis.core import (QgsApplication,
+                       QgsProcessingUtils,
                        QgsFeatureSink,
                        QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterField,
                        QgsProcessingParameterFolderDestination,
-                       QgsProcessingOutputFolder,
+                       QgsProcessingException,
+                       QgsProcessingOutputMultipleLayers,
                        QgsExpression,
-                       QgsFeatureRequest)
+                       QgsFeatureRequest,
+                       QgsVectorFileWriter)
 
 from processing.algs.qgis.QgisAlgorithm import QgisAlgorithm
 from processing.tools.system import mkdir
@@ -48,9 +46,13 @@ class VectorSplit(QgisAlgorithm):
     INPUT = 'INPUT'
     FIELD = 'FIELD'
     OUTPUT = 'OUTPUT'
+    OUTPUT_LAYERS = 'OUTPUT_LAYERS'
 
     def group(self):
         return self.tr('Vector general')
+
+    def groupId(self):
+        return 'vectorgeneral'
 
     def __init__(self):
         super().__init__()
@@ -64,8 +66,13 @@ class VectorSplit(QgisAlgorithm):
 
         self.addParameter(QgsProcessingParameterFolderDestination(self.OUTPUT,
                                                                   self.tr('Output directory')))
+        self.addOutput(QgsProcessingOutputMultipleLayers(self.OUTPUT_LAYERS, self.tr('Output layers')))
 
-        self.addOutput(QgsProcessingOutputFolder(self.OUTPUT, self.tr('Output directory')))
+    def icon(self):
+        return QgsApplication.getThemeIcon("/algorithms/mAlgorithmSplitLayer.svg")
+
+    def svgIconPath(self):
+        return QgsApplication.iconPath("/algorithms/mAlgorithmSplitLayer.svg")
 
     def name(self):
         return 'splitvectorlayer'
@@ -75,8 +82,16 @@ class VectorSplit(QgisAlgorithm):
 
     def processAlgorithm(self, parameters, context, feedback):
         source = self.parameterAsSource(parameters, self.INPUT, context)
+        if source is None:
+            raise QgsProcessingException(self.invalidSourceError(parameters, self.INPUT))
+
         fieldName = self.parameterAsString(parameters, self.FIELD, context)
         directory = self.parameterAsString(parameters, self.OUTPUT, context)
+
+        output_format = context.preferredVectorFormat()
+        if not output_format in QgsVectorFileWriter.supportedFormatExtensions():
+            # fallback to gpkg if preferred format is not available
+            output_format = 'gpkg'
 
         mkdir(directory)
 
@@ -89,11 +104,12 @@ class VectorSplit(QgisAlgorithm):
         geomType = source.wkbType()
 
         total = 100.0 / len(uniqueValues) if uniqueValues else 1
+        output_layers = []
 
         for current, i in enumerate(uniqueValues):
             if feedback.isCanceled():
                 break
-            fName = u'{0}_{1}.shp'.format(baseName, str(i).strip())
+            fName = '{0}_{1}.{2}'.format(baseName, str(i).strip(), output_format)
             feedback.pushInfo(self.tr('Creating layer: {}').format(fName))
 
             sink, dest = QgsProcessingUtils.createFeatureSink(fName, context, fields, geomType, crs)
@@ -108,8 +124,9 @@ class VectorSplit(QgisAlgorithm):
                 sink.addFeature(f, QgsFeatureSink.FastInsert)
                 count += 1
             feedback.pushInfo(self.tr('Added {} features to layer').format(count))
+            output_layers.append(fName)
             del sink
 
             feedback.setProgress(int(current * total))
 
-        return {self.OUTPUT: directory}
+        return {self.OUTPUT: directory, self.OUTPUT_LAYERS: output_layers}

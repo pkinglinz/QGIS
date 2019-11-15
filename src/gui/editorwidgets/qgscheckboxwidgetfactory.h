@@ -21,7 +21,8 @@
 
 SIP_NO_FILE
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsCheckboxWidgetFactory
  * \note not available in Python bindings
  */
@@ -29,6 +30,11 @@ SIP_NO_FILE
 class GUI_EXPORT QgsCheckboxWidgetFactory : public QgsEditorWidgetFactory
 {
   public:
+
+    /**
+     * Constructor for QgsCheckboxWidgetFactory, where \a name is a human-readable
+     * name for the factory.
+     */
     explicit QgsCheckboxWidgetFactory( const QString &name );
 
     // QgsEditorWidgetFactory interface

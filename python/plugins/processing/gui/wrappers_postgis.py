@@ -30,13 +30,12 @@ from qgis.PyQt.QtWidgets import QComboBox
 
 from processing.gui.wrappers import (
     WidgetWrapper,
-    ExpressionWidgetWrapperMixin,
     DIALOG_MODELER,
 )
 from processing.tools.postgis import GeoDB
 
 
-class ConnectionWidgetWrapper(WidgetWrapper, ExpressionWidgetWrapperMixin):
+class ConnectionWidgetWrapper(WidgetWrapper):
     """
     WidgetWrapper for ParameterString that create and manage a combobox widget
     with existing postgis connections.
@@ -47,7 +46,7 @@ class ConnectionWidgetWrapper(WidgetWrapper, ExpressionWidgetWrapperMixin):
         for group in self.items():
             self._combo.addItem(*group)
         self._combo.currentIndexChanged.connect(lambda: self.widgetValueHasChanged.emit(self))
-        return self.wrapWithExpressionButton(self._combo)
+        return self._combo
 
     def items(self):
         settings = QgsSettings()
@@ -69,7 +68,7 @@ class ConnectionWidgetWrapper(WidgetWrapper, ExpressionWidgetWrapperMixin):
         return self.comboValue(combobox=self._combo)
 
 
-class SchemaWidgetWrapper(WidgetWrapper, ExpressionWidgetWrapperMixin):
+class SchemaWidgetWrapper(WidgetWrapper):
     """
     WidgetWrapper for ParameterString that create and manage a combobox widget
     with existing schemas from a parent connection parameter.
@@ -86,25 +85,25 @@ class SchemaWidgetWrapper(WidgetWrapper, ExpressionWidgetWrapperMixin):
         self._combo.currentIndexChanged.connect(lambda: self.widgetValueHasChanged.emit(self))
         self._combo.lineEdit().editingFinished.connect(lambda: self.widgetValueHasChanged.emit(self))
 
-        return self.wrapWithExpressionButton(self._combo)
+        return self._combo
 
     def postInitialize(self, wrappers):
         for wrapper in wrappers:
-            if wrapper.param.name() == self._connection_param:
+            if wrapper.parameterDefinition().name() == self._connection_param:
                 self.connection_wrapper = wrapper
-                self.setConnection(wrapper.value())
+                self.setConnection(wrapper.parameterValue())
                 wrapper.widgetValueHasChanged.connect(self.connectionChanged)
                 break
 
     def connectionChanged(self, wrapper):
-        connection = wrapper.value()
+        connection = wrapper.parameterValue()
         if connection == self._connection:
             return
         self.setConnection(connection)
 
     def setConnection(self, connection):
         self._connection = connection
-        # when there is NO connection (yet), this get's called with a ''-connection
+        # when there is NO connection (yet), this gets called with a ''-connection
         if isinstance(connection, str) and connection != '':
             self._database = GeoDB.from_name(connection)
         else:
@@ -141,7 +140,7 @@ class SchemaWidgetWrapper(WidgetWrapper, ExpressionWidgetWrapperMixin):
         return self._database
 
 
-class TableWidgetWrapper(WidgetWrapper, ExpressionWidgetWrapperMixin):
+class TableWidgetWrapper(WidgetWrapper):
     """
     WidgetWrapper for ParameterString that create and manage a combobox widget
     with existing tables from a parent schema parameter.
@@ -158,19 +157,19 @@ class TableWidgetWrapper(WidgetWrapper, ExpressionWidgetWrapperMixin):
         self._combo.currentIndexChanged.connect(lambda: self.widgetValueHasChanged.emit(self))
         self._combo.lineEdit().editingFinished.connect(lambda: self.widgetValueHasChanged.emit(self))
 
-        return self.wrapWithExpressionButton(self._combo)
+        return self._combo
 
     def postInitialize(self, wrappers):
         for wrapper in wrappers:
-            if wrapper.param.name() == self._schema_param:
+            if wrapper.parameterDefinition().name() == self._schema_param:
                 self.schema_wrapper = wrapper
-                self.setSchema(wrapper.database(), wrapper.value())
+                self.setSchema(wrapper.database(), wrapper.parameterValue())
                 wrapper.widgetValueHasChanged.connect(self.schemaChanged)
                 break
 
     def schemaChanged(self, wrapper):
         database = wrapper.database()
-        schema = wrapper.value()
+        schema = wrapper.parameterValue()
         if database == self._database and schema == self._schema:
             return
         self.setSchema(database, schema)

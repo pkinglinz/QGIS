@@ -12,17 +12,18 @@
  *   (at your option) any later version.                                   *
  *                                                                         *
  ***************************************************************************/
-#ifndef QGSELLIPSESYMBOLLAYERV2WIDGET_H
-#define QGSELLIPSESYMBOLLAYERV2WIDGET_H
+#ifndef QGSELLIPSESYMBOLLAYERWIDGET_H
+#define QGSELLIPSESYMBOLLAYERWIDGET_H
 
 #include "ui_widget_ellipse.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgssymbollayerwidget.h"
 #include "qgis_gui.h"
 
 class QgsEllipseSymbolLayer;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsEllipseSymbolLayerWidget
  */
 class GUI_EXPORT QgsEllipseSymbolLayerWidget: public QgsSymbolLayerWidget, private Ui::WidgetEllipseBase
@@ -30,13 +31,23 @@ class GUI_EXPORT QgsEllipseSymbolLayerWidget: public QgsSymbolLayerWidget, priva
     Q_OBJECT
 
   public:
-    QgsEllipseSymbolLayerWidget( const QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = 0 );
 
-    static QgsSymbolLayerWidget *create( const QgsVectorLayer *vl ) SIP_FACTORY { return new QgsEllipseSymbolLayerWidget( vl ); }
+    /**
+     * Constructor for QgsEllipseSymbolLayerWidget.
+     * \param vl associated vector layer
+     * \param parent parent widget
+     */
+    QgsEllipseSymbolLayerWidget( QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
+
+    /**
+     * Creates a new QgsSymbolLayerWidget.
+     * \param vl associated vector layer
+     */
+    static QgsSymbolLayerWidget *create( QgsVectorLayer *vl ) SIP_FACTORY { return new QgsEllipseSymbolLayerWidget( vl ); }
 
     // from base class
-    virtual void setSymbolLayer( QgsSymbolLayer *layer ) override;
-    virtual QgsSymbolLayer *symbolLayer() override;
+    void setSymbolLayer( QgsSymbolLayer *layer ) override;
+    QgsSymbolLayer *symbolLayer() override;
 
   protected:
     QgsEllipseSymbolLayer *mLayer = nullptr;
@@ -45,25 +56,25 @@ class GUI_EXPORT QgsEllipseSymbolLayerWidget: public QgsSymbolLayerWidget, priva
     void blockComboSignals( bool block );
 
   private slots:
-    void on_mShapeListWidget_itemSelectionChanged();
-    void on_mWidthSpinBox_valueChanged( double d );
-    void on_mHeightSpinBox_valueChanged( double d );
-    void on_mRotationSpinBox_valueChanged( double d );
-    void on_mStrokeStyleComboBox_currentIndexChanged( int index );
-    void on_mStrokeWidthSpinBox_valueChanged( double d );
-    void on_btnChangeColorStroke_colorChanged( const QColor &newColor );
-    void on_btnChangeColorFill_colorChanged( const QColor &newColor );
+    void mShapeListWidget_itemSelectionChanged();
+    void mWidthSpinBox_valueChanged( double d );
+    void mHeightSpinBox_valueChanged( double d );
+    void mRotationSpinBox_valueChanged( double d );
+    void mStrokeStyleComboBox_currentIndexChanged( int index );
+    void mStrokeWidthSpinBox_valueChanged( double d );
+    void btnChangeColorStroke_colorChanged( const QColor &newColor );
+    void btnChangeColorFill_colorChanged( const QColor &newColor );
 
-    void on_mSymbolWidthUnitWidget_changed();
-    void on_mStrokeWidthUnitWidget_changed();
-    void on_mSymbolHeightUnitWidget_changed();
-    void on_mOffsetUnitWidget_changed();
-    void on_mHorizontalAnchorComboBox_currentIndexChanged( int index );
-    void on_mVerticalAnchorComboBox_currentIndexChanged( int index );
+    void mSymbolWidthUnitWidget_changed();
+    void mStrokeWidthUnitWidget_changed();
+    void mSymbolHeightUnitWidget_changed();
+    void mOffsetUnitWidget_changed();
+    void mHorizontalAnchorComboBox_currentIndexChanged( int index );
+    void mVerticalAnchorComboBox_currentIndexChanged( int index );
 
     void penJoinStyleChanged();
 
     void setOffset();
 };
 
-#endif // QGSELLIPSESYMBOLLAYERV2WIDGET_H
+#endif // QGSELLIPSESYMBOLLAYERWIDGET_H

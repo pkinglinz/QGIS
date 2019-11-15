@@ -19,20 +19,37 @@
 #define QGSGEOMETRYRUBBERBAND_H
 
 #include "qgsmapcanvasitem.h"
-#include "qgis.h"
+#include "qgswkbtypes.h"
 #include <QBrush>
 #include <QPen>
 #include "qgis_gui.h"
 
+#ifdef SIP_RUN
+% ModuleHeaderCode
+// For ConvertToSubClassCode.
+#include <qgsgeometryrubberband.h>
+% End
+#endif
 
 class QgsAbstractGeometry;
 class QgsPoint;
 struct QgsVertexId;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * A rubberband class for QgsAbstractGeometry (considering curved geometries)*/
 class GUI_EXPORT QgsGeometryRubberBand: public QgsMapCanvasItem
 {
+
+#ifdef SIP_RUN
+    SIP_CONVERT_TO_SUBCLASS_CODE
+    if ( dynamic_cast<QgsGeometryRubberBand *>( sipCpp ) )
+      sipType = sipType_QgsGeometryRubberBand;
+    else
+      sipType = nullptr;
+    SIP_END
+#endif
+
   public:
     enum IconType
     {
@@ -69,7 +86,7 @@ class GUI_EXPORT QgsGeometryRubberBand: public QgsMapCanvasItem
     };
 
     QgsGeometryRubberBand( QgsMapCanvas *mapCanvas, QgsWkbTypes::GeometryType geomType = QgsWkbTypes::LineGeometry );
-    ~QgsGeometryRubberBand();
+    ~QgsGeometryRubberBand() override;
 
     //! Sets geometry (takes ownership). Geometry is expected to be in map coordinates
     void setGeometry( QgsAbstractGeometry *geom SIP_TRANSFER );
@@ -91,7 +108,7 @@ class GUI_EXPORT QgsGeometryRubberBand: public QgsMapCanvasItem
     void setIconType( IconType iconType ) { mIconType = iconType; }
 
   protected:
-    virtual void paint( QPainter *painter ) override;
+    void paint( QPainter *painter ) override;
 
   private:
     QgsAbstractGeometry *mGeometry = nullptr;

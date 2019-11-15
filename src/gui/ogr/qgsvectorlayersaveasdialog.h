@@ -30,38 +30,103 @@
 class QgsVectorLayer;
 
 /**
- *  Class to select destination file, type and CRS for ogr layers
- *  \note not available in Python bindings
+ * \ingroup gui
+ * Class to select destination file, type and CRS for ogr layers
+ * \note not available in Python bindings
+ * \since QGIS 1.0
  */
 class GUI_EXPORT QgsVectorLayerSaveAsDialog : public QDialog, private Ui::QgsVectorLayerSaveAsDialogBase
 {
     Q_OBJECT
 
   public:
-    // bitmask of options to be shown
+
+    //! Bitmask of options to be shown
     enum Options
     {
-      Symbology = 1,
-      AllOptions = ~0
+      Symbology = 1, //!< Show symbology options
+      DestinationCrs = 1 << 2, //!< Show destination CRS (reprojection) option
+      Fields = 1 << 3, //!< Show field customization group
+      AddToCanvas = 1 << 4, //!< Show add to map option
+      SelectedOnly = 1 << 5, //!< Show selected features only option
+      GeometryType = 1 << 6, //!< Show geometry group
+      Extent = 1 << 7, //!< Show extent group
+      AllOptions = ~0 //!< Show all options
     };
 
-    QgsVectorLayerSaveAsDialog( long srsid, QWidget *parent = nullptr, Qt::WindowFlags fl = 0 );
-    QgsVectorLayerSaveAsDialog( QgsVectorLayer *layer, int options = AllOptions, QWidget *parent = nullptr, Qt::WindowFlags fl = 0 );
-    ~QgsVectorLayerSaveAsDialog();
+    /**
+     * Construct a new QgsVectorLayerSaveAsDialog
+     */
+    QgsVectorLayerSaveAsDialog( long srsid, QWidget *parent = nullptr, Qt::WindowFlags fl = nullptr );
 
+    /**
+     * Construct a new QgsVectorLayerSaveAsDialog
+     */
+    QgsVectorLayerSaveAsDialog( QgsVectorLayer *layer, int options = AllOptions, QWidget *parent = nullptr, Qt::WindowFlags fl = nullptr );
+
+    /**
+     * The format in which the export should be written.
+     * \see QgsVectorFileWriter::filterForDriver()
+     */
     QString format() const;
+
+    /**
+     * The encoding of the target file.
+     */
     QString encoding() const;
+
+    /**
+     * Returns the target filename.
+     */
     QString filename() const;
+
+    /**
+     * Returns the target layer name
+     */
     QString layername() const;
+
+    /**
+     * Returns a list of additional data source options which are passed to OGR.
+     * Refer to the OGR documentation for the target format for available options.
+     */
     QStringList datasourceOptions() const;
+
+    /**
+     * Returns a list of additional layer options which are passed to OGR.
+     * Refer to the OGR documentation for the target format for available options.
+     */
     QStringList layerOptions() const;
+
+    /**
+     * Returns the internal CRS ID.
+     * \see QgsCoordinateReferenceSystem::srsid()
+     */
     long crs() const;
+
+    /**
+     * Returns a list of attributes which are selected for saving.
+     */
     QgsAttributeList selectedAttributes() const;
-    //! Return selected attributes that must be exported with their displayed values instead of their raw values. Added in QGIS 2.16
+    //! Returns selected attributes that must be exported with their displayed values instead of their raw values. Added in QGIS 2.16
     QgsAttributeList attributesAsDisplayedValues() const;
+
+    /**
+     * Returns TRUE if the "add to canvas" checkbox is checked.
+     *
+     * \see setAddToCanvas()
+     */
     bool addToCanvas() const;
 
-    /** Returns type of symbology export.
+    /**
+     * Sets whether the  "add to canvas" checkbox should be \a checked.
+     *
+     * \see addToCanvas()
+     * \since QGIS 3.6
+     */
+    void setAddToCanvas( bool checked );
+
+    /**
+     * Returns type of symbology export.
         0: No symbology
         1: Feature symbology
         2: Symbol level symbology*/
@@ -78,38 +143,61 @@ class GUI_EXPORT QgsVectorLayerSaveAsDialog : public QDialog, private Ui::QgsVec
      */
     void setMapCanvas( QgsMapCanvas *canvas );
 
+    /**
+     * Determines if filtering the export by an extent is activated.
+     * \see filterExtent()
+     */
     bool hasFilterExtent() const;
+
+    /**
+     * Determines the extent to be exported.
+     * \see hasFilterExtent()
+     */
     QgsRectangle filterExtent() const;
 
+    /**
+     * Sets whether only selected features will be saved.
+     */
+    void setOnlySelected( bool onlySelected );
+
+    /**
+     * Returns whether only selected features will be saved.
+     */
     bool onlySelected() const;
 
-    /** Returns the selected flat geometry type for the export.
+    /**
+     * Returns the selected flat geometry type for the export.
      * \see automaticGeometryType()
      * \see forceMulti()
      * \see includeZ()
      */
     QgsWkbTypes::Type geometryType() const;
 
-    /** Returns true if geometry type is set to automatic.
+    /**
+     * Returns TRUE if geometry type is set to automatic.
      * \see geometryType()
      */
     bool automaticGeometryType() const;
 
-    /** Returns true if force multi geometry type is checked.
+    /**
+     * Returns TRUE if force multi geometry type is checked.
      * \see includeZ()
      */
     bool forceMulti() const;
 
-    /** Sets whether the force multi geometry checkbox should be checked.
+    /**
+     * Sets whether the force multi geometry checkbox should be checked.
      */
     void setForceMulti( bool checked );
 
-    /** Returns true if include z dimension is checked.
+    /**
+     * Returns TRUE if include z dimension is checked.
      * \see forceMulti()
      */
     bool includeZ() const;
 
-    /** Sets whether the include z dimension checkbox should be checked.
+    /**
+     * Sets whether the include z dimension checkbox should be checked.
      */
     void setIncludeZ( bool checked );
 
@@ -118,18 +206,16 @@ class GUI_EXPORT QgsVectorLayerSaveAsDialog : public QDialog, private Ui::QgsVec
 
   private slots:
 
-    void on_mFormatComboBox_currentIndexChanged( int idx );
-    void on_leFilename_textChanged( const QString &text );
-    void on_browseFilename_clicked();
-    void on_mCrsSelector_crsChanged( const QgsCoordinateReferenceSystem &crs );
+    void mFormatComboBox_currentIndexChanged( int idx );
+    void mCrsSelector_crsChanged( const QgsCoordinateReferenceSystem &crs );
     void showHelp();
-    void on_mSymbologyExportComboBox_currentIndexChanged( const QString &text );
-    void on_mGeometryTypeComboBox_currentIndexChanged( int index );
+    void mSymbologyExportComboBox_currentIndexChanged( const QString &text );
+    void mGeometryTypeComboBox_currentIndexChanged( int index );
     void accept() override;
-    void on_mSelectAllAttributes_clicked();
-    void on_mDeselectAllAttributes_clicked();
-    void on_mReplaceRawFieldValues_stateChanged( int state );
-    void on_mAttributeTable_itemChanged( QTableWidgetItem *item );
+    void mSelectAllAttributes_clicked();
+    void mDeselectAllAttributes_clicked();
+    void mReplaceRawFieldValues_stateChanged( int state );
+    void mAttributeTable_itemChanged( QTableWidgetItem *item );
 
   private:
     void setup();
@@ -144,6 +230,7 @@ class GUI_EXPORT QgsVectorLayerSaveAsDialog : public QDialog, private Ui::QgsVec
     bool mAttributeTableItemChangedSlotEnabled;
     bool mReplaceRawFieldValuesStateChangedSlotEnabled;
     QgsVectorFileWriter::ActionOnExistingFile mActionOnExistingFile;
+    Options mOptions = AllOptions;
 };
 
 #endif // QGSVECTORLAYERSAVEASDIALOG_H

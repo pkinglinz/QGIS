@@ -30,20 +30,6 @@
 
 static int sRenderCounter = 0;
 
-QgsRenderChecker::QgsRenderChecker()
-  : mReport( QLatin1String( "" ) )
-  , mMatchTarget( 0 )
-  , mElapsedTime( 0 )
-  , mRenderedImageFile( QLatin1String( "" ) )
-  , mExpectedImageFile( QLatin1String( "" ) )
-  , mMismatchCount( 0 )
-  , mColorTolerance( 0 )
-  , mMaxSizeDifferenceX( 0 )
-  , mMaxSizeDifferenceY( 0 )
-  , mElapsedTimeTarget( 0 )
-  , mBufferDashMessages( false )
-{
-}
 
 QString QgsRenderChecker::controlImagePath() const
 {
@@ -196,7 +182,7 @@ bool QgsRenderChecker::runTest( const QString &testName,
   //
   mMapSettings.setBackgroundColor( qRgb( 152, 219, 249 ) );
   mMapSettings.setFlag( QgsMapSettings::Antialiasing );
-  mMapSettings.setOutputSize( QSize( myExpectedImage.width(), myExpectedImage.height() ) );
+  mMapSettings.setOutputSize( QSize( myExpectedImage.width(), myExpectedImage.height() ) / mMapSettings.devicePixelRatio() );
 
   QTime myTime;
   myTime.start();
@@ -208,6 +194,7 @@ bool QgsRenderChecker::runTest( const QString &testName,
   mElapsedTime = myTime.elapsed();
 
   QImage myImage = job.renderedImage();
+  Q_ASSERT( myImage.devicePixelRatioF() == mMapSettings.devicePixelRatio() );
 
   //
   // Save the pixmap to disk so the user can make a
@@ -398,6 +385,28 @@ bool QgsRenderChecker::compareImages( const QString &testName,
       mReport += QLatin1String( "</td></tr>" );
     }
   }
+
+  if ( myExpectedImage.format() == QImage::Format_Indexed8 )
+  {
+    if ( myResultImage.format() != QImage::Format_Indexed8 )
+    {
+      qDebug() << "Expected image and result image for " << testName << " have different formats (8bit format is expected) - FAILING!";
+
+      mReport += QLatin1String( "<tr><td colspan=3>" );
+      mReport += "<font color=red>Expected image and result image for " + testName + " have different formats (8bit format is expected) - FAILING!</font>";
+      mReport += QLatin1String( "</td></tr>" );
+      mReport += myImagesString;
+      delete maskImage;
+      return false;
+    }
+
+    // When we compute the diff between the 2 images, we use constScanLine expecting a QRgb color
+    // but this method returns color table index for 8 bit image, not color.
+    // So we convert the 2 images in 32 bits so the diff works correctly
+    myResultImage = myResultImage.convertToFormat( QImage::Format_ARGB32 );
+    myExpectedImage = myExpectedImage.convertToFormat( QImage::Format_ARGB32 );
+  }
+
 
   //
   // Now iterate through them counting how many

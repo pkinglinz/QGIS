@@ -29,8 +29,7 @@
 #include "qgisappstylesheet.h"
 #include "qgisapp.h"
 #include "qgsapplayertreeviewmenuprovider.h"
-#include "qgscomposer.h"
-#include "qgscomposerview.h"
+#include "qgsdatumtransformdialog.h"
 #include "qgsgui.h"
 #include "qgsmaplayer.h"
 #include "qgsmaptooladvanceddigitizing.h"
@@ -54,13 +53,10 @@ QgisAppInterface::QgisAppInterface( QgisApp *_qgis )
   , pluginManagerIface( _qgis->pluginManager() )
 {
   // connect signals
-  connect( qgis->layerTreeView(), &QgsLayerTreeView::currentLayerChanged,
+  connect( qgis, &QgisApp::activeLayerChanged,
            this, &QgisInterface::currentLayerChanged );
   connect( qgis, &QgisApp::currentThemeChanged,
            this, &QgisAppInterface::currentThemeChanged );
-  connect( qgis, &QgisApp::composerOpened, this, &QgisAppInterface::composerOpened );
-  connect( qgis, &QgisApp::composerWillBeClosed, this, &QgisAppInterface::composerWillBeClosed );
-  connect( qgis, &QgisApp::composerClosed, this, &QgisAppInterface::composerClosed );
 
   connect( qgis, &QgisApp::layoutDesignerOpened, this, &QgisAppInterface::layoutDesignerOpened );
   connect( qgis, &QgisApp::layoutDesignerWillBeClosed, this, &QgisAppInterface::layoutDesignerWillBeClosed );
@@ -87,7 +83,7 @@ QgsLayerTreeView *QgisAppInterface::layerTreeView()
 }
 
 void QgisAppInterface::addCustomActionForLayerType( QAction *action,
-    QString menu, QgsMapLayer::LayerType type, bool allLayers )
+    QString menu, QgsMapLayerType type, bool allLayers )
 {
   QgsAppLayerTreeViewMenuProvider *menuProvider = dynamic_cast<QgsAppLayerTreeViewMenuProvider *>( qgis->layerTreeView()->menuProvider() );
   if ( !menuProvider )
@@ -161,6 +157,11 @@ QgsRasterLayer *QgisAppInterface::addRasterLayer( const QString &url, const QStr
   return qgis->addRasterLayer( url, baseName, providerKey );
 }
 
+QgsMeshLayer *QgisAppInterface::addMeshLayer( const QString &url, const QString &baseName, const QString &providerKey )
+{
+  return qgis->addMeshLayer( url, baseName, providerKey );
+}
+
 bool QgisAppInterface::addProject( const QString &projectName )
 {
   return qgis->addProject( projectName );
@@ -184,6 +185,16 @@ QgsMapLayer *QgisAppInterface::activeLayer()
 bool QgisAppInterface::setActiveLayer( QgsMapLayer *layer )
 {
   return qgis->setActiveLayer( layer );
+}
+
+void QgisAppInterface::copySelectionToClipboard( QgsMapLayer *layer )
+{
+  return qgis->copySelectionToClipboard( layer );
+}
+
+void QgisAppInterface::pasteFromClipboard( QgsMapLayer *layer )
+{
+  return qgis->pasteFromClipboard( layer );
 }
 
 void QgisAppInterface::addPluginToMenu( const QString &name, QAction *action )
@@ -387,53 +398,9 @@ void QgisAppInterface::addUserInputWidget( QWidget *widget )
   qgis->addUserInputWidget( widget );
 }
 
-QList<QgsComposerInterface *> QgisAppInterface::openComposers()
+void QgisAppInterface::showLayoutManager()
 {
-  QList<QgsComposerInterface *> composerInterfaceList;
-  if ( qgis )
-  {
-    const QSet<QgsComposer *> composerList = qgis->printComposers();
-    QSet<QgsComposer *>::const_iterator it = composerList.constBegin();
-    for ( ; it != composerList.constEnd(); ++it )
-    {
-      if ( *it )
-      {
-        QgsComposerInterface *v = ( *it )->iface();
-        if ( v )
-        {
-          composerInterfaceList << v;
-        }
-      }
-    }
-  }
-  return composerInterfaceList;
-}
-
-QgsComposerInterface *QgisAppInterface::openComposer( QgsComposition *composition )
-{
-  QgsComposer *composerObj = qgis->openComposer( composition );
-  if ( composerObj )
-  {
-    return composerObj->iface();
-  }
-  return nullptr;
-}
-
-void QgisAppInterface::closeComposer( QgsComposition *composition )
-{
-  if ( qgis )
-  {
-    const QSet<QgsComposer *> composerList = qgis->printComposers();
-    QSet<QgsComposer *>::const_iterator it = composerList.constBegin();
-    for ( ; it != composerList.constEnd(); ++it )
-    {
-      if ( *it && ( *it )->composition() == composition )
-      {
-        ( *it )->close();
-        return;
-      }
-    }
-  }
+  qgis->showLayoutManager();
 }
 
 QList<QgsLayoutDesignerInterface *> QgisAppInterface::openLayoutDesigners()
@@ -458,7 +425,7 @@ QList<QgsLayoutDesignerInterface *> QgisAppInterface::openLayoutDesigners()
   return designerInterfaceList;
 }
 
-QgsLayoutDesignerInterface *QgisAppInterface::openLayoutDesigner( QgsLayout *layout )
+QgsLayoutDesignerInterface *QgisAppInterface::openLayoutDesigner( QgsMasterLayoutInterface *layout )
 {
   QgsLayoutDesignerDialog *designer = qgis->openLayoutDesignerDialog( layout );
   if ( designer )
@@ -521,7 +488,7 @@ QDialog *QgisAppInterface::showAttributeTable( QgsVectorLayer *l, const QString 
 {
   if ( l )
   {
-    QgsAttributeTableDialog *dialog = new QgsAttributeTableDialog( l );
+    QgsAttributeTableDialog *dialog = new QgsAttributeTableDialog( l, QgsAttributeTableFilterModel::ShowFilteredList );
     dialog->setFilterExpression( filterExpression );
     dialog->show();
     return dialog;
@@ -574,6 +541,16 @@ void QgisAppInterface::registerCustomDropHandler( QgsCustomDropHandler *handler 
   qgis->registerCustomDropHandler( handler );
 }
 
+void QgisAppInterface::registerCustomLayoutDropHandler( QgsLayoutCustomDropHandler *handler )
+{
+  qgis->registerCustomLayoutDropHandler( handler );
+}
+
+void QgisAppInterface::unregisterCustomLayoutDropHandler( QgsLayoutCustomDropHandler *handler )
+{
+  qgis->unregisterCustomLayoutDropHandler( handler );
+}
+
 void QgisAppInterface::unregisterCustomDropHandler( QgsCustomDropHandler *handler )
 {
   qgis->unregisterCustomDropHandler( handler );
@@ -587,6 +564,7 @@ QMenu *QgisAppInterface::newLayerMenu() { return qgis->newLayerMenu(); }
 QMenu *QgisAppInterface::addLayerMenu() { return qgis->addLayerMenu(); }
 QMenu *QgisAppInterface::settingsMenu() { return qgis->settingsMenu(); }
 QMenu *QgisAppInterface::pluginMenu() { return qgis->pluginMenu(); }
+QMenu *QgisAppInterface::pluginHelpMenu() { return qgis->pluginHelpMenu(); }
 QMenu *QgisAppInterface::rasterMenu() { return qgis->rasterMenu(); }
 QMenu *QgisAppInterface::vectorMenu() { return qgis->vectorMenu(); }
 QMenu *QgisAppInterface::databaseMenu() { return qgis->databaseMenu(); }
@@ -597,9 +575,11 @@ QMenu *QgisAppInterface::helpMenu() { return qgis->helpMenu(); }
 
 QToolBar *QgisAppInterface::fileToolBar() { return qgis->fileToolBar(); }
 QToolBar *QgisAppInterface::layerToolBar() { return qgis->layerToolBar(); }
+QToolBar *QgisAppInterface::dataSourceManagerToolBar() { return qgis->dataSourceManagerToolBar(); }
 QToolBar *QgisAppInterface::mapNavToolToolBar() { return qgis->mapNavToolToolBar(); }
 QToolBar *QgisAppInterface::digitizeToolBar() { return qgis->digitizeToolBar(); }
 QToolBar *QgisAppInterface::advancedDigitizeToolBar() { return qgis->advancedDigitizeToolBar(); }
+QToolBar *QgisAppInterface::shapeDigitizeToolBar() { return qgis->shapeDigitizeToolBar(); }
 QToolBar *QgisAppInterface::attributesToolBar() { return qgis->attributesToolBar(); }
 QToolBar *QgisAppInterface::pluginToolBar() { return qgis->pluginToolBar(); }
 QToolBar *QgisAppInterface::helpToolBar() { return qgis->helpToolBar(); }
@@ -614,8 +594,8 @@ QAction *QgisAppInterface::actionSaveProject() { return qgis->actionSaveProject(
 QAction *QgisAppInterface::actionSaveProjectAs() { return qgis->actionSaveProjectAs(); }
 QAction *QgisAppInterface::actionSaveMapAsImage() { return qgis->actionSaveMapAsImage(); }
 QAction *QgisAppInterface::actionProjectProperties() { return qgis->actionProjectProperties(); }
-QAction *QgisAppInterface::actionPrintComposer() { return qgis->actionNewPrintComposer(); }
-QAction *QgisAppInterface::actionShowComposerManager() { return qgis->actionShowComposerManager(); }
+QAction *QgisAppInterface::actionCreatePrintLayout() { return qgis->actionNewPrintLayout(); }
+QAction *QgisAppInterface::actionShowLayoutManager() { return qgis->actionShowLayoutManager(); }
 QAction *QgisAppInterface::actionExit() { return qgis->actionExit(); }
 
 QAction *QgisAppInterface::actionCutFeatures() { return qgis->actionCutFeatures(); }
@@ -631,7 +611,8 @@ QAction *QgisAppInterface::actionAddPart() { return qgis->actionAddPart(); }
 QAction *QgisAppInterface::actionSimplifyFeature() { return qgis->actionSimplifyFeature(); }
 QAction *QgisAppInterface::actionDeleteRing() { return qgis->actionDeleteRing(); }
 QAction *QgisAppInterface::actionDeletePart() { return qgis->actionDeletePart(); }
-QAction *QgisAppInterface::actionNodeTool() { return qgis->actionNodeTool(); }
+QAction *QgisAppInterface::actionVertexTool() { return qgis->actionVertexTool(); }
+QAction *QgisAppInterface::actionVertexToolActiveLayer() { return qgis->actionVertexToolActiveLayer(); }
 
 QAction *QgisAppInterface::actionPan() { return qgis->actionPan(); }
 QAction *QgisAppInterface::actionPanToSelected() { return qgis->actionPanToSelected(); }
@@ -669,6 +650,7 @@ QAction *QgisAppInterface::actionCopyLayerStyle() { return qgis->actionCopyLayer
 QAction *QgisAppInterface::actionPasteLayerStyle() { return qgis->actionPasteLayerStyle(); }
 QAction *QgisAppInterface::actionOpenTable() { return qgis->actionOpenTable(); }
 QAction *QgisAppInterface::actionOpenFieldCalculator() { return qgis->actionOpenFieldCalculator(); }
+QAction *QgisAppInterface::actionOpenStatisticalSummary() { return qgis->actionStatisticalSummary(); }
 QAction *QgisAppInterface::actionToggleEditing() { return qgis->actionToggleEditing(); }
 QAction *QgisAppInterface::actionSaveActiveLayerEdits() { return qgis->actionSaveActiveLayerEdits(); }
 QAction *QgisAppInterface::actionAllEdits() { return qgis->actionAllEdits(); }
@@ -705,7 +687,7 @@ QAction *QgisAppInterface::actionAbout() { return qgis->actionAbout(); }
 
 bool QgisAppInterface::openFeatureForm( QgsVectorLayer *vlayer, QgsFeature &f, bool updateFeatureOnly, bool showModal )
 {
-  Q_UNUSED( updateFeatureOnly );
+  Q_UNUSED( updateFeatureOnly )
   if ( !vlayer )
     return false;
 
@@ -755,16 +737,17 @@ QgsAttributeDialog *QgisAppInterface::getFeatureForm( QgsVectorLayer *l, QgsFeat
 {
   QgsDistanceArea myDa;
 
-  myDa.setSourceCrs( l->crs() );
+  myDa.setSourceCrs( l->crs(), QgsProject::instance()->transformContext() );
   myDa.setEllipsoid( QgsProject::instance()->ellipsoid() );
 
   QgsAttributeEditorContext context;
   context.setDistanceArea( myDa );
   context.setVectorLayerTools( qgis->vectorLayerTools() );
+  context.setMapCanvas( qgis->mapCanvas() );
   QgsAttributeDialog *dialog = new QgsAttributeDialog( l, &feature, false, qgis, true, context );
   if ( !feature.isValid() )
   {
-    dialog->setMode( QgsAttributeForm::AddFeatureMode );
+    dialog->setMode( QgsAttributeEditorContext::AddFeatureMode );
   }
   return dialog;
 }
@@ -789,6 +772,12 @@ QgsStatusBar *QgisAppInterface::statusBarIface()
   return qgis->statusBarIface();
 }
 
+void QgisAppInterface::locatorSearch( const QString &searchText )
+{
+  qgis->mLocatorWidget->invalidateResults();
+  qgis->mLocatorWidget->search( searchText );
+}
+
 void QgisAppInterface::registerLocatorFilter( QgsLocatorFilter *filter )
 {
   qgis->mLocatorWidget->locator()->registerFilter( filter );
@@ -797,4 +786,29 @@ void QgisAppInterface::registerLocatorFilter( QgsLocatorFilter *filter )
 void QgisAppInterface::deregisterLocatorFilter( QgsLocatorFilter *filter )
 {
   qgis->mLocatorWidget->locator()->deregisterFilter( filter );
+}
+
+void QgisAppInterface::invalidateLocatorResults()
+{
+  qgis->mLocatorWidget->invalidateResults();
+}
+
+bool QgisAppInterface::askForDatumTransform( QgsCoordinateReferenceSystem sourceCrs, QgsCoordinateReferenceSystem destinationCrs )
+{
+  return qgis->askUserForDatumTransform( sourceCrs, destinationCrs );
+}
+
+void QgisAppInterface::takeAppScreenShots( const QString &saveDirectory, const int categories )
+{
+  qgis->takeAppScreenShots( saveDirectory, categories );
+}
+
+QgsBrowserGuiModel *QgisAppInterface::browserModel()
+{
+  return qgis->mBrowserModel;
+}
+
+QgsLayerTreeRegistryBridge::InsertionPoint QgisAppInterface::layerTreeInsertionPoint()
+{
+  return qgis->layerTreeInsertionPoint();
 }

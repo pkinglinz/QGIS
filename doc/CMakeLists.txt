@@ -5,24 +5,41 @@ SET (WITH_APIDOC FALSE CACHE BOOL "Determines whether the QGIS API doxygen docum
 SET (WITH_TXT2TAGS_PDF FALSE CACHE BOOL "Determines whether PDF should be generate for the txt2tags documentation")
 
 # include Qt documentation
-SET (QT_DOC_URL "http://doc.qt.io/qt-5/" CACHE STRING "URL for Qt docs")
+SET (QT_DOC_URL "https://doc.qt.io/qt-5/" CACHE STRING "URL for Qt docs")
 
 INCLUDE(Txt2Tags)
 FIND_TXT2TAGS()
 
 IF(TXT2TAGS_EXECUTABLE)
-  ADD_TXT2TAGS_FILES(QGIS_DOC_FILES INSTALL.t2t news.t2t)
+  ADD_TXT2TAGS_FILES(QGIS_DOC_FILES INSTALL.t2t NEWS.t2t)
   IF(WITH_TXT2TAGS_PDF)
-    ADD_TXT2TAGS_PDFS(QGIS_DOC_FILES INSTALL.t2t news.t2t)
+    ADD_TXT2TAGS_PDFS(QGIS_DOC_FILES INSTALL.t2t NEWS.t2t)
   ENDIF(WITH_TXT2TAGS_PDF)
-  ADD_CUSTOM_TARGET (t2tdoc ALL DEPENDS ${QGIS_DOC_FILES})
+  FILE(GLOB t2tfiles doc/*.t2t)
+  ADD_CUSTOM_TARGET (t2tdoc ALL DEPENDS ${QGIS_DOC_FILES} ${t2tfiles})
 ELSE(TXT2TAGS_EXECUTABLE)
   SET(QGIS_DOC_FILES
-    ${CMAKE_SOURCE_DIR}/INSTALL
+    ../INSTALL
+    ../NEWS
+    INSTALL.html
+    NEWS.html
   )
 ENDIF(TXT2TAGS_EXECUTABLE)
 
-SET(QGIS_DOC_FILES ${QGIS_DOC_FILES} index.html news.html developersmap.html nohelp.html contributors.json favicon.ico style.css AUTHORS CONTRIBUTORS SPONSORS DONORS TRANSLATORS LICENSE)
+SET(QGIS_DOC_FILES
+  ${QGIS_DOC_FILES}
+  index.html
+  developersmap.html
+  nohelp.html
+  favicon.ico
+  style.css
+  AUTHORS
+  CONTRIBUTORS
+  SPONSORS
+  DONORS
+  TRANSLATORS
+  LICENSE
+)
 
 INSTALL(FILES ${QGIS_DOC_FILES} DESTINATION ${QGIS_DATA_DIR}/doc)
 INSTALL(FILES ../images/icons/qgis-icon-60x60.png DESTINATION ${QGIS_DATA_DIR}/doc/images)
@@ -53,12 +70,15 @@ IF(WITH_APIDOC)
     SET(DOXYGEN_INPUT
       ${CMAKE_SOURCE_DIR}/doc
       ${CMAKE_SOURCE_DIR}/src/core
+      ${CMAKE_SOURCE_DIR}/src/core/3d
       ${CMAKE_SOURCE_DIR}/src/core/annotations
       ${CMAKE_SOURCE_DIR}/src/core/auth
-      ${CMAKE_SOURCE_DIR}/src/core/composer
+      ${CMAKE_SOURCE_DIR}/src/core/callouts
+      ${CMAKE_SOURCE_DIR}/src/core/classification
       ${CMAKE_SOURCE_DIR}/src/core/diagram
       ${CMAKE_SOURCE_DIR}/src/core/dxf
       ${CMAKE_SOURCE_DIR}/src/core/effects
+      ${CMAKE_SOURCE_DIR}/src/core/expression
       ${CMAKE_SOURCE_DIR}/src/core/fieldformatter
       ${CMAKE_SOURCE_DIR}/src/core/geometry
       ${CMAKE_SOURCE_DIR}/src/core/geocms
@@ -68,6 +88,7 @@ IF(WITH_APIDOC)
       ${CMAKE_SOURCE_DIR}/src/core/layout
       ${CMAKE_SOURCE_DIR}/src/core/locator
       ${CMAKE_SOURCE_DIR}/src/core/metadata
+      ${CMAKE_SOURCE_DIR}/src/core/mesh
       ${CMAKE_SOURCE_DIR}/src/core/pal
       ${CMAKE_SOURCE_DIR}/src/core/processing
       ${CMAKE_SOURCE_DIR}/src/core/providers
@@ -75,42 +96,48 @@ IF(WITH_APIDOC)
       ${CMAKE_SOURCE_DIR}/src/core/raster
       ${CMAKE_SOURCE_DIR}/src/core/scalebar
       ${CMAKE_SOURCE_DIR}/src/core/symbology
+      ${CMAKE_SOURCE_DIR}/src/core/validity
       ${CMAKE_SOURCE_DIR}/src/gui
       ${CMAKE_SOURCE_DIR}/src/gui/auth
       ${CMAKE_SOURCE_DIR}/src/gui/attributetable
+      ${CMAKE_SOURCE_DIR}/src/gui/callouts
       ${CMAKE_SOURCE_DIR}/src/gui/editorwidgets
       ${CMAKE_SOURCE_DIR}/src/gui/editorwidgets/core
       ${CMAKE_SOURCE_DIR}/src/gui/effects
       ${CMAKE_SOURCE_DIR}/src/gui/layertree
+      ${CMAKE_SOURCE_DIR}/src/gui/layout
       ${CMAKE_SOURCE_DIR}/src/gui/locator
+      ${CMAKE_SOURCE_DIR}/src/gui/ogr
+      ${CMAKE_SOURCE_DIR}/src/gui/processing
       ${CMAKE_SOURCE_DIR}/src/gui/raster
       ${CMAKE_SOURCE_DIR}/src/gui/symbology
       ${CMAKE_SOURCE_DIR}/src/analysis
+      ${CMAKE_SOURCE_DIR}/src/analysis/mesh
       ${CMAKE_SOURCE_DIR}/src/analysis/interpolation
       ${CMAKE_SOURCE_DIR}/src/analysis/network
-      ${CMAKE_SOURCE_DIR}/src/analysis/openstreetmap
+      ${CMAKE_SOURCE_DIR}/src/analysis/processing
       ${CMAKE_SOURCE_DIR}/src/analysis/raster
       ${CMAKE_SOURCE_DIR}/src/analysis/vector
+      ${CMAKE_SOURCE_DIR}/src/analysis/vector/geometry_checker
+      ${CMAKE_SOURCE_DIR}/src/3d
+      ${CMAKE_SOURCE_DIR}/src/3d/chunks
+      ${CMAKE_SOURCE_DIR}/src/3d/symbols
+      ${CMAKE_SOURCE_DIR}/src/3d/terrain
       ${CMAKE_SOURCE_DIR}/src/plugins
+      ${CMAKE_SOURCE_DIR}/src/quickgui
+      ${CMAKE_SOURCE_DIR}/src/quickgui/plugin
     )
 
-    IF(WITH_SERVER_PLUGINS)
+    IF(WITH_SERVER)
       SET(DOXYGEN_INPUT
         ${DOXYGEN_INPUT}
-        ${CMAKE_SOURCE_DIR}/src/server/qgsserver.h
-        ${CMAKE_SOURCE_DIR}/src/server/qgscapabilitiescache.h
-        ${CMAKE_SOURCE_DIR}/src/server/qgsserverexception.h
-        ${CMAKE_SOURCE_DIR}/src/server/qgsrequesthandler.h
-        ${CMAKE_SOURCE_DIR}/src/server/qgsserverfilter.h
-        ${CMAKE_SOURCE_DIR}/src/server/qgsaccesscontrolfilter.h
-        ${CMAKE_SOURCE_DIR}/src/server/qgsserverinterface.h
-        ${CMAKE_SOURCE_DIR}/src/server/qgsserverrequest.h
-        ${CMAKE_SOURCE_DIR}/src/server/qgsserverresponse.h
-        ${CMAKE_SOURCE_DIR}/src/server/qgsserverrequest.h
-        ${CMAKE_SOURCE_DIR}/src/server/qgsservice.h
-        ${CMAKE_SOURCE_DIR}/src/server/qgsserviceregistry.h
+        ${CMAKE_SOURCE_DIR}/src/server/
+        ${CMAKE_SOURCE_DIR}/src/server/services/
+        ${CMAKE_SOURCE_DIR}/src/server/services/wms
+        ${CMAKE_SOURCE_DIR}/src/server/services/wfs
+        ${CMAKE_SOURCE_DIR}/src/server/services/wcs
       )
-    ENDIF(WITH_SERVER_PLUGINS)
+    ENDIF(WITH_SERVER)
 
     SET(DOXYGEN_FILE_PATTERNS *.h *.cpp *.dox)
 
@@ -130,7 +157,9 @@ IF(WITH_APIDOC)
 
     IF(DOXYGEN_ON_DEMAND)
       ADD_CUSTOM_TARGET(apidoc DEPENDS ${QHP_FILES})
+      INSTALL(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/api/html/ DESTINATION ${QGIS_DATA_DIR}/doc/api OPTIONAL)
     ELSE(DOXYGEN_ON_DEMAND)
+      INSTALL(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/api/html/ DESTINATION ${QGIS_DATA_DIR}/doc/api)
       ADD_CUSTOM_TARGET(apidoc ALL DEPENDS ${QHP_FILES})
     ENDIF(DOXYGEN_ON_DEMAND)
     ADD_CUSTOM_COMMAND(
@@ -139,7 +168,6 @@ IF(WITH_APIDOC)
       COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
       COMMENT "Generating API documentation" VERBATIM)
-    INSTALL(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/api/html/ DESTINATION ${QGIS_DATA_DIR}/doc/api)
     INSTALL(FILES ../images/icons/qgis-icon-60x60.png DESTINATION ${QGIS_DATA_DIR}/doc/api)
     IF(GENERATE_QHP)
       INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/api/qch/qgis.qch DESTINATION ${QGIS_DATA_DIR}/doc/api)

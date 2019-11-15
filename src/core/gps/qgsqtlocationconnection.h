@@ -47,7 +47,7 @@ SIP_IF_FEATURE( MOBILITY_LOCATION )
  * \class QgsQtLocationConnection
  * \note may not be available in Python bindings on all platforms
 */
-class CORE_EXPORT QgsQtLocationConnection: public QgsGPSConnection
+class CORE_EXPORT QgsQtLocationConnection: public QgsGpsConnection
 {
     Q_OBJECT
   public:
@@ -58,9 +58,10 @@ class CORE_EXPORT QgsQtLocationConnection: public QgsGPSConnection
     void broadcastConnectionAvailable();
 
     //! Parse available data source content
-    void parseData();
+    void parseData() override;
 
-    /** Called when the position updated.
+    /**
+     * Called when the position updated.
       * \note not available in Python bindings
       */
     void positionUpdated( const QGeoPositionInfo &info ) SIP_SKIP;
@@ -69,12 +70,14 @@ class CORE_EXPORT QgsQtLocationConnection: public QgsGPSConnection
     SIP_IF_FEATURE( !ANDROID )
 #endif
 
-    /** Called when the number of satellites in view is updated.
+    /**
+     * Called when the number of satellites in view is updated.
       * \note not available in Python bindings on android
       */
     void satellitesInViewUpdated( const QList<QGeoSatelliteInfo> &satellites );
 
-    /** Called when the number of satellites in use is updated.
+    /**
+     * Called when the number of satellites in use is updated.
       * \note not available in Python bindings on android
       */
     void satellitesInUseUpdated( const QList<QGeoSatelliteInfo> &satellites );

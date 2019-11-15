@@ -20,6 +20,7 @@
 #include "qgis_core.h"
 #include "qgis.h"
 #include "qgsunittypes.h"
+#include "qgstextrenderer.h"
 #include <QColor>
 #include <QFont>
 #include <QPen>
@@ -56,6 +57,24 @@ class CORE_EXPORT QgsScaleBarSettings
     };
 
     /**
+     * Label vertical placement.
+     */
+    enum LabelVerticalPlacement
+    {
+      LabelAboveSegment = 0, //!< Labels are drawn above the scalebar
+      LabelBelowSegment, //!< Labels are drawn below the scalebar
+    };
+
+    /**
+     * Label horizontal placement.
+     */
+    enum LabelHorizontalPlacement
+    {
+      LabelCenteredEdge = 0, //!< Labels are drawn centered relative to segment's edge
+      LabelCenteredSegment, //!< Labels are drawn centered relative to segment
+    };
+
+    /**
      * Constructor for QgsScaleBarSettings.
      */
     QgsScaleBarSettings()
@@ -71,8 +90,9 @@ class CORE_EXPORT QgsScaleBarSettings
       mBrush2.setColor( mFillColor2 );
       mBrush2.setStyle( Qt::SolidPattern );
 
-      mFont.setPointSizeF( 12.0 );
-      mFontColor = QColor( 0, 0, 0 );
+      mTextFormat.setSize( 12.0 );
+      mTextFormat.setSizeUnit( QgsUnitTypes::RenderPoints );
+      mTextFormat.setColor( QColor( 0, 0, 0 ) );
     }
 
     /**
@@ -118,8 +138,8 @@ class CORE_EXPORT QgsScaleBarSettings
     /**
      * Returns the size mode for the scale bar segments.
      * \see setSegmentSizeMode()
-     * \see minBarWidth()
-     * \see maxBarWidth()
+     * \see minimumBarWidth()
+     * \see maximumBarWidth()
      */
     SegmentSizeMode segmentSizeMode() const { return mSegmentSizeMode; }
 
@@ -208,30 +228,68 @@ class CORE_EXPORT QgsScaleBarSettings
     void setUnitLabel( const QString &label ) { mUnitLabeling = label; }
 
     /**
+     * Returns the text format used for drawing text in the scalebar.
+     * \see setTextFormat()
+     * \since QGIS 3.2
+     */
+    QgsTextFormat &textFormat() { return mTextFormat; }
+
+    /**
+     * Returns the text format used for drawing text in the scalebar.
+     * \see setTextFormat()
+     * \since QGIS 3.2
+     */
+    QgsTextFormat textFormat() const SIP_SKIP { return mTextFormat; }
+
+    /**
+     * Sets the text \a format used for drawing text in the scalebar.
+     * \see textFormat()
+     * \since QGIS 3.2
+     */
+    void setTextFormat( const QgsTextFormat &format ) { mTextFormat = format; }
+
+    /**
      * Returns the font used for drawing text in the scalebar.
      * \see setFont()
+     * \deprecated use textFormat() instead
      */
-    QFont font() const { return mFont; }
+    Q_DECL_DEPRECATED QFont font() const SIP_DEPRECATED { return mTextFormat.font(); }
 
     /**
      * Sets the \a font used for drawing text in the scalebar.
-     * \see setFont()
+     * \see font()
+     * \deprecated use setTextFormat() instead
      */
-    void setFont( const QFont &font ) { mFont = font; }
+    Q_DECL_DEPRECATED void setFont( const QFont &font ) SIP_DEPRECATED
+    {
+      mTextFormat.setFont( font );
+      if ( font.pointSizeF() > 0 )
+      {
+        mTextFormat.setSize( font.pointSizeF() );
+        mTextFormat.setSizeUnit( QgsUnitTypes::RenderPoints );
+      }
+      else if ( font.pixelSize() > 0 )
+      {
+        mTextFormat.setSize( font.pixelSize() );
+        mTextFormat.setSizeUnit( QgsUnitTypes::RenderPixels );
+      }
+    }
 
     /**
      * Returns the color used for drawing text in the scalebar.
      * \see setFontColor()
      * \see font()
+     * \deprecated use textFormat() instead
      */
-    QColor fontColor() const { return mFontColor; }
+    Q_DECL_DEPRECATED QColor fontColor() const SIP_DEPRECATED { return mTextFormat.color(); }
 
     /**
      * Sets the \a color used for drawing text in the scalebar.
      * \see fontColor()
      * \see setFont()
+     * \deprecated use textFormat() instead
      */
-    void setFontColor( const QColor &color ) { mFontColor = color; }
+    Q_DECL_DEPRECATED void setFontColor( const QColor &color ) SIP_DEPRECATED { mTextFormat.setColor( color ); }
 
     /**
      * Returns the color used for fills in the scalebar.
@@ -351,6 +409,34 @@ class CORE_EXPORT QgsScaleBarSettings
     void setLabelBarSpace( double space ) { mLabelBarSpace = space; }
 
     /**
+     * Returns the vertical placement of text labels.
+     * \see setLabelVerticalPlacement()
+     * \since QGIS 3.10
+     */
+    LabelVerticalPlacement labelVerticalPlacement() const { return mLabelVerticalPlacement; }
+
+    /**
+     * Sets the vertical \a placement of text labels.
+     * \see labelVerticalPlacement()
+     * \since QGIS 3.10
+     */
+    void setLabelVerticalPlacement( LabelVerticalPlacement placement ) { mLabelVerticalPlacement = placement; }
+
+    /**
+     * Returns the horizontal placement of text labels.
+     * \see setLabelHorizontalPlacement()
+     * \since QGIS 3.10
+     */
+    LabelHorizontalPlacement labelHorizontalPlacement() const { return mLabelHorizontalPlacement; }
+
+    /**
+     * Sets the horizontal \a placement of text labels.
+     * \see labelHorizontalPlacement()
+     * \since QGIS 3.10
+     */
+    void setLabelHorizontalPlacement( LabelHorizontalPlacement placement ) { mLabelHorizontalPlacement = placement; }
+
+    /**
      * Returns the spacing (margin) between the scalebar box and content in millimeters.
      * \see setBoxContentSpace()
      */
@@ -417,9 +503,10 @@ class CORE_EXPORT QgsScaleBarSettings
 
     //! Labeling of map units
     QString mUnitLabeling;
-    //! Font
-    QFont mFont;
-    QColor mFontColor;
+
+    //! Text format
+    QgsTextFormat mTextFormat;
+
     //! Fill color
     QColor mFillColor = QColor( 0, 0, 0 );
     //! Secondary fill color
@@ -439,6 +526,10 @@ class CORE_EXPORT QgsScaleBarSettings
 
     //! Space between bar and Text labels
     double mLabelBarSpace = 3.0;
+    //! Label's vertical placement
+    LabelVerticalPlacement mLabelVerticalPlacement = LabelAboveSegment;
+    //! Label's horizontal placement
+    LabelHorizontalPlacement mLabelHorizontalPlacement = LabelCenteredEdge;
 
     //! Space between content and item box
     double mBoxContentSpace = 1.0;

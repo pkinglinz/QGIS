@@ -19,6 +19,8 @@
 #include "qgslayoutview.h"
 #include "qgsdoublespinbox.h"
 #include "qgslayoutunitscombobox.h"
+#include "qgslayoutpagecollection.h"
+#include "qgslayoutundostack.h"
 
 QgsLayoutGuideWidget::QgsLayoutGuideWidget( QWidget *parent, QgsLayout *layout, QgsLayoutView *layoutView )
   : QgsPanelWidget( parent )
@@ -27,9 +29,9 @@ QgsLayoutGuideWidget::QgsLayoutGuideWidget( QWidget *parent, QgsLayout *layout, 
   setupUi( this );
   setPanelTitle( tr( "Guides" ) );
 
-  mHozProxyModel = new QgsLayoutGuideProxyModel( mHozGuidesTableView, QgsLayoutGuide::Horizontal, 0 );
+  mHozProxyModel = new QgsLayoutGuideProxyModel( mHozGuidesTableView, Qt::Horizontal, 0 );
   mHozProxyModel->setSourceModel( &mLayout->guides() );
-  mVertProxyModel = new QgsLayoutGuideProxyModel( mVertGuidesTableView, QgsLayoutGuide::Vertical, 0 );
+  mVertProxyModel = new QgsLayoutGuideProxyModel( mVertGuidesTableView, Qt::Vertical, 0 );
   mVertProxyModel->setSourceModel( &mLayout->guides() );
 
   mHozGuidesTableView->setModel( mHozProxyModel );
@@ -38,12 +40,11 @@ QgsLayoutGuideWidget::QgsLayoutGuideWidget( QWidget *parent, QgsLayout *layout, 
   mHozGuidesTableView->setEditTriggers( QAbstractItemView::AllEditTriggers );
   mVertGuidesTableView->setEditTriggers( QAbstractItemView::AllEditTriggers );
 
+  mHozGuidesTableView->setItemDelegateForColumn( 0, new QgsLayoutGuidePositionDelegate( mHozGuidesTableView ) );
+  mHozGuidesTableView->setItemDelegateForColumn( 1, new QgsLayoutGuideUnitDelegate( mHozGuidesTableView ) );
 
-  mHozGuidesTableView->setItemDelegateForColumn( 0, new QgsLayoutGuidePositionDelegate( mLayout, mHozProxyModel ) );
-  mHozGuidesTableView->setItemDelegateForColumn( 1, new QgsLayoutGuideUnitDelegate( mLayout, mHozProxyModel ) );
-
-  mVertGuidesTableView->setItemDelegateForColumn( 0, new QgsLayoutGuidePositionDelegate( mLayout, mVertProxyModel ) );
-  mVertGuidesTableView->setItemDelegateForColumn( 1, new QgsLayoutGuideUnitDelegate( mLayout, mVertProxyModel ) );
+  mVertGuidesTableView->setItemDelegateForColumn( 0, new QgsLayoutGuidePositionDelegate( mVertGuidesTableView ) );
+  mVertGuidesTableView->setItemDelegateForColumn( 1, new QgsLayoutGuideUnitDelegate( mVertGuidesTableView ) );
 
   connect( mAddHozGuideButton, &QPushButton::clicked, this, &QgsLayoutGuideWidget::addHorizontalGuide );
   connect( mAddVertGuideButton, &QPushButton::clicked, this, &QgsLayoutGuideWidget::addVerticalGuide );
@@ -54,26 +55,34 @@ QgsLayoutGuideWidget::QgsLayoutGuideWidget( QWidget *parent, QgsLayout *layout, 
   connect( mClearAllButton, &QPushButton::clicked, this, &QgsLayoutGuideWidget::clearAll );
   connect( mApplyToAllButton, &QPushButton::clicked, this, &QgsLayoutGuideWidget::applyToAll );
 
-  connect( layoutView, &QgsLayoutView::pageChanged, this, &QgsLayoutGuideWidget::pageChanged );
-  pageChanged( 0 );
+  connect( mLayout->pageCollection(), &QgsLayoutPageCollection::changed, this, &QgsLayoutGuideWidget::updatePageCount );
+  updatePageCount();
+  connect( mPageNumberComboBox, qgis::overload< int >::of( &QComboBox::currentIndexChanged ), this, [ = ]( int )
+  {
+    setCurrentPage( mPageNumberComboBox->currentData().toInt() );
+  } );
+
+  connect( layoutView, &QgsLayoutView::pageChanged, this, &QgsLayoutGuideWidget::setCurrentPage );
+  setCurrentPage( 0 );
 }
 
 void QgsLayoutGuideWidget::addHorizontalGuide()
 {
-  std::unique_ptr< QgsLayoutGuide > newGuide( new QgsLayoutGuide( QgsLayoutGuide::Horizontal, QgsLayoutMeasurement( 0 ), mLayout->pageCollection()->page( mPage ) ) );
+  std::unique_ptr< QgsLayoutGuide > newGuide( new QgsLayoutGuide( Qt::Horizontal, QgsLayoutMeasurement( 0 ), mLayout->pageCollection()->page( mPage ) ) );
   mLayout->guides().addGuide( newGuide.release() );
 }
 
 void QgsLayoutGuideWidget::addVerticalGuide()
 {
-  std::unique_ptr< QgsLayoutGuide > newGuide( new QgsLayoutGuide( QgsLayoutGuide::Vertical, QgsLayoutMeasurement( 0 ), mLayout->pageCollection()->page( mPage ) ) );
+  std::unique_ptr< QgsLayoutGuide > newGuide( new QgsLayoutGuide( Qt::Vertical, QgsLayoutMeasurement( 0 ), mLayout->pageCollection()->page( mPage ) ) );
   mLayout->guides().addGuide( newGuide.release() );
 }
 
 void QgsLayoutGuideWidget::deleteHorizontalGuide()
 {
-  mLayout->undoStack()->beginMacro( tr( "Remove horizontal guides" ) );
-  Q_FOREACH ( const QModelIndex &index, mHozGuidesTableView->selectionModel()->selectedIndexes() )
+  mLayout->undoStack()->beginMacro( tr( "Remove Horizontal Guides" ) );
+  const auto constSelectedIndexes = mHozGuidesTableView->selectionModel()->selectedIndexes();
+  for ( const QModelIndex &index : constSelectedIndexes )
   {
     mHozGuidesTableView->closePersistentEditor( index );
     if ( index.column() == 0 )
@@ -84,8 +93,9 @@ void QgsLayoutGuideWidget::deleteHorizontalGuide()
 
 void QgsLayoutGuideWidget::deleteVerticalGuide()
 {
-  mLayout->undoStack()->beginMacro( tr( "Remove vertical guides" ) );
-  Q_FOREACH ( const QModelIndex &index, mVertGuidesTableView->selectionModel()->selectedIndexes() )
+  mLayout->undoStack()->beginMacro( tr( "Remove Vertical Guides" ) );
+  const auto constSelectedIndexes = mVertGuidesTableView->selectionModel()->selectedIndexes();
+  for ( const QModelIndex &index : constSelectedIndexes )
   {
     mVertGuidesTableView->closePersistentEditor( index );
     if ( index.column() == 0 )
@@ -94,40 +104,45 @@ void QgsLayoutGuideWidget::deleteVerticalGuide()
   mLayout->undoStack()->endMacro();
 }
 
-void QgsLayoutGuideWidget::pageChanged( int page )
+void QgsLayoutGuideWidget::setCurrentPage( int page )
 {
   mPage = page;
 
   // have to close any open editors - or we'll get a crash
 
   // qt - y u no do this for me?
-  Q_FOREACH ( const QModelIndex &index, mHozGuidesTableView->selectionModel()->selectedIndexes() )
+  const auto horizontalSelectedIndexes = mHozGuidesTableView->selectionModel()->selectedIndexes();
+  for ( const QModelIndex &index : horizontalSelectedIndexes )
   {
     mHozGuidesTableView->closePersistentEditor( index );
   }
-  Q_FOREACH ( const QModelIndex &index, mVertGuidesTableView->selectionModel()->selectedIndexes() )
+  const auto verticalSelectedIndexes = mVertGuidesTableView->selectionModel()->selectedIndexes();
+  for ( const QModelIndex &index : verticalSelectedIndexes )
   {
     mVertGuidesTableView->closePersistentEditor( index );
   }
 
   mHozProxyModel->setPage( page );
   mVertProxyModel->setPage( page );
-  mPageLabel->setText( tr( "Guides for page %1" ).arg( page + 1 ) );
+
+  whileBlocking( mPageNumberComboBox )->setCurrentIndex( page );
 }
 
 void QgsLayoutGuideWidget::clearAll()
 {
   // qt - y u no do this for me?
-  Q_FOREACH ( const QModelIndex &index, mHozGuidesTableView->selectionModel()->selectedIndexes() )
+  const auto horizontalSelectedIndexes = mHozGuidesTableView->selectionModel()->selectedIndexes();
+  for ( const QModelIndex &index : horizontalSelectedIndexes )
   {
     mHozGuidesTableView->closePersistentEditor( index );
   }
-  Q_FOREACH ( const QModelIndex &index, mVertGuidesTableView->selectionModel()->selectedIndexes() )
+  const auto verticalSelectedIndexes = mVertGuidesTableView->selectionModel()->selectedIndexes();
+  for ( const QModelIndex &index : verticalSelectedIndexes )
   {
     mVertGuidesTableView->closePersistentEditor( index );
   }
 
-  mLayout->undoStack()->beginMacro( tr( "Remove all guides" ) );
+  mLayout->undoStack()->beginMacro( tr( "Remove All Guides" ) );
   mVertProxyModel->removeRows( 0, mVertProxyModel->rowCount() );
   mHozProxyModel->removeRows( 0, mHozProxyModel->rowCount() );
   mLayout->undoStack()->endMacro();
@@ -138,25 +153,35 @@ void QgsLayoutGuideWidget::applyToAll()
   mLayout->guides().applyGuidesToAllOtherPages( mPage );
 }
 
+void QgsLayoutGuideWidget::updatePageCount()
+{
+  const int prevPage = mPageNumberComboBox->currentIndex();
+  mPageNumberComboBox->clear();
+  for ( int i = 0; i < mLayout->pageCollection()->pageCount(); ++ i )
+    mPageNumberComboBox->addItem( QString::number( i + 1 ), i );
 
-QgsLayoutGuidePositionDelegate::QgsLayoutGuidePositionDelegate( QgsLayout *layout, QAbstractItemModel *model )
-  : mLayout( layout )
-  , mModel( model )
+  if ( mPageNumberComboBox->count() > prevPage )
+    mPageNumberComboBox->setCurrentIndex( prevPage );
+}
+
+
+QgsLayoutGuidePositionDelegate::QgsLayoutGuidePositionDelegate( QObject *parent )
+  : QStyledItemDelegate( parent )
 {
 
 }
 
-QWidget *QgsLayoutGuidePositionDelegate::createEditor( QWidget *parent, const QStyleOptionViewItem &, const QModelIndex &index ) const
+QWidget *QgsLayoutGuidePositionDelegate::createEditor( QWidget *parent, const QStyleOptionViewItem &, const QModelIndex & ) const
 {
   QgsDoubleSpinBox *spin = new QgsDoubleSpinBox( parent );
   spin->setMinimum( 0 );
   spin->setMaximum( 1000000 );
   spin->setDecimals( 2 );
   spin->setShowClearButton( false );
-  connect( spin, static_cast < void ( QgsDoubleSpinBox::* )( double ) > ( &QgsDoubleSpinBox::valueChanged ), this, [ = ]( double v )
+  connect( spin, static_cast < void ( QgsDoubleSpinBox::* )( double ) > ( &QgsDoubleSpinBox::valueChanged ), this, [ = ]( double )
   {
     // we want to update on every spin change, not just the final
-    setModelData( index, v, QgsLayoutGuideCollection::PositionRole );
+    const_cast< QgsLayoutGuidePositionDelegate * >( this )->emit commitData( spin );
   } );
   return spin;
 }
@@ -167,25 +192,18 @@ void QgsLayoutGuidePositionDelegate::setModelData( QWidget *editor, QAbstractIte
   model->setData( index, spin->value(), QgsLayoutGuideCollection::PositionRole );
 }
 
-void QgsLayoutGuidePositionDelegate::setModelData( const QModelIndex &index, const QVariant &value, int role ) const
+QgsLayoutGuideUnitDelegate::QgsLayoutGuideUnitDelegate( QObject *parent )
+  : QStyledItemDelegate( parent )
 {
-  mModel->setData( index, value, role );
 }
 
-QgsLayoutGuideUnitDelegate::QgsLayoutGuideUnitDelegate( QgsLayout *layout, QAbstractItemModel *model )
-  : mLayout( layout )
-  , mModel( model )
-{
-
-}
-
-QWidget *QgsLayoutGuideUnitDelegate::createEditor( QWidget *parent, const QStyleOptionViewItem &, const QModelIndex &index ) const
+QWidget *QgsLayoutGuideUnitDelegate::createEditor( QWidget *parent, const QStyleOptionViewItem &, const QModelIndex & ) const
 {
   QgsLayoutUnitsComboBox *unitsCb = new QgsLayoutUnitsComboBox( parent );
-  connect( unitsCb, &QgsLayoutUnitsComboBox::changed, this, [ = ]( int unit )
+  connect( unitsCb, &QgsLayoutUnitsComboBox::changed, this, [ = ]( int )
   {
     // we want to update on every unit change, not just the final
-    setModelData( index, unit, QgsLayoutGuideCollection::UnitsRole );
+    const_cast< QgsLayoutGuideUnitDelegate * >( this )->emit commitData( unitsCb );
   } );
   return unitsCb;
 }
@@ -196,7 +214,3 @@ void QgsLayoutGuideUnitDelegate::setModelData( QWidget *editor, QAbstractItemMod
   model->setData( index, cb->unit(), QgsLayoutGuideCollection::UnitsRole );
 }
 
-void QgsLayoutGuideUnitDelegate::setModelData( const QModelIndex &index, const QVariant &value, int role ) const
-{
-  mModel->setData( index, value, role );
-}

@@ -16,15 +16,10 @@
 *                                                                         *
 ***************************************************************************
 """
-from builtins import range
 
 __author__ = 'Victor Olaya'
 __date__ = 'August 2012'
 __copyright__ = '(C) 2012, Victor Olaya'
-
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
 
 import random
 
@@ -33,7 +28,9 @@ from qgis.core import (QgsFeatureSink,
                        QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterEnum,
                        QgsProcessingParameterNumber,
-                       QgsProcessingParameterFeatureSink)
+                       QgsProcessingParameterFeatureSink,
+                       QgsFeatureRequest,
+                       QgsProcessingFeatureSource)
 from processing.algs.qgis.QgisAlgorithm import QgisAlgorithm
 
 
@@ -46,6 +43,9 @@ class RandomExtract(QgisAlgorithm):
 
     def group(self):
         return self.tr('Vector selection')
+
+    def groupId(self):
+        return 'vectorselection'
 
     def __init__(self):
         super().__init__()
@@ -62,7 +62,7 @@ class RandomExtract(QgisAlgorithm):
 
         self.addParameter(QgsProcessingParameterNumber(self.NUMBER,
                                                        self.tr('Number/percentage of selected features'), QgsProcessingParameterNumber.Integer,
-                                                       10, False, 0.0, 999999999999.0))
+                                                       10, False, 0.0))
 
         self.addParameter(QgsProcessingParameterFeatureSink(self.OUTPUT, self.tr('Extracted (random)')))
 
@@ -74,9 +74,12 @@ class RandomExtract(QgisAlgorithm):
 
     def processAlgorithm(self, parameters, context, feedback):
         source = self.parameterAsSource(parameters, self.INPUT, context)
+        if source is None:
+            raise QgsProcessingException(self.invalidSourceError(parameters, self.INPUT))
+
         method = self.parameterAsEnum(parameters, self.METHOD, context)
 
-        features = source.getFeatures()
+        features = source.getFeatures(QgsFeatureRequest(), QgsProcessingFeatureSource.FlagSkipGeometryValidityChecks)
         featureCount = source.featureCount()
         value = self.parameterAsInt(parameters, self.NUMBER, context)
 
@@ -96,6 +99,8 @@ class RandomExtract(QgisAlgorithm):
 
         (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT, context,
                                                source.fields(), source.wkbType(), source.sourceCrs())
+        if sink is None:
+            raise QgsProcessingException(self.invalidSinkError(parameters, self.OUTPUT))
 
         total = 100.0 / featureCount if featureCount else 1
         for i, feat in enumerate(features):

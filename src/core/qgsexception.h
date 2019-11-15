@@ -27,7 +27,8 @@
 
 
 
-/** \ingroup core
+/**
+ * \ingroup core
   * Defines a QGIS exception class.
  */
 class CORE_EXPORT QgsException
@@ -41,8 +42,7 @@ class CORE_EXPORT QgsException
       : mWhat( message )
     {}
 
-    virtual ~QgsException() throw()
-    {}
+    virtual ~QgsException() throw() = default;
 
     //! \note not available in Python bindings
     QString what() const throw()
@@ -58,7 +58,8 @@ class CORE_EXPORT QgsException
 };
 
 
-/** \ingroup core
+/**
+ * \ingroup core
  * Custom exception class for Coordinate Reference System related exceptions.
  */
 class CORE_EXPORT QgsCsException : public QgsException
@@ -88,5 +89,24 @@ class CORE_EXPORT QgsProcessingException : public QgsException
     QgsProcessingException( const QString &message ) : QgsException( message ) {}
 
 };
+
+
+/**
+ * \class QgsProviderConnectionException
+ * \ingroup core
+ * Custom exception class for provider connection related exceptions.
+ * \since QGIS 3.10
+ */
+class CORE_EXPORT QgsProviderConnectionException: public QgsException
+{
+  public:
+
+    /**
+     * Constructor for QgsProviderConnectionException, with the specified error \a message.
+     */
+    QgsProviderConnectionException( const QString &message ) : QgsException( message ) {}
+
+};
+
 
 #endif

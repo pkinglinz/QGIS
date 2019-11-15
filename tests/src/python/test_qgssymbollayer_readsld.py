@@ -20,8 +20,6 @@
 __author__ = 'Jorge Gustavo Rocha'
 __date__ = 'January 2017'
 __copyright__ = '(C) 2017, Jorge Gustavo Rocha'
-# This will get replaced with a git SHA1 when you do a git archive
-__revision__ = '$Format:%H$'
 
 import qgis  # NOQA
 
@@ -58,7 +56,7 @@ def createLayerWithOneLine():
     linelayer = QgsVectorLayer("LineString?crs=epsg:4326&field=gid:int&field=name:string", "simple_line", "memory")
     one = QgsFeature(linelayer.dataProvider().fields(), 0)
     one.setAttributes([1, 'one'])
-    one.setGeometry(QgsGeometry.fromPolyline([QgsPointXY(-7, 38), QgsPointXY(-8, 42)]))
+    one.setGeometry(QgsGeometry.fromPolylineXY([QgsPointXY(-7, 38), QgsPointXY(-8, 42)]))
     linelayer.dataProvider().addFeatures([one])
     return linelayer
 
@@ -69,9 +67,9 @@ def createLayerWithOnePoint():
     pr = layer.dataProvider()
     f = QgsFeature()
     f.setAttributes(["test", 123])
-    f.setGeometry(QgsGeometry.fromPoint(QgsPointXY(100, 200)))
+    f.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(100, 200)))
     assert pr.addFeatures([f])
-    assert layer.pendingFeatureCount() == 1
+    assert layer.featureCount() == 1
     return layer
 
 
@@ -80,7 +78,7 @@ def createLayerWithOnePolygon():
     assert layer.isValid()
     f1 = QgsFeature(layer.dataProvider().fields(), 1)
     f1.setAttribute("pk", 1)
-    f1.setGeometry(QgsGeometry.fromPolygon([[QgsPointXY(2484588, 2425722), QgsPointXY(2482767, 2398853), QgsPointXY(2520109, 2397715), QgsPointXY(2520792, 2425494), QgsPointXY(2484588, 2425722)]]))
+    f1.setGeometry(QgsGeometry.fromPolygonXY([[QgsPointXY(2484588, 2425722), QgsPointXY(2482767, 2398853), QgsPointXY(2520109, 2397715), QgsPointXY(2520792, 2425494), QgsPointXY(2484588, 2425722)]]))
     assert layer.dataProvider().addFeatures([f1])
     return layer
 
@@ -128,7 +126,7 @@ class TestQgsSymbolLayerReadSld(unittest.TestCase):
         <se:Rotation><ogc:Literal>50</ogc:Literal></se:Rotation>
         """
         # technically it's not necessary to use a real shape, but a empty memory
-        # layer. In case these tests will upgrate to a rendering where to
+        # layer. In case these tests will upgrade to a rendering where to
         # compare also rendering not only properties
         #myShpFile = os.path.join(unitTestDataPath(), 'points.shp')
         #layer = QgsVectorLayer(myShpFile, 'points', 'ogr')

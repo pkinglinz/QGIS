@@ -48,10 +48,22 @@ void TestQgsMapSettingsUtils::initTestCase()
 
 void TestQgsMapSettingsUtils::createWorldFileContent()
 {
+  double a, b, c, d, e, f;
+  QgsMapSettingsUtils::worldFileParameters( mMapSettings, a, b, c, d, e, f );
+  QCOMPARE( a, 1.0 );
+  QCOMPARE( b, 0.0 );
+  QCOMPARE( c, 0.5 );
+  QCOMPARE( d, 0.0 );
+  QCOMPARE( e, -1.0 );
+  QCOMPARE( f, 0.5 );
+
   QCOMPARE( QgsMapSettingsUtils::worldFileContent( mMapSettings ), QString( "1\r\n0\r\n0\r\n-1\r\n0.5\r\n0.5\r\n" ) );
 
   mMapSettings.setRotation( 45 );
   QCOMPARE( QgsMapSettingsUtils::worldFileContent( mMapSettings ), QString( "0.70710678118654757\r\n0.70710678118654746\r\n0.70710678118654746\r\n-0.70710678118654757\r\n0.5\r\n0.49999999999999994\r\n" ) );
+
+  mMapSettings.setRotation( 145 );
+  QCOMPARE( QgsMapSettingsUtils::worldFileContent( mMapSettings ), QString( "-0.81915204428899191\r\n0.57357643635104594\r\n0.57357643635104594\r\n0.81915204428899191\r\n0.5\r\n0.49999999999999994\r\n" ) );
 }
 
 QGSTEST_MAIN( TestQgsMapSettingsUtils )

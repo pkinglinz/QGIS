@@ -21,7 +21,6 @@
 #include "ui_qgsmapsavedialog.h"
 
 #include "qgisapp.h"
-#include "qgsmapcanvas.h"
 #include "qgsmapdecoration.h"
 #include "qgsrectangle.h"
 #include "qgshelp.h"
@@ -29,7 +28,11 @@
 #include <QDialog>
 #include <QSize>
 
-/** \ingroup app
+class QgsMapCanvas;
+
+
+/**
+ * \ingroup app
  * \brief a dialog for saving a map to an image.
  * \since QGIS 3.0
 */
@@ -45,7 +48,8 @@ class APP_EXPORT QgsMapSaveDialog: public QDialog, private Ui::QgsMapSaveDialog
       Pdf        // PDF-specific dialog
     };
 
-    /** Constructor for QgsMapSaveDialog
+    /**
+     * Constructor for QgsMapSaveDialog
      */
     QgsMapSaveDialog( QWidget *parent = nullptr, QgsMapCanvas *mapCanvas = nullptr,
                       const QList< QgsDecorationItem * > &decorations = QList< QgsDecorationItem * >(),
@@ -67,8 +71,11 @@ class APP_EXPORT QgsMapSaveDialog: public QDialog, private Ui::QgsMapSaveDialog
     //! returns whether the draw decorations element is checked
     bool drawDecorations() const;
 
-    //! returns whether a world file will be created
+    //! returns whether the resulting image will be georeferenced (embedded or via world file)
     bool saveWorldFile() const;
+
+    //! returns whether metadata such as title and subject will be exported whenever possible
+    bool exportMetadata() const;
 
     //! returns whether the map will be rasterized
     bool saveAsRaster() const;
@@ -81,7 +88,7 @@ class APP_EXPORT QgsMapSaveDialog: public QDialog, private Ui::QgsMapSaveDialog
 
   private:
 
-    void lockChanged( const bool locked );
+    void lockChanged( bool locked );
     void copyToClipboard();
 
     void updateDpi( int dpi );
@@ -92,13 +99,15 @@ class APP_EXPORT QgsMapSaveDialog: public QDialog, private Ui::QgsMapSaveDialog
     void updateOutputSize();
 
     DialogType mDialogType;
-    QgsMapCanvas *mMapCanvas;
+    QgsMapCanvas *mMapCanvas = nullptr;
     QList< QgsMapDecoration * > mDecorations;
     QList< QgsAnnotation *> mAnnotations;
 
     QgsRectangle mExtent;
     int mDpi;
     QSize mSize;
+
+    QString mInfoDetails;
 
   private slots:
 

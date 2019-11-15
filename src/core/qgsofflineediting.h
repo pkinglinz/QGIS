@@ -21,16 +21,16 @@
 
 #include "qgis_core.h"
 #include "qgsfeature.h"
-#include "qgsvectorlayer.h"
+#include "qgssqliteutils.h"
 
 #include <QObject>
 #include <QString>
 
 class QgsMapLayer;
 class QgsVectorLayer;
-struct sqlite3;
 
-/** \ingroup core
+/**
+ * \ingroup core
  */
 class CORE_EXPORT QgsOfflineEditing : public QObject
 {
@@ -48,17 +48,26 @@ class CORE_EXPORT QgsOfflineEditing : public QObject
       UpdateGeometries
     };
 
+    //! Type of offline database container file
+    enum ContainerType
+    {
+      SpatiaLite,
+      GPKG
+    };
+
     QgsOfflineEditing();
 
-    /** Convert current project for offline editing
+    /**
+     * Convert current project for offline editing
      * \param offlineDataPath Path to offline db file
      * \param offlineDbFile Offline db file name
      * \param layerIds List of layer names to convert
      * \param onlySelected Only copy selected features from layers where a selection is present
+     * \param containerType defines the SQLite file container type like SpatiaLite or GPKG
      */
-    bool convertToOfflineProject( const QString &offlineDataPath, const QString &offlineDbFile, const QStringList &layerIds, bool onlySelected = false );
+    bool convertToOfflineProject( const QString &offlineDataPath, const QString &offlineDbFile, const QStringList &layerIds, bool onlySelected = false, ContainerType containerType = SpatiaLite );
 
-    //! Return true if current project is offline
+    //! Returns TRUE if current project is offline
     bool isOfflineProject() const;
 
     //! Synchronize to remote layers
@@ -67,12 +76,12 @@ class CORE_EXPORT QgsOfflineEditing : public QObject
   signals:
 
     /**
-     * The signal is emitted when the process has started.
+     * Emitted when the process has started.
      */
     void progressStarted();
 
     /**
-     * Is emitted whenever a new layer is being processed.
+     * Emitted whenever a new layer is being processed.
      * It is possible to estimate the progress of the complete operation by
      * comparing the index of the current \a layer to the total amount
      * \a numLayers.
@@ -80,14 +89,15 @@ class CORE_EXPORT QgsOfflineEditing : public QObject
     void layerProgressUpdated( int layer, int numLayers );
 
     /**
-     * Is emitted when the mode for the progress of the current operation is
+     * Emitted when the mode for the progress of the current operation is
      * set.
      * \param mode progress mode
      * \param maximum total number of entities to process in the current operation
      */
     void progressModeSet( QgsOfflineEditing::ProgressMode mode, int maximum );
 
-    /** Emitted with the progress of the current mode
+    /**
+     * Emitted with the progress of the current mode
      * \param progress current index of processed entities
      */
     void progressUpdated( int progress );
@@ -104,9 +114,10 @@ class CORE_EXPORT QgsOfflineEditing : public QObject
 
   private:
     void initializeSpatialMetadata( sqlite3 *sqlite_handle );
-    bool createSpatialiteDB( const QString &offlineDbPath );
+    bool createOfflineDb( const QString &offlineDbPath, ContainerType containerType = SpatiaLite );
     void createLoggingTables( sqlite3 *db );
-    QgsVectorLayer *copyVectorLayer( QgsVectorLayer *layer, sqlite3 *db, const QString &offlineDbPath, bool onlySelected );
+
+    QgsVectorLayer *copyVectorLayer( QgsVectorLayer *layer, sqlite3 *db, const QString &offlineDbPath, bool onlySelected, ContainerType containerType = SpatiaLite );
 
     void applyAttributesAdded( QgsVectorLayer *remoteLayer, sqlite3 *db, int layerId, int commitNo );
     void applyFeaturesAdded( QgsVectorLayer *offlineLayer, QgsVectorLayer *remoteLayer, sqlite3 *db, int layerId );
@@ -135,7 +146,7 @@ class CORE_EXPORT QgsOfflineEditing : public QObject
 
     void showWarning( const QString &message );
 
-    sqlite3 *openLoggingDb();
+    sqlite3_database_unique_ptr openLoggingDb();
     int getOrCreateLayerId( sqlite3 *db, const QString &qgisLayerId );
     int getCommitNo( sqlite3 *db );
     void increaseCommitNo( sqlite3 *db );

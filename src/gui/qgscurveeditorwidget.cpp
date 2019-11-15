@@ -15,6 +15,7 @@
 
 
 #include "qgscurveeditorwidget.h"
+#include "qgsvectorlayer.h"
 
 #include <QPainter>
 #include <QVBoxLayout>
@@ -40,7 +41,6 @@
 QgsCurveEditorWidget::QgsCurveEditorWidget( QWidget *parent, const QgsCurveTransform &transform )
   : QWidget( parent )
   , mCurve( transform )
-  , mCurrentPlotMarkerIndex( -1 )
 {
   mPlot = new QwtPlot();
   mPlot->setMinimumSize( QSize( 0, 100 ) );
@@ -300,7 +300,8 @@ void QgsCurveEditorWidget::updateHistogram()
 void QgsCurveEditorWidget::updatePlot()
 {
   // remove existing markers
-  Q_FOREACH ( QwtPlotMarker *marker, mMarkers )
+  const auto constMMarkers = mMarkers;
+  for ( QwtPlotMarker *marker : constMMarkers )
   {
     marker->detach();
     delete marker;
@@ -311,7 +312,8 @@ void QgsCurveEditorWidget::updatePlot()
   QVector< double > x;
 
   int i = 0;
-  Q_FOREACH ( const QgsPointXY &point, mCurve.controlPoints() )
+  const auto constControlPoints = mCurve.controlPoints();
+  for ( const QgsPointXY &point : constControlPoints )
   {
     x << point.x();
     addPlotMarker( point.x(), point.y(), mCurrentPlotMarkerIndex == i );

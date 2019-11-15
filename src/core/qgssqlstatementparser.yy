@@ -53,7 +53,7 @@ struct sqlstatement_parser_context
   // lexer context
   yyscan_t flex_scanner;
 
-  // varible where the parser error will be stored
+  // variable where the parser error will be stored
   QString errorMsg;
   // root node of the sqlstatement
   QgsSQLStatement::NodeSelect* rootNode;
@@ -86,8 +86,6 @@ struct sqlstatement_parser_context
 %define api.pure
 %lex-param {void * scanner}
 %parse-param {sqlstatement_parser_context* parser_ctx}
-
-%name-prefix "sqlstatement_"
 
 %union
 {
@@ -164,7 +162,7 @@ struct sqlstatement_parser_context
 %type <boolVal> select_type;
 
 // debugging
-%error-verbose
+%define parse.error verbose
 
 //
 // operator precedence
@@ -205,7 +203,7 @@ struct sqlstatement_parser_context
 %%
 
 root: select_statement { parser_ctx->rootNode = $1; }
-    ;
+   ;
 
 /* We have to separate expr from expr_non_logical to avoid */
 /* grammar ambiguities with the AND of the "BETWEEN x AND y" and the */
@@ -376,7 +374,7 @@ selected_column:
             delete $1;
             QgsSQLStatement::NodeList* nodeList = new QgsSQLStatement::NodeList();
             nodeList->append( new QgsSQLStatement::NodeColumnRef("*", true) );
-            $$ = new QgsSQLStatement::NodeSelectedColumn( 
+            $$ = new QgsSQLStatement::NodeSelectedColumn(
                     new QgsSQLStatement::NodeFunction( "COUNT", nodeList) );
         }
 
@@ -393,7 +391,7 @@ selected_column:
             delete $1;
             QgsSQLStatement::NodeList* nodeList = new QgsSQLStatement::NodeList();
             nodeList->append( new QgsSQLStatement::NodeColumnRef("*", true) );
-            $$ = new QgsSQLStatement::NodeSelectedColumn( 
+            $$ = new QgsSQLStatement::NodeSelectedColumn(
                     new QgsSQLStatement::NodeFunction( "COUNT", nodeList) );
             $$->setAlias(*$5);
             delete $5;
@@ -414,7 +412,7 @@ selected_column:
             QgsSQLStatement::NodeList* nodeList = new QgsSQLStatement::NodeList();
             $4->setDistinct();
             nodeList->append( $4 );
-            $$ = new QgsSQLStatement::NodeSelectedColumn( 
+            $$ = new QgsSQLStatement::NodeSelectedColumn(
                     new QgsSQLStatement::NodeFunction( "COUNT", nodeList) );
         }
 
@@ -434,7 +432,7 @@ selected_column:
             QgsSQLStatement::NodeList* nodeList = new QgsSQLStatement::NodeList();
             $4->setDistinct();
             nodeList->append( $4 );
-            $$ = new QgsSQLStatement::NodeSelectedColumn( 
+            $$ = new QgsSQLStatement::NodeSelectedColumn(
                     new QgsSQLStatement::NodeFunction( "COUNT", nodeList) );
             $$->setAlias(*$6);
             delete $6;

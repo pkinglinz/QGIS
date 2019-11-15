@@ -21,18 +21,15 @@ __author__ = 'Victor Olaya'
 __date__ = 'January 2013'
 __copyright__ = '(C) 2013, Victor Olaya'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 import plotly as plt
 import plotly.graph_objs as go
 
 
-from qgis.core import (QgsProcessingParameterFeatureSource,
+from qgis.core import (QgsFeatureRequest,
+                       QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterField,
-                       QgsProcessingParameterFileDestination,
-                       QgsProcessingOutputHtml)
+                       QgsProcessingException,
+                       QgsProcessingParameterFileDestination)
 from processing.algs.qgis.QgisAlgorithm import QgisAlgorithm
 from processing.tools import vector
 
@@ -46,6 +43,9 @@ class BarPlot(QgisAlgorithm):
 
     def group(self):
         return self.tr('Graphics')
+
+    def groupId(self):
+        return 'graphics'
 
     def __init__(self):
         super().__init__()
@@ -62,8 +62,6 @@ class BarPlot(QgisAlgorithm):
 
         self.addParameter(QgsProcessingParameterFileDestination(self.OUTPUT, self.tr('Bar plot'), self.tr('HTML files (*.html)')))
 
-        self.addOutput(QgsProcessingOutputHtml(self.OUTPUT, self.tr('Bar plot')))
-
     def name(self):
         return 'barplot'
 
@@ -72,6 +70,8 @@ class BarPlot(QgisAlgorithm):
 
     def processAlgorithm(self, parameters, context, feedback):
         source = self.parameterAsSource(parameters, self.INPUT, context)
+        if source is None:
+            raise QgsProcessingException(self.invalidSourceError(parameters, self.INPUT))
 
         namefieldname = self.parameterAsString(parameters, self.NAME_FIELD, context)
         valuefieldname = self.parameterAsString(parameters, self.VALUE_FIELD, context)
@@ -80,7 +80,7 @@ class BarPlot(QgisAlgorithm):
 
         values = vector.values(source, valuefieldname)
 
-        x_var = [i[namefieldname] for i in source.getFeatures()]
+        x_var = vector.convert_nulls([i[namefieldname] for i in source.getFeatures(QgsFeatureRequest().setFlags(QgsFeatureRequest.NoGeometry))], '<NULL>')
 
         data = [go.Bar(x=x_var,
                        y=values[valuefieldname])]

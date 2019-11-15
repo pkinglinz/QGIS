@@ -60,7 +60,7 @@ void QgsMapCanvasAnnotationItem::updatePosition()
 
   if ( mAnnotation->hasFixedMapPosition() )
   {
-    QgsCoordinateTransform t( mAnnotation->mapPositionCrs(), mMapCanvas->mapSettings().destinationCrs() );
+    QgsCoordinateTransform t( mAnnotation->mapPositionCrs(), mMapCanvas->mapSettings().destinationCrs(), QgsProject::instance() );
     QgsPointXY coord = mAnnotation->mapPosition();
     try
     {
@@ -94,9 +94,13 @@ void QgsMapCanvasAnnotationItem::updateBoundingRect()
   double fillSymbolBleed = mAnnotation && mAnnotation->fillSymbol() ?
                            QgsSymbolLayerUtils::estimateMaxSymbolBleed( mAnnotation->fillSymbol(), rc ) : 0;
 
+  const double mmToPixelScale = mMapCanvas->logicalDpiX() / 25.4;
+
   if ( mAnnotation && !mAnnotation->hasFixedMapPosition() )
   {
-    mBoundingRect = QRectF( - fillSymbolBleed, -fillSymbolBleed, mAnnotation->frameSize().width() + fillSymbolBleed * 2, mAnnotation->frameSize().height() + fillSymbolBleed * 2 );
+    mBoundingRect = QRectF( - fillSymbolBleed, -fillSymbolBleed,
+                            mmToPixelScale * mAnnotation->frameSizeMm().width() + fillSymbolBleed * 2,
+                            mmToPixelScale * mAnnotation->frameSizeMm().height() + fillSymbolBleed * 2 );
   }
   else
   {
@@ -106,9 +110,11 @@ void QgsMapCanvasAnnotationItem::updateBoundingRect()
       halfSymbolSize = scaledSymbolSize() / 2.0;
     }
 
-    QPointF offset = mAnnotation ? mAnnotation->frameOffsetFromReferencePoint() : QPointF( 0, 0 );
+    QPointF offset = mAnnotation ? QPointF( mAnnotation->frameOffsetFromReferencePointMm().x() * mmToPixelScale,
+                                            mAnnotation->frameOffsetFromReferencePointMm().y() * mmToPixelScale ) : QPointF( 0, 0 );
 
-    QSizeF frameSize = mAnnotation ? mAnnotation->frameSize() : QSizeF( 0.0, 0.0 );
+    QSizeF frameSize = mAnnotation ? QSizeF( mAnnotation->frameSizeMm().width() * mmToPixelScale,
+                       mAnnotation->frameSizeMm().height() * mmToPixelScale ) : QSizeF( 0.0, 0.0 );
 
     double xMinPos = std::min( -halfSymbolSize, offset.x() - fillSymbolBleed );
     double xMaxPos = std::max( halfSymbolSize, offset.x() + frameSize.width() + fillSymbolBleed );
@@ -120,7 +126,11 @@ void QgsMapCanvasAnnotationItem::updateBoundingRect()
 
 void QgsMapCanvasAnnotationItem::onCanvasLayersChanged()
 {
-  if ( !mAnnotation->mapLayer() )
+  if ( !mMapCanvas->annotationsVisible() )
+  {
+    setVisible( false );
+  }
+  else if ( !mAnnotation->mapLayer() )
   {
     setVisible( true );
   }
@@ -144,7 +154,7 @@ void QgsMapCanvasAnnotationItem::setFeatureForMapPosition()
 
   try
   {
-    QgsCoordinateTransform ct( mAnnotation->mapPositionCrs(), mMapCanvas->mapSettings().destinationCrs() );
+    QgsCoordinateTransform ct( mAnnotation->mapPositionCrs(), mMapCanvas->mapSettings().destinationCrs(), QgsProject::instance() );
     if ( ct.isValid() )
       mapPosition = ct.transform( mapPosition );
   }
@@ -192,8 +202,10 @@ QgsMapCanvasAnnotationItem::MouseMoveAction QgsMapCanvasAnnotationItem::moveActi
     return MoveMapPosition;
   }
 
-  QPointF offset = mAnnotation && mAnnotation->hasFixedMapPosition() ? mAnnotation->frameOffsetFromReferencePoint() : QPointF( 0, 0 );
-  QSizeF frameSize = mAnnotation ? mAnnotation->frameSize() : QSizeF( 0, 0 );
+  const double mmToPixelScale = mMapCanvas->logicalDpiX() / 25.4;
+
+  QPointF offset = mAnnotation && mAnnotation->hasFixedMapPosition() ? mAnnotation->frameOffsetFromReferencePointMm() * mmToPixelScale : QPointF( 0, 0 );
+  QSizeF frameSize = mAnnotation ? mAnnotation->frameSizeMm() * mmToPixelScale : QSizeF( 0, 0 );
 
   bool left, right, up, down;
   left = std::fabs( itemPos.x() - offset.x() ) < cursorSensitivity;
@@ -287,6 +299,9 @@ double QgsMapCanvasAnnotationItem::scaledSymbolSize() const
 
 void QgsMapCanvasAnnotationItem::paint( QPainter *painter )
 {
+  if ( !mAnnotation || !mAnnotation->isVisible() )
+    return;
+
   QgsRenderContext rc = QgsRenderContext::fromQPainter( painter );
   rc.setFlag( QgsRenderContext::Antialiasing, true );
 

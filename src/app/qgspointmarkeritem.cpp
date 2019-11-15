@@ -18,6 +18,7 @@
 #include "qgsmapcanvas.h"
 #include "qgsmapsettings.h"
 #include "qgsproject.h"
+#include "qgsexpressioncontextutils.h"
 #include <QPainter>
 #include <cmath>
 
@@ -106,10 +107,12 @@ void QgsPointMarkerItem::updateSize()
 {
   QgsRenderContext rc = renderContext( nullptr );
   mMarkerSymbol->startRender( rc, mFeature.fields() );
-  QRectF bounds =  mMarkerSymbol->bounds( mLocation, rc, mFeature );
+  QRectF bounds = mMarkerSymbol->bounds( mLocation, rc, mFeature );
   mMarkerSymbol->stopRender( rc );
-  QgsRectangle r( mMapCanvas->mapSettings().mapToPixel().toMapCoordinates( bounds.x(), bounds.y() ),
-                  mMapCanvas->mapSettings().mapToPixel().toMapCoordinates( bounds.x() + bounds.width() * 2, bounds.y() + bounds.height() * 2 ) );
+  QgsRectangle r( mMapCanvas->mapSettings().mapToPixel().toMapCoordinates( static_cast<int>( bounds.x() ),
+                  static_cast<int>( bounds.y() ) ),
+                  mMapCanvas->mapSettings().mapToPixel().toMapCoordinates( static_cast<int>( bounds.x() + bounds.width() * 2 ),
+                      static_cast<int>( bounds.y() + bounds.height() * 2 ) ) );
   setRect( r );
 }
 

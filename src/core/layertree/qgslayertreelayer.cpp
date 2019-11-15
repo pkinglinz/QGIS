@@ -76,12 +76,12 @@ void QgsLayerTreeLayer::attachToLayer()
 
 QString QgsLayerTreeLayer::name() const
 {
-  return mRef ? mRef->name() : mLayerName;
+  return ( mRef && mUseLayerName ) ? mRef->name() : mLayerName;
 }
 
 void QgsLayerTreeLayer::setName( const QString &n )
 {
-  if ( mRef )
+  if ( mRef && mUseLayerName )
   {
     if ( mRef->name() == n )
       return;
@@ -97,7 +97,7 @@ void QgsLayerTreeLayer::setName( const QString &n )
   }
 }
 
-QgsLayerTreeLayer *QgsLayerTreeLayer::readXml( QDomElement &element )
+QgsLayerTreeLayer *QgsLayerTreeLayer::readXml( QDomElement &element, const QgsReadWriteContext &context )
 {
   if ( element.tagName() != QLatin1String( "layer-tree-layer" ) )
     return nullptr;
@@ -106,7 +106,7 @@ QgsLayerTreeLayer *QgsLayerTreeLayer::readXml( QDomElement &element )
   QString layerName = element.attribute( QStringLiteral( "name" ) );
 
   QString providerKey = element.attribute( QStringLiteral( "providerKey" ) );
-  QString source = element.attribute( QStringLiteral( "source" ) );
+  QString source = context.pathResolver().readPath( element.attribute( QStringLiteral( "source" ) ) );
 
   Qt::CheckState checked = QgsLayerTreeUtils::checkStateFromXml( element.attribute( QStringLiteral( "checked" ) ) );
   bool isExpanded = ( element.attribute( QStringLiteral( "expanded" ), QStringLiteral( "1" ) ) == QLatin1String( "1" ) );
@@ -121,15 +121,15 @@ QgsLayerTreeLayer *QgsLayerTreeLayer::readXml( QDomElement &element )
   return nodeLayer;
 }
 
-QgsLayerTreeLayer *QgsLayerTreeLayer::readXml( QDomElement &element, const QgsProject *project )
+QgsLayerTreeLayer *QgsLayerTreeLayer::readXml( QDomElement &element, const QgsProject *project, const QgsReadWriteContext &context )
 {
-  QgsLayerTreeLayer *node = readXml( element );
+  QgsLayerTreeLayer *node = readXml( element, context );
   if ( node )
     node->resolveReferences( project );
   return node;
 }
 
-void QgsLayerTreeLayer::writeXml( QDomElement &parentElement )
+void QgsLayerTreeLayer::writeXml( QDomElement &parentElement, const QgsReadWriteContext &context )
 {
   QDomDocument doc = parentElement.ownerDocument();
   QDomElement elem = doc.createElement( QStringLiteral( "layer-tree-layer" ) );
@@ -138,7 +138,7 @@ void QgsLayerTreeLayer::writeXml( QDomElement &parentElement )
 
   if ( mRef )
   {
-    elem.setAttribute( QStringLiteral( "source" ), mRef->publicSource() );
+    elem.setAttribute( QStringLiteral( "source" ), context.pathResolver().writePath( mRef->publicSource() ) );
     elem.setAttribute( QStringLiteral( "providerKey" ), mRef->dataProvider() ? mRef->dataProvider()->name() : QString() );
   }
 
@@ -164,17 +164,33 @@ void QgsLayerTreeLayer::layerWillBeDeleted()
 {
   Q_ASSERT( mRef );
 
+  emit layerWillBeUnloaded();
+
   mLayerName = mRef->name();
   // in theory we do not even need to do this - the weak ref should clear itself
   mRef.layer.clear();
   // layerId stays in the reference
 
-  emit layerWillBeUnloaded();
 }
 
+void QgsLayerTreeLayer::setUseLayerName( const bool use )
+{
+  mUseLayerName = use;
+}
+
+bool QgsLayerTreeLayer::useLayerName() const
+{
+  return mUseLayerName;
+}
 
 void QgsLayerTreeLayer::layerNameChanged()
 {
   Q_ASSERT( mRef );
   emit nameChanged( this, mRef->name() );
 }
+
+void QgsLayerTreeLayer::setLabelExpression( const QString &expression )
+{
+  mLabelExpression = expression;
+}
+

@@ -15,10 +15,11 @@
 #include "qgslabelfeature.h"
 #include "feature.h"
 #include "qgsgeometry.h"
+#include "qgsgeos.h"
 
-QgsLabelFeature::QgsLabelFeature( QgsFeatureId id, GEOSGeometry *geometry, QSizeF size )
+QgsLabelFeature::QgsLabelFeature( QgsFeatureId id, geos::unique_ptr geometry, QSizeF size )
   : mId( id )
-  , mGeometry( geometry )
+  , mGeometry( std::move( geometry ) )
   , mSize( size )
   , mPriority( -1 )
   , mZIndex( 0 )
@@ -37,27 +38,18 @@ QgsLabelFeature::QgsLabelFeature( QgsFeatureId id, GEOSGeometry *geometry, QSize
 
 QgsLabelFeature::~QgsLabelFeature()
 {
-  if ( mGeometry )
-    GEOSGeom_destroy_r( QgsGeometry::getGEOSHandler(), mGeometry );
-
-  if ( mObstacleGeometry )
-    GEOSGeom_destroy_r( QgsGeometry::getGEOSHandler(), mObstacleGeometry );
-
   if ( mPermissibleZoneGeosPrepared )
   {
-    GEOSPreparedGeom_destroy_r( QgsGeometry::getGEOSHandler(), mPermissibleZoneGeosPrepared );
-    GEOSGeom_destroy_r( QgsGeometry::getGEOSHandler(), mPermissibleZoneGeos );
+    mPermissibleZoneGeosPrepared.reset();
+    mPermissibleZoneGeos.reset();
   }
 
   delete mInfo;
 }
 
-void QgsLabelFeature::setObstacleGeometry( GEOSGeometry *obstacleGeom )
+void QgsLabelFeature::setObstacleGeometry( geos::unique_ptr obstacleGeom )
 {
-  if ( mObstacleGeometry )
-    GEOSGeom_destroy_r( QgsGeometry::getGEOSHandler(), mObstacleGeometry );
-
-  mObstacleGeometry = obstacleGeom;
+  mObstacleGeometry = std::move( obstacleGeom );
 }
 
 void QgsLabelFeature::setPermissibleZone( const QgsGeometry &geometry )
@@ -66,18 +58,56 @@ void QgsLabelFeature::setPermissibleZone( const QgsGeometry &geometry )
 
   if ( mPermissibleZoneGeosPrepared )
   {
-    GEOSPreparedGeom_destroy_r( QgsGeometry::getGEOSHandler(), mPermissibleZoneGeosPrepared );
-    GEOSGeom_destroy_r( QgsGeometry::getGEOSHandler(), mPermissibleZoneGeos );
+    mPermissibleZoneGeosPrepared.reset();
+    mPermissibleZoneGeos.reset();
     mPermissibleZoneGeosPrepared = nullptr;
-    mPermissibleZoneGeos = nullptr;
   }
 
   if ( mPermissibleZone.isNull() )
     return;
 
-  mPermissibleZoneGeos = mPermissibleZone.exportToGeos();
+  mPermissibleZoneGeos = QgsGeos::asGeos( mPermissibleZone );
   if ( !mPermissibleZoneGeos )
     return;
 
-  mPermissibleZoneGeosPrepared = GEOSPrepare_r( QgsGeometry::getGEOSHandler(), mPermissibleZoneGeos );
+  mPermissibleZoneGeosPrepared.reset( GEOSPrepare_r( QgsGeos::getGEOSHandler(), mPermissibleZoneGeos.get() ) );
+}
+
+QgsFeature QgsLabelFeature::feature() const
+{
+  return mFeature;
+}
+
+QSizeF QgsLabelFeature::size( double angle ) const
+{
+  if ( mRotatedSize.isEmpty() )
+    return mSize;
+
+  // Between 45 to 135 and 235 to 315 degrees, return the rotated size
+  return ( angle >= 0.785398 && angle <= 2.35619 ) || ( angle >= 3.92699 && angle <= 5.49779 ) ? mRotatedSize : mSize;
+}
+
+void QgsLabelFeature::setFeature( const QgsFeature &feature )
+{
+  mFeature = feature;
+}
+
+double QgsLabelFeature::overrunDistance() const
+{
+  return mOverrunDistance;
+}
+
+void QgsLabelFeature::setOverrunDistance( double overrunDistance )
+{
+  mOverrunDistance = overrunDistance;
+}
+
+double QgsLabelFeature::overrunSmoothDistance() const
+{
+  return mOverrunSmoothDistance;
+}
+
+void QgsLabelFeature::setOverrunSmoothDistance( double overrunSmoothDistance )
+{
+  mOverrunSmoothDistance = overrunSmoothDistance;
 }

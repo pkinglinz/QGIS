@@ -29,18 +29,17 @@ class QgsDwgImportDialog : public QDialog, private Ui::QgsDwgImportBase
     Q_OBJECT
   public:
     QgsDwgImportDialog( QWidget *parent = nullptr, Qt::WindowFlags f = nullptr );
-    ~QgsDwgImportDialog();
+    ~QgsDwgImportDialog() override;
 
   private slots:
-    void on_buttonBox_accepted();
-    void on_pbBrowseDatabase_clicked();
-    void on_pbBrowseDrawing_clicked();
-    void on_pbImportDrawing_clicked();
-    void on_pbLoadDatabase_clicked();
-    void on_pbSelectAll_clicked();
-    void on_pbDeselectAll_clicked();
-    void on_leDatabase_textChanged( const QString &text );
-    void on_leLayerGroup_textChanged( const QString &text );
+    void buttonBox_accepted();
+    void pbBrowseDrawing_clicked();
+    void pbImportDrawing_clicked();
+    void pbLoadDatabase_clicked();
+    void pbSelectAll_clicked();
+    void pbDeselectAll_clicked();
+    void mDatabaseFileWidget_textChanged( const QString &filename );
+    void leLayerGroup_textChanged( const QString &text );
     void showHelp();
 
   private:

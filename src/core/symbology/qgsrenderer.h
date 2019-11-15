@@ -13,8 +13,8 @@
  *                                                                         *
  ***************************************************************************/
 
-#ifndef QGSRENDERERV2_H
-#define QGSRENDERERV2_H
+#ifndef QGSRENDERER_H
+#define QGSRENDERER_H
 
 #include "qgis_core.h"
 #include "qgis_sip.h"
@@ -24,6 +24,7 @@
 #include "qgssymbol.h"
 #include "qgsfields.h"
 #include "qgsfeaturerequest.h"
+#include "qgssymbollayerreference.h"
 
 #include <QList>
 #include <QString>
@@ -37,6 +38,7 @@ class QgsFeature;
 class QgsVectorLayer;
 class QgsPaintEffect;
 class QgsReadWriteContext;
+class QgsStyleEntityVisitorInterface;
 
 typedef QMap<QString, QString> QgsStringMap SIP_SKIP;
 
@@ -51,7 +53,8 @@ typedef QMap<QString, QgsSymbol * > QgsSymbolMap SIP_SKIP;
 ////////
 // symbol levels
 
-/** \ingroup core
+/**
+ * \ingroup core
  * \class QgsSymbolLevelItem
  */
 class CORE_EXPORT QgsSymbolLevelItem
@@ -61,8 +64,18 @@ class CORE_EXPORT QgsSymbolLevelItem
       : mSymbol( symbol )
       , mLayer( layer )
     {}
-    QgsSymbol *symbol() { return mSymbol; }
-    int layer() { return mLayer; }
+
+    /**
+     * The symbol of this symbol level
+     */
+    QgsSymbol *symbol() const;
+
+    /**
+     * The layer of this symbol level
+     */
+    int layer() const;
+
+    // TODO QGIS 4.0 -> make private
   protected:
     QgsSymbol *mSymbol = nullptr;
     int mLayer;
@@ -82,7 +95,8 @@ typedef QList< QList< QgsSymbolLevelItem > > QgsSymbolLevelOrder;
 //////////////
 // renderers
 
-/** \ingroup core
+/**
+ * \ingroup core
  * \class QgsFeatureRenderer
  */
 class CORE_EXPORT QgsFeatureRenderer
@@ -90,25 +104,28 @@ class CORE_EXPORT QgsFeatureRenderer
 
 #ifdef SIP_RUN
     SIP_CONVERT_TO_SUBCLASS_CODE
-    if ( sipCpp->type() == "singleSymbol" )
+
+    const QString type = sipCpp->type();
+
+    if ( type == QStringLiteral( "singleSymbol" ) )
       sipType = sipType_QgsSingleSymbolRenderer;
-    else if ( sipCpp->type() == "categorizedSymbol" )
+    else if ( type == QStringLiteral( "categorizedSymbol" ) )
       sipType = sipType_QgsCategorizedSymbolRenderer;
-    else if ( sipCpp->type() == "graduatedSymbol" )
+    else if ( type == QStringLiteral( "graduatedSymbol" ) )
       sipType = sipType_QgsGraduatedSymbolRenderer;
-    else if ( sipCpp->type() == "RuleRenderer" )
+    else if ( type == QStringLiteral( "RuleRenderer" ) )
       sipType = sipType_QgsRuleBasedRenderer;
-    else if ( sipCpp->type() == "heatmapRenderer" )
+    else if ( type == QStringLiteral( "heatmapRenderer" ) )
       sipType = sipType_QgsHeatmapRenderer;
-    else if ( sipCpp->type() == "invertedPolygonRenderer" )
+    else if ( type == QStringLiteral( "invertedPolygonRenderer" ) )
       sipType = sipType_QgsInvertedPolygonRenderer;
-    else if ( sipCpp->type() == "pointCluster" )
+    else if ( type == QStringLiteral( "pointCluster" ) )
       sipType = sipType_QgsPointClusterRenderer;
-    else if ( sipCpp->type() == "pointDisplacement" )
+    else if ( type == QStringLiteral( "pointDisplacement" ) )
       sipType = sipType_QgsPointDisplacementRenderer;
-    else if ( sipCpp->type() == "25dRenderer" )
+    else if ( type == QStringLiteral( "25dRenderer" ) )
       sipType = sipType_Qgs25DRenderer;
-    else if ( sipCpp->type() == "nullSymbol" )
+    else if ( type == QStringLiteral( "nullSymbol" ) )
       sipType = sipType_QgsNullSymbolRenderer;
     else
       sipType = 0;
@@ -118,12 +135,13 @@ class CORE_EXPORT QgsFeatureRenderer
   public:
     // renderer takes ownership of its symbols!
 
-    //! return a new renderer - used by default in vector layers
+    //! Returns a new renderer - used by default in vector layers
     static QgsFeatureRenderer *defaultRenderer( QgsWkbTypes::GeometryType geomType ) SIP_FACTORY;
 
     QString type() const { return mType; }
 
-    /** To be overridden
+    /**
+     * To be overridden
      *
      * Must be called between startRender() and stopRender() calls.
      * \param feature feature
@@ -131,35 +149,47 @@ class CORE_EXPORT QgsFeatureRenderer
      * \returns returns pointer to symbol or 0 if symbol was not found
      * \since QGIS 2.12
      */
-    virtual QgsSymbol *symbolForFeature( QgsFeature &feature, QgsRenderContext &context ) = 0;
+    virtual QgsSymbol *symbolForFeature( const QgsFeature &feature, QgsRenderContext &context ) const = 0;
 
     /**
-     * Return symbol for feature. The difference compared to symbolForFeature() is that it returns original
+     * Returns symbol for feature. The difference compared to symbolForFeature() is that it returns original
      * symbol which can be used as an identifier for renderer's rule - the former may return a temporary replacement
      * of a symbol for use in rendering.
      * \since QGIS 2.12
      */
-    virtual QgsSymbol *originalSymbolForFeature( QgsFeature &feature, QgsRenderContext &context );
+    virtual QgsSymbol *originalSymbolForFeature( const QgsFeature &feature, QgsRenderContext &context ) const;
 
     /**
-     * Return legend keys matching a specified feature.
+     * Returns legend keys matching a specified feature.
      * \since QGIS 2.14
      */
-    virtual QSet< QString > legendKeysForFeature( QgsFeature &feature, QgsRenderContext &context );
+    virtual QSet< QString > legendKeysForFeature( const QgsFeature &feature, QgsRenderContext &context ) const;
 
     /**
-     * Needs to be called when a new render cycle is started
+     * Must be called when a new render cycle is started. A call to startRender() must always
+     * be followed by a corresponding call to stopRender() after all features have been rendered.
      *
      * \param context  Additional information passed to the renderer about the job which will be rendered
      * \param fields   The fields available for rendering
-     * \returns         Information passed back from the renderer that can e.g. be used to reduce the amount of requested features
+     *
+     * \see stopRender()
+     *
+     * \warning This method is not thread safe. Before calling startRender() in a non-main thread,
+     * the renderer should instead be cloned and startRender()/stopRender() called on the clone.
      */
-    virtual void startRender( QgsRenderContext &context, const QgsFields &fields ) = 0;
+    virtual void startRender( QgsRenderContext &context, const QgsFields &fields );
 
     /**
-     * Needs to be called when a render cycle has finished to clean up.
+     * Must be called when a render cycle has finished, to allow the renderer to clean up.
+     *
+     * Calls to stopRender() must always be preceded by a call to startRender().
+     *
+     * \warning This method is not thread safe. Before calling startRender() in a non-main thread,
+     * the renderer should instead be cloned and startRender()/stopRender() called on the clone.
+     *
+     * \see startRender()
      */
-    virtual void stopRender( QgsRenderContext &context ) = 0;
+    virtual void stopRender( QgsRenderContext &context );
 
     /**
      * If a renderer does not require all the features this method may be overridden
@@ -172,10 +202,10 @@ class CORE_EXPORT QgsFeatureRenderer
      *
      * \returns An expression used as where clause
      */
-    virtual QString filter( const QgsFields &fields = QgsFields() ) { Q_UNUSED( fields ); return QString(); }
+    virtual QString filter( const QgsFields &fields = QgsFields() ) { Q_UNUSED( fields ) return QString(); }
 
     /**
-     * Return a list of attributes required by this renderer. Attributes not listed in here may
+     * Returns a list of attributes required by this renderer. Attributes not listed in here may
      * not have been requested from the provider at rendering time.
      *
      * \returns A set of attributes
@@ -183,7 +213,7 @@ class CORE_EXPORT QgsFeatureRenderer
     virtual QSet<QString> usedAttributes( const QgsRenderContext &context ) const = 0;
 
     /**
-     * Returns true if this renderer requires the geometry to apply the filter.
+     * Returns TRUE if this renderer requires the geometry to apply the filter.
      */
     virtual bool filterNeedsGeometry() const;
 
@@ -201,13 +231,16 @@ class CORE_EXPORT QgsFeatureRenderer
      * Render a feature using this renderer in the given context.
      * Must be called between startRender() and stopRender() calls.
      * Default implementation renders a symbol as determined by symbolForFeature() call.
-     * Returns true if the feature has been returned (this is used for example
+     * Returns TRUE if the feature has been returned (this is used for example
      * to determine whether the feature may be labelled).
      *
      * If layer is not -1, the renderer should draw only a particula layer from symbols
      * (in order to support symbol level rendering).
+     *
+     * \see startRender()
+     * \see stopRender()
      */
-    virtual bool renderFeature( QgsFeature &feature, QgsRenderContext &context, int layer = -1, bool selected = false, bool drawVertexMarker = false );
+    virtual bool renderFeature( const QgsFeature &feature, QgsRenderContext &context, int layer = -1, bool selected = false, bool drawVertexMarker = false ) SIP_THROW( QgsCsException );
 
     //! Returns debug information about this renderer
     virtual QString dump() const;
@@ -231,20 +264,21 @@ class CORE_EXPORT QgsFeatureRenderer
      *
      * E.g. if you only want to deal with visible features:
      *
-     * ~~~{.py}
+     * \code{.py}
      * if not renderer.capabilities().testFlag(QgsFeatureRenderer.Filter) or renderer.willRenderFeature(feature, context):
      *     deal_with_my_feature()
      * else:
      *     skip_the_curren_feature()
-     * ~~~
+     * \endcode
      */
-    virtual QgsFeatureRenderer::Capabilities capabilities() { return 0; }
+    virtual QgsFeatureRenderer::Capabilities capabilities() { return nullptr; }
 
-    /** Returns list of symbols used by the renderer.
+    /**
+     * Returns list of symbols used by the renderer.
      * \param context render context
      * \since QGIS 2.12
      */
-    virtual QgsSymbolList symbols( QgsRenderContext &context ) { Q_UNUSED( context ); return QgsSymbolList(); }
+    virtual QgsSymbolList symbols( QgsRenderContext &context ) const;
 
     bool usingSymbolLevels() const { return mUsingSymbolLevels; }
     void setUsingSymbolLevels( bool usingSymbolLevels ) { mUsingSymbolLevels = usingSymbolLevels; }
@@ -255,11 +289,14 @@ class CORE_EXPORT QgsFeatureRenderer
     //! store renderer info to XML element
     virtual QDomElement save( QDomDocument &doc, const QgsReadWriteContext &context );
 
-    //! create the SLD UserStyle element following the SLD v1.1 specs with the given name
-    //! \since QGIS 2.8
+    /**
+     * create the SLD UserStyle element following the SLD v1.1 specs with the given name
+     * \since QGIS 2.8
+     */
     virtual QDomElement writeSld( QDomDocument &doc, const QString &styleName, const QgsStringMap &props = QgsStringMap() ) const;
 
-    /** Create a new renderer according to the information contained in
+    /**
+     * Create a new renderer according to the information contained in
      * the UserStyle element of a SLD style document
      * \param node the node in the SLD document whose the UserStyle element
      * is a child
@@ -274,90 +311,109 @@ class CORE_EXPORT QgsFeatureRenderer
     //! used from subclasses to create SLD Rule elements following SLD v1.1 specs
     virtual void toSld( QDomDocument &doc, QDomElement &element, const QgsStringMap &props = QgsStringMap() ) const
     {
-      element.appendChild( doc.createComment( QStringLiteral( "FeatureRendererV2 %1 not implemented yet" ).arg( type() ) ) );
+      element.appendChild( doc.createComment( QStringLiteral( "FeatureRenderer %1 not implemented yet" ).arg( type() ) ) );
       ( void ) props; // warning avoidance
     }
 
-    //! items of symbology items in legend should be checkable
-    //! \since QGIS 2.5
+    /**
+     * items of symbology items in legend should be checkable
+     * \since QGIS 2.5
+     */
     virtual bool legendSymbolItemsCheckable() const;
 
-    //! items of symbology items in legend is checked
-    //! \since QGIS 2.5
+    /**
+     * items of symbology items in legend is checked
+     * \since QGIS 2.5
+     */
     virtual bool legendSymbolItemChecked( const QString &key );
 
-    //! item in symbology was checked
-    //! \since QGIS 2.5
+    /**
+     * item in symbology was checked
+     * \since QGIS 2.5
+     */
     virtual void checkLegendSymbolItem( const QString &key, bool state = true );
 
-    /** Sets the symbol to be used for a legend symbol item.
+    /**
+     * Sets the symbol to be used for a legend symbol item.
      * \param key rule key for legend symbol
      * \param symbol new symbol for legend item. Ownership is transferred to renderer.
      * \since QGIS 2.14
      */
     virtual void setLegendSymbolItem( const QString &key, QgsSymbol *symbol SIP_TRANSFER );
 
-    //! Returns a list of symbology items for the legend
-    //! \since QGIS 2.6
+    /**
+     * Returns a list of symbology items for the legend
+     * \since QGIS 2.6
+     */
     virtual QgsLegendSymbolList legendSymbolItems() const;
 
-    //! If supported by the renderer, return classification attribute for the use in legend
-    //! \since QGIS 2.6
+    /**
+     * If supported by the renderer, return classification attribute for the use in legend
+     * \since QGIS 2.6
+     */
     virtual QString legendClassificationAttribute() const { return QString(); }
 
-    //! set type and size of editing vertex markers for subsequent rendering
-    void setVertexMarkerAppearance( int type, int size );
+    //! Sets type and size of editing vertex markers for subsequent rendering
+    void setVertexMarkerAppearance( int type, double size );
 
-    /** Returns whether the renderer will render a feature or not.
+    /**
+     * Returns whether the renderer will render a feature or not.
      * Must be called between startRender() and stopRender() calls.
      * Default implementation uses symbolForFeature().
      * \since QGIS 2.12
      */
-    virtual bool willRenderFeature( QgsFeature &feat, QgsRenderContext &context );
+    virtual bool willRenderFeature( const QgsFeature &feature, QgsRenderContext &context ) const;
 
-    /** Returns list of symbols used for rendering the feature.
+    /**
+     * Returns list of symbols used for rendering the feature.
      * For renderers that do not support MoreSymbolsPerFeature it is more efficient
      * to use symbolForFeature()
      * \since QGIS 2.12
      */
-    virtual QgsSymbolList symbolsForFeature( QgsFeature &feat, QgsRenderContext &context );
+    virtual QgsSymbolList symbolsForFeature( const QgsFeature &feature, QgsRenderContext &context ) const;
 
-    /** Equivalent of originalSymbolsForFeature() call
+    /**
+     * Equivalent of originalSymbolsForFeature() call
      * extended to support renderers that may use more symbols per feature - similar to symbolsForFeature()
      * \since QGIS 2.12
      */
-    virtual QgsSymbolList originalSymbolsForFeature( QgsFeature &feat, QgsRenderContext &context );
+    virtual QgsSymbolList originalSymbolsForFeature( const QgsFeature &feature, QgsRenderContext &context ) const;
 
-    /** Allows for a renderer to modify the extent of a feature request prior to rendering
+    /**
+     * Allows for a renderer to modify the extent of a feature request prior to rendering
      * \param extent reference to request's filter extent. Modify extent to change the
      * extent of feature request
      * \param context render context
      * \since QGIS 2.7
      */
-    virtual void modifyRequestExtent( QgsRectangle &extent, QgsRenderContext &context ) { Q_UNUSED( extent ); Q_UNUSED( context ); }
+    virtual void modifyRequestExtent( QgsRectangle &extent, QgsRenderContext &context );
 
-    /** Returns the current paint effect for the renderer.
+    /**
+     * Returns the current paint effect for the renderer.
      * \returns paint effect
-     * \since QGIS 2.9
      * \see setPaintEffect
+     * \since QGIS 2.9
      */
     QgsPaintEffect *paintEffect() const;
 
-    /** Sets the current paint effect for the renderer.
+    /**
+     * Sets the current paint effect for the renderer.
      * \param effect paint effect. Ownership is transferred to the renderer.
-     * \since QGIS 2.9
      * \see paintEffect
+     * \since QGIS 2.9
      */
     void setPaintEffect( QgsPaintEffect *effect );
 
-    /** Returns whether the renderer must render as a raster.
-     * \since QGIS 2.12
+    /**
+     * Returns whether the renderer must render as a raster.
      * \see setForceRasterRender
+     * \since QGIS 2.12
      */
     bool forceRasterRender() const { return mForceRaster; }
 
-    /** Sets whether the renderer should be rendered to a raster destination.
-     * \param forceRaster set to true if renderer must be drawn on a raster surface.
+    /**
+     * Sets whether the renderer should be rendered to a raster destination.
+     * \param forceRaster set to TRUE if renderer must be drawn on a raster surface.
      * This may be desirable for highly detailed layers where rendering as a vector
      * would result in a large, complex vector output.
      * \see forceRasterRender
@@ -366,62 +422,76 @@ class CORE_EXPORT QgsFeatureRenderer
     void setForceRasterRender( bool forceRaster ) { mForceRaster = forceRaster; }
 
     /**
-     * Get the order in which features shall be processed by this renderer.
-     * \since QGIS 2.14
-     * \note this property has no effect if orderByEnabled() is false
+     * Gets the order in which features shall be processed by this renderer.
+     * \note this property has no effect if orderByEnabled() is FALSE
      * \see orderByEnabled()
+     * \since QGIS 2.14
      */
     QgsFeatureRequest::OrderBy orderBy() const;
 
     /**
      * Define the order in which features shall be processed by this renderer.
-     * \note this property has no effect if orderByEnabled() is false
-     * \since QGIS 2.14
+     * \note this property has no effect if orderByEnabled() is FALSE
      * \see setOrderByEnabled()
+     * \since QGIS 2.14
      */
     void setOrderBy( const QgsFeatureRequest::OrderBy &orderBy );
 
     /**
      * Returns whether custom ordering will be applied before features are processed by this renderer.
-     * \since QGIS 2.14
      * \see orderBy()
      * \see setOrderByEnabled()
+     * \since QGIS 2.14
      */
     bool orderByEnabled() const;
 
     /**
      * Sets whether custom ordering should be applied before features are processed by this renderer.
-     * \param enabled set to true to enable custom feature ordering
-     * \since QGIS 2.14
+     * \param enabled set to TRUE to enable custom feature ordering
      * \see setOrderBy()
      * \see orderByEnabled()
+     * \since QGIS 2.14
      */
     void setOrderByEnabled( bool enabled );
 
-    /** Sets an embedded renderer (subrenderer) for this feature renderer. The base class implementation
+    /**
+     * Sets an embedded renderer (subrenderer) for this feature renderer. The base class implementation
      * does nothing with subrenderers, but individual derived classes can use these to modify their behavior.
      * \param subRenderer the embedded renderer. Ownership will be transferred.
      * \see embeddedRenderer()
      * \since QGIS 2.16
      */
-    virtual void setEmbeddedRenderer( QgsFeatureRenderer *subRenderer SIP_TRANSFER ) { delete subRenderer; }
+    virtual void setEmbeddedRenderer( QgsFeatureRenderer *subRenderer SIP_TRANSFER );
 
-    /** Returns the current embedded renderer (subrenderer) for this feature renderer. The base class
-     * implementation does not use subrenderers and will always return null.
+    /**
+     * Returns the current embedded renderer (subrenderer) for this feature renderer. The base class
+     * implementation does not use subrenderers and will always return NULLPTR.
      * \see setEmbeddedRenderer()
      * \since QGIS 2.16
      */
-    virtual const QgsFeatureRenderer *embeddedRenderer() const { return nullptr; }
+    virtual const QgsFeatureRenderer *embeddedRenderer() const;
+
+    /**
+     * Accepts the specified symbology \a visitor, causing it to visit all symbols associated
+     * with the renderer.
+     *
+     * Returns TRUE if the visitor should continue visiting other objects, or FALSE if visiting
+     * should be canceled.
+     *
+     * \since QGIS 3.10
+     */
+    virtual bool accept( QgsStyleEntityVisitorInterface *visitor ) const;
 
   protected:
     QgsFeatureRenderer( const QString &type );
 
-    void renderFeatureWithSymbol( QgsFeature &feature,
-                                  QgsSymbol *symbol,
-                                  QgsRenderContext &context,
-                                  int layer,
-                                  bool selected,
-                                  bool drawVertexMarker );
+    /**
+     * Render the \a feature with the \a symbol using \a context.
+     * Use \a layer to specify the symbol layer, \a selected to
+     * specify if it should be rendered as selected and \a drawVertexMarker
+     * to specify if vertex markers should be rendered.
+     */
+    void renderFeatureWithSymbol( const QgsFeature &feature, QgsSymbol *symbol, QgsRenderContext &context, int layer, bool selected, bool drawVertexMarker ) SIP_THROW( QgsCsException );
 
     //! render editing vertex marker at specified point
     void renderVertexMarker( QPointF pt, QgsRenderContext &context );
@@ -453,18 +523,20 @@ class CORE_EXPORT QgsFeatureRenderer
     //! The current type of editing marker
     int mCurrentVertexMarkerType;
     //! The current size of editing marker
-    int mCurrentVertexMarkerSize;
+    double mCurrentVertexMarkerSize;
 
     QgsPaintEffect *mPaintEffect = nullptr;
 
     bool mForceRaster;
 
-    /** \note this function is used to convert old sizeScale expressions to symbol
+    /**
+     * \note this function is used to convert old sizeScale expressions to symbol
      * level DataDefined size
      */
     static void convertSymbolSizeScale( QgsSymbol *symbol, QgsSymbol::ScaleMethod method, const QString &field );
 
-    /** \note this function is used to convert old rotations expressions to symbol
+    /**
+     * \note this function is used to convert old rotations expressions to symbol
      * level DataDefined angle
      */
     static void convertSymbolRotation( QgsSymbol *symbol, const QString &field );
@@ -479,6 +551,11 @@ class CORE_EXPORT QgsFeatureRenderer
     QgsFeatureRenderer &operator=( const QgsFeatureRenderer & );
 #endif
 
+#ifdef QGISDEBUG
+    //! Pointer to thread in which startRender was first called
+    QThread *mThread = nullptr;
+#endif
+
     Q_DISABLE_COPY( QgsFeatureRenderer )
 };
 
@@ -488,4 +565,4 @@ Q_DECLARE_OPERATORS_FOR_FLAGS( QgsFeatureRenderer::Capabilities )
 class QgsRendererWidget;
 class QgsPaintEffectWidget;
 
-#endif // QGSRENDERERV2_H
+#endif // QGSRENDERER_H

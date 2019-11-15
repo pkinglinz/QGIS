@@ -14,6 +14,7 @@
  ***************************************************************************/
 
 #include "qgsproperty.h"
+#include "qgsproperty_p.h"
 
 #include "qgslogger.h"
 #include "qgsexpression.h"
@@ -21,15 +22,12 @@
 #include "qgssymbollayerutils.h"
 #include "qgscolorramp.h"
 
-
-QgsPropertyDefinition::QgsPropertyDefinition()
-  : mTypes( DataTypeString )
-{}
-
-QgsPropertyDefinition::QgsPropertyDefinition( const QString &name, const QString &description, QgsPropertyDefinition::StandardPropertyTemplate type )
+QgsPropertyDefinition::QgsPropertyDefinition( const QString &name, const QString &description, QgsPropertyDefinition::StandardPropertyTemplate type, const QString &origin, const QString &comment )
   : mName( name )
   , mDescription( description )
   , mStandardType( type )
+  , mOrigin( origin )
+  , mComment( comment )
 {
   switch ( mStandardType )
   {
@@ -90,7 +88,7 @@ QgsPropertyDefinition::QgsPropertyDefinition( const QString &name, const QString
 
     case ColorWithAlpha:
       mTypes = DataTypeString;
-      mHelpText = QObject::tr( "string [<b>r,g,b,a</b>] as int 0-255 or #<b>RRGGBBAA</b> as hex or <b>color</b> as color's name" );
+      mHelpText = QObject::tr( "string [<b>r,g,b,a</b>] as int 0-255 or #<b>AARRGGBB</b> as hex or <b>color</b> as color's name" );
       break;
 
     case ColorNoAlpha:
@@ -122,7 +120,7 @@ QgsPropertyDefinition::QgsPropertyDefinition( const QString &name, const QString
 
     case Size2D:
       mTypes = DataTypeString;
-      mHelpText = QObject::tr( "double size [<b>width,height</b>]" );
+      mHelpText = QObject::tr( "string of doubles '<b>width,height</b>' or array of doubles <b>[width, height]</b>" );
       break;
 
     case LineStyle:
@@ -166,7 +164,7 @@ QgsPropertyDefinition::QgsPropertyDefinition( const QString &name, const QString
 
     case Offset:
       mTypes = DataTypeString;
-      mHelpText = QObject::tr( "double offset [<b>x,y</b>]" );
+      mHelpText = QObject::tr( "string of doubles '<b>x,y</b>' or array of doubles <b>[x, y]</b>" );
       break;
 
     case Custom:
@@ -174,11 +172,13 @@ QgsPropertyDefinition::QgsPropertyDefinition( const QString &name, const QString
   }
 }
 
-QgsPropertyDefinition::QgsPropertyDefinition( const QString &name, DataType dataType, const QString &description, const QString &helpText )
+QgsPropertyDefinition::QgsPropertyDefinition( const QString &name, DataType dataType, const QString &description, const QString &helpText, const QString &origin, const QString &comment )
   : mName( name )
   , mDescription( description )
   , mTypes( dataType )
   , mHelpText( helpText )
+  , mOrigin( origin )
+  , mComment( comment )
 {}
 
 bool QgsPropertyDefinition::supportsAssistant() const
@@ -201,6 +201,8 @@ QgsProperty::QgsProperty()
 {
   d = new QgsPropertyPrivate();
 }
+
+QgsProperty::~QgsProperty() = default;
 
 QgsProperty QgsProperty::fromExpression( const QString &expression, bool isActive )
 {
@@ -310,6 +312,7 @@ void QgsProperty::setExpressionString( const QString &expression )
   d->expressionString = expression;
   d->expression = QgsExpression( expression );
   d->expressionPrepared = false;
+  d->expressionIsInvalid = false;
 }
 
 QString QgsProperty::expressionString() const
@@ -371,10 +374,12 @@ bool QgsProperty::prepare( const QgsExpressionContext &context ) const
       {
         d->expressionReferencedCols.clear();
         d->expressionPrepared = false;
+        d->expressionIsInvalid = true;
         return false;
       }
 
       d->expressionPrepared = true;
+      d->expressionIsInvalid = false;
       d->expressionReferencedCols = d->expression.referencedColumns();
       return true;
     }
@@ -408,15 +413,28 @@ QSet<QString> QgsProperty::referencedFields( const QgsExpressionContext &context
 
     case ExpressionBasedProperty:
     {
+      if ( d->expressionIsInvalid )
+        return QSet< QString >();
+
       d.detach();
       if ( !d->expressionPrepared && !prepare( context ) )
+      {
+        d->expressionIsInvalid = true;
         return QSet< QString >();
+      }
 
       return d->expressionReferencedCols;
     }
 
   }
   return QSet<QString>();
+}
+
+bool QgsProperty::isProjectColor() const
+{
+  QRegularExpression rx( QStringLiteral( "^project_color\\('.*'\\)$" ) );
+  return d->type == QgsProperty::ExpressionBasedProperty && !d->expressionString.isEmpty()
+         && rx.match( d->expressionString ).hasMatch();
 }
 
 QVariant QgsProperty::propertyValue( const QgsExpressionContext &context, const QVariant &defaultValue, bool *ok ) const
@@ -449,19 +467,20 @@ QVariant QgsProperty::propertyValue( const QgsExpressionContext &context, const 
           *ok = true;
         return f.attribute( d->cachedFieldIdx );
       }
-
-      int fieldIdx = f.fieldNameIndex( d->fieldName );
-      if ( fieldIdx < 0 )
+      prepare( context );
+      if ( d->cachedFieldIdx < 0 )
         return defaultValue;
 
       if ( ok )
         *ok = true;
-      return f.attribute( fieldIdx );
+      return f.attribute( d->cachedFieldIdx );
     }
 
     case ExpressionBasedProperty:
     {
-      d.detach();
+      if ( d->expressionIsInvalid )
+        return defaultValue;
+
       if ( !d->expressionPrepared && !prepare( context ) )
         return defaultValue;
 
@@ -627,7 +646,7 @@ bool QgsProperty::valueAsBool( const QgsExpressionContext &context, bool default
   bool valOk = false;
   QVariant val = value( context, defaultValue, &valOk );
 
-  if ( !valOk || !val.isValid() )
+  if ( !valOk || !val.isValid() || val.isNull() )
     return defaultValue;
 
   if ( ok )
@@ -701,6 +720,7 @@ bool QgsProperty::loadVariant( const QVariant &property )
 
       d->expression = QgsExpression( d->expressionString );
       d->expressionPrepared = false;
+      d->expressionIsInvalid = false;
       d->expressionReferencedCols.clear();
       break;
 
@@ -710,8 +730,7 @@ bool QgsProperty::loadVariant( const QVariant &property )
   }
 
   //restore transformer if present
-  if ( d->transformer )
-    delete d->transformer;
+  delete d->transformer;
   d->transformer = nullptr;
 
 

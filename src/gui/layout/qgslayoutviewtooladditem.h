@@ -16,7 +16,7 @@
 #ifndef QGSLAYOUTVIEWTOOLADDITEM_H
 #define QGSLAYOUTVIEWTOOLADDITEM_H
 
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgis_gui.h"
 #include "qgslayoutviewtool.h"
 #include "qgslayoutviewrubberband.h"
@@ -34,30 +34,42 @@ class GUI_EXPORT QgsLayoutViewToolAddItem : public QgsLayoutViewTool
 
   public:
 
+    //! Constructs a QgsLayoutViewToolAddItem for the given layout \a view.
     QgsLayoutViewToolAddItem( QgsLayoutView *view SIP_TRANSFERTHIS );
 
     /**
-     * Returns the item type for items created by the tool.
-     * \see setItemType()
+     * Returns the item metadata id for items created by the tool.
+     * \see setItemMetadataId()
      */
-    int itemType() const;
+    int itemMetadataId() const;
 
     /**
-     * Sets the item \a type for items created by the tool.
-     * \see itemType()
+     * Sets the item metadata \a metadataId for items created by the tool.
+     *
+     * The \a metadataId associates the current tool behavior with a metadata entry
+     * from QgsLayoutItemGuiRegistry.
+     *
+     * \see itemMetadataId()
      */
-    void setItemType( int type );
+    void setItemMetadataId( int metadataId );
 
     void layoutPressEvent( QgsLayoutViewMouseEvent *event ) override;
     void layoutMoveEvent( QgsLayoutViewMouseEvent *event ) override;
     void layoutReleaseEvent( QgsLayoutViewMouseEvent *event ) override;
     void deactivate() override;
 
+  signals:
+
+    /**
+     * Emitted when an item has been created using the tool.
+     */
+    void createdItem();
+
   private:
 
     bool mDrawing = false;
 
-    int mItemType = 0;
+    int mItemMetadataId = -1;
 
     //! Rubber band item
     std::unique_ptr< QgsLayoutViewRubberBand > mRubberBand;

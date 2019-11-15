@@ -53,10 +53,7 @@ static bool _initRenderer( const QString &name, QgsRendererWidgetFunc f, const Q
 
   if ( !iconName.isEmpty() )
   {
-    QString iconPath = QgsApplication::defaultThemePath() + iconName;
-    QPixmap pix;
-    if ( pix.load( iconPath ) )
-      m->setIcon( pix );
+    m->setIcon( QgsApplication::getThemeIcon( iconName ) );
   }
 
   QgsDebugMsg( "Set for " + name );
@@ -89,6 +86,7 @@ QgsRendererPropertiesDialog::QgsRendererPropertiesDialog( QgsVectorLayer *layer,
 
 {
   setupUi( this );
+  QgsGui::enableAutoGeometryRestore( this );
   mLayerRenderingGroupBox->setSettingGroup( QStringLiteral( "layerRenderingGroupBox" ) );
 
   // can be embedded in vector layer properties
@@ -103,7 +101,8 @@ QgsRendererPropertiesDialog::QgsRendererPropertiesDialog( QgsVectorLayer *layer,
 
   QgsRendererRegistry *reg = QgsApplication::rendererRegistry();
   QStringList renderers = reg->renderersList( mLayer );
-  Q_FOREACH ( const QString &name, renderers )
+  const auto constRenderers = renderers;
+  for ( const QString &name : constRenderers )
   {
     QgsRendererAbstractMetadata *m = reg->rendererMetadata( name );
     cboRenderers->addItem( m->icon(), m->visibleName(), name );
@@ -134,7 +133,8 @@ QgsRendererPropertiesDialog::QgsRendererPropertiesDialog( QgsVectorLayer *layer,
 
 void QgsRendererPropertiesDialog::connectValueChanged( const QList<QWidget *> &widgets, const char *slot )
 {
-  Q_FOREACH ( QWidget *widget, widgets )
+  const auto constWidgets = widgets;
+  for ( QWidget *widget : constWidgets )
   {
     if ( QgsPropertyOverrideButton *w = qobject_cast<QgsPropertyOverrideButton *>( widget ) )
     {
@@ -148,27 +148,27 @@ void QgsRendererPropertiesDialog::connectValueChanged( const QList<QWidget *> &w
     {
       connect( w, SIGNAL( opacityChanged( double ) ), this,  slot );
     }
-    else if ( QComboBox *w =  qobject_cast<QComboBox *>( widget ) )
+    else if ( QComboBox *w = qobject_cast<QComboBox *>( widget ) )
     {
       connect( w, SIGNAL( currentIndexChanged( int ) ), this, slot );
     }
-    else if ( QSpinBox *w =  qobject_cast<QSpinBox *>( widget ) )
+    else if ( QSpinBox *w = qobject_cast<QSpinBox *>( widget ) )
     {
       connect( w, SIGNAL( valueChanged( int ) ), this, slot );
     }
-    else if ( QDoubleSpinBox *w =  qobject_cast<QDoubleSpinBox *>( widget ) )
+    else if ( QDoubleSpinBox *w = qobject_cast<QDoubleSpinBox *>( widget ) )
     {
       connect( w, SIGNAL( valueChanged( double ) ), this, slot );
     }
-    else if ( QgsColorButton *w =  qobject_cast<QgsColorButton *>( widget ) )
+    else if ( QgsColorButton *w = qobject_cast<QgsColorButton *>( widget ) )
     {
       connect( w, SIGNAL( colorChanged( QColor ) ), this, slot );
     }
-    else if ( QCheckBox *w =  qobject_cast<QCheckBox *>( widget ) )
+    else if ( QCheckBox *w = qobject_cast<QCheckBox *>( widget ) )
     {
       connect( w, SIGNAL( toggled( bool ) ), this, slot );
     }
-    else if ( QLineEdit *w =  qobject_cast<QLineEdit *>( widget ) )
+    else if ( QLineEdit *w = qobject_cast<QLineEdit *>( widget ) )
     {
       connect( w, SIGNAL( textEdited( QString ) ), this, slot );
       connect( w, SIGNAL( textChanged( QString ) ), this, slot );
@@ -196,6 +196,16 @@ void QgsRendererPropertiesDialog::setMapCanvas( QgsMapCanvas *canvas )
   }
 }
 
+void QgsRendererPropertiesDialog::setContext( const QgsSymbolWidgetContext &context )
+{
+  mMapCanvas = context.mapCanvas();
+  mMessageBar = context.messageBar();
+  if ( mActiveWidget )
+  {
+    mActiveWidget->setContext( context );
+  }
+}
+
 void QgsRendererPropertiesDialog::setDockMode( bool dockMode )
 {
   mDockMode = dockMode;
@@ -209,7 +219,7 @@ void QgsRendererPropertiesDialog::rendererChanged()
 {
   if ( cboRenderers->currentIndex() == -1 )
   {
-    QgsDebugMsg( "No current item -- this should never happen!" );
+    QgsDebugMsg( QStringLiteral( "No current item -- this should never happen!" ) );
     return;
   }
 
@@ -249,10 +259,11 @@ void QgsRendererPropertiesDialog::rendererChanged()
     stackedWidget->setCurrentWidget( mActiveWidget );
     if ( mActiveWidget->renderer() )
     {
-      if ( mMapCanvas )
+      if ( mMapCanvas || mMessageBar )
       {
         QgsSymbolWidgetContext context;
         context.setMapCanvas( mMapCanvas );
+        context.setMessageBar( mMessageBar );
         mActiveWidget->setContext( context );
       }
       changeOrderBy( mActiveWidget->renderer()->orderBy(), mActiveWidget->renderer()->orderByEnabled() );
@@ -305,18 +316,18 @@ void QgsRendererPropertiesDialog::onOK()
 
 void QgsRendererPropertiesDialog::openPanel( QgsPanelWidget *panel )
 {
-  QgsDebugMsg( "Open panel!!!" );
+  QgsDebugMsg( QStringLiteral( "Open panel!!!" ) );
   if ( mDockMode )
   {
-    QgsDebugMsg( "DOCK MODE" );
+    QgsDebugMsg( QStringLiteral( "DOCK MODE" ) );
     emit showPanel( panel );
   }
   else
   {
-    QgsDebugMsg( "DIALOG MODE" );
+    QgsDebugMsg( QStringLiteral( "DIALOG MODE" ) );
     // Show the dialog version if no one is connected
     QDialog *dlg = new QDialog();
-    QString key =  QStringLiteral( "/UI/paneldialog/%1" ).arg( panel->panelTitle() );
+    QString key = QStringLiteral( "/UI/paneldialog/%1" ).arg( panel->panelTitle() );
     QgsSettings settings;
     dlg->restoreGeometry( settings.value( key ).toByteArray() );
     dlg->setWindowTitle( panel->panelTitle() );

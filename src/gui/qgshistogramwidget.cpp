@@ -18,6 +18,7 @@
 #include "qgshistogramwidget.h"
 #include "qgsapplication.h"
 #include "qgsvectorlayer.h"
+#include "qgsvectorlayerutils.h"
 #include "qgsstatisticalsummary.h"
 #include "qgssettings.h"
 
@@ -103,7 +104,7 @@ void QgsHistogramWidget::refreshValues()
   QApplication::setOverrideCursor( Qt::WaitCursor );
 
   bool ok;
-  mValues = mVectorLayer->getDoubleValues( mSourceFieldExp, ok );
+  mValues = QgsVectorLayerUtils::getDoubleValues( mVectorLayer, mSourceFieldExp, ok );
 
   if ( ! ok )
   {
@@ -200,7 +201,7 @@ void QgsHistogramWidget::drawHistogram()
 
   // make colors list
   mHistoColors.clear();
-  Q_FOREACH ( const QgsRendererRange &range, mRanges )
+  for ( const QgsRendererRange &range : qgis::as_const( mRanges ) )
   {
     mHistoColors << ( range.symbol() ? range.symbol()->color() : Qt::black );
   }
@@ -247,7 +248,7 @@ void QgsHistogramWidget::drawHistogram()
   plotHistogram->attach( mpPlot );
 
   mRangeMarkers.clear();
-  Q_FOREACH ( const QgsRendererRange &range, mRanges )
+  for ( const QgsRendererRange &range : qgis::as_const( mRanges ) )
   {
     QwtPlotMarker *rangeMarker = new QwtPlotMarker();
     rangeMarker->attach( mpPlot );

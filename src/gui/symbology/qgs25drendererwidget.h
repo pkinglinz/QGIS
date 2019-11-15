@@ -17,13 +17,14 @@
 #define QGS25DRENDERERWIDGET_H
 
 #include "ui_qgs25drendererwidgetbase.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsrendererwidget.h"
 #include "qgis_gui.h"
 
 class Qgs25DRenderer;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class Qgs25DRendererWidget
  */
 class GUI_EXPORT Qgs25DRendererWidget : public QgsRendererWidget, protected Ui::Qgs25DRendererWidgetBase
@@ -32,14 +33,16 @@ class GUI_EXPORT Qgs25DRendererWidget : public QgsRendererWidget, protected Ui::
 
   public:
 
-    /** Static creation method
+    /**
+     * Static creation method
      * \param layer the layer where this renderer is applied
      * \param style
      * \param renderer the mask renderer (will not take ownership)
      */
     static QgsRendererWidget *create( QgsVectorLayer *layer, QgsStyle *style, QgsFeatureRenderer *renderer SIP_TRANSFER ) SIP_FACTORY;
 
-    /** Constructor
+    /**
+     * Constructor
      * \param layer the layer where this renderer is applied
      * \param style
      * \param renderer the mask renderer (will not take ownership)
@@ -55,6 +58,8 @@ class GUI_EXPORT Qgs25DRendererWidget : public QgsRendererWidget, protected Ui::
     void apply() override SIP_FORCE;
 
     Qgs25DRenderer *mRenderer = nullptr;
+
+    friend class QgsAppScreenShots;
 };
 
 #endif // QGS25DRENDERERWIDGET_H

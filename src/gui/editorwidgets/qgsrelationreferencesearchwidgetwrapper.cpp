@@ -22,6 +22,7 @@
 #include "qgsrelationreferencewidget.h"
 #include "qgsrelationmanager.h"
 #include "qgssettings.h"
+#include "qgsapplication.h"
 
 #include <QStringListModel>
 
@@ -37,18 +38,33 @@ bool QgsRelationReferenceSearchWidgetWrapper::applyDirectly()
   return true;
 }
 
-QString QgsRelationReferenceSearchWidgetWrapper::expression()
+QString QgsRelationReferenceSearchWidgetWrapper::expression() const
 {
   return mExpression;
 }
 
 QVariant QgsRelationReferenceSearchWidgetWrapper::value() const
 {
-  if ( mWidget )
+  if ( !mWidget )
+    return QVariant( );
+
+  const QVariantList fkeys = mWidget->foreignKeys();
+
+  if ( fkeys.isEmpty() )
   {
-    return mWidget->foreignKey();
+    return QVariant( );
   }
-  return QVariant();
+  else
+  {
+    const QList<QgsRelation::FieldPair> fieldPairs = mWidget->relation().fieldPairs();
+    Q_ASSERT( fieldPairs.count() == fkeys.count() );
+    for ( int i = 0; i < fieldPairs.count(); i++ )
+    {
+      if ( fieldPairs.at( i ).referencingField() == layer()->fields().at( fieldIndex() ).name() )
+        return fkeys.at( i );
+    }
+    return QVariant(); // should not happen
+  }
 }
 
 QgsSearchWidgetWrapper::FilterFlags QgsRelationReferenceSearchWidgetWrapper::supportedFlags() const
@@ -56,14 +72,9 @@ QgsSearchWidgetWrapper::FilterFlags QgsRelationReferenceSearchWidgetWrapper::sup
   return EqualTo | NotEqualTo | IsNull | IsNotNull;
 }
 
-QgsSearchWidgetWrapper::FilterFlags QgsRelationReferenceSearchWidgetWrapper::defaultFlags() const
-{
-  return EqualTo;
-}
-
 QString QgsRelationReferenceSearchWidgetWrapper::createExpression( QgsSearchWidgetWrapper::FilterFlags flags ) const
 {
-  QString fieldName = QgsExpression::quotedColumnRef( layer()->fields().at( mFieldIdx ).name() );
+  QString fieldName = createFieldIdentifier();
 
   //clear any unsupported flags
   flags &= supportedFlags();
@@ -127,7 +138,12 @@ bool QgsRelationReferenceSearchWidgetWrapper::valid() const
 
 void QgsRelationReferenceSearchWidgetWrapper::onValueChanged( const QVariant &value )
 {
-  if ( !value.isValid() )
+  onValuesChanged( QVariantList() << value );
+}
+
+void QgsRelationReferenceSearchWidgetWrapper::onValuesChanged( const QVariantList &values )
+{
+  if ( !values.isEmpty() )
   {
     clearExpression();
     emit valueCleared();
@@ -135,15 +151,17 @@ void QgsRelationReferenceSearchWidgetWrapper::onValueChanged( const QVariant &va
   else
   {
     QgsSettings settings;
+    // TODO: adapt for composite keys
+    QVariant value = values.at( 0 );
     setExpression( value.isNull() ? QgsApplication::nullRepresentation() : value.toString() );
     emit valueChanged();
   }
   emit expressionChanged( mExpression );
 }
 
-void QgsRelationReferenceSearchWidgetWrapper::setExpression( QString exp )
+void QgsRelationReferenceSearchWidgetWrapper::setExpression( const QString &expression )
 {
-  QgsSettings settings;
+  QString exp = expression;
   QString nullValue = QgsApplication::nullRepresentation();
   QString fieldName = layer()->fields().at( mFieldIdx ).name();
 
@@ -192,7 +210,7 @@ void QgsRelationReferenceSearchWidgetWrapper::initWidget( QWidget *editor )
   mWidget->setRelation( relation, false );
 
   mWidget->showIndeterminateState();
-  connect( mWidget, &QgsRelationReferenceWidget::foreignKeyChanged, this, &QgsRelationReferenceSearchWidgetWrapper::onValueChanged );
+  connect( mWidget, &QgsRelationReferenceWidget::foreignKeysChanged, this, &QgsRelationReferenceSearchWidgetWrapper::onValuesChanged );
 }
 
 

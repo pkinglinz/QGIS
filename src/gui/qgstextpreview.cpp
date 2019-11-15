@@ -14,12 +14,12 @@
  ***************************************************************************/
 
 #include "qgstextpreview.h"
+#include "qgsapplication.h"
 #include <QDesktopWidget>
 #include <QPainter>
 
 QgsTextPreview::QgsTextPreview( QWidget *parent )
   : QLabel( parent )
-  , mMapUnits( QgsUnitTypes::DistanceMeters )
 {
   // initially use a basic transform with no scale
   QgsMapToPixel newCoordXForm;
@@ -28,12 +28,14 @@ QgsTextPreview::QgsTextPreview( QWidget *parent )
 
   mContext.setScaleFactor( QgsApplication::desktop()->logicalDpiX() / 25.4 );
   mContext.setUseAdvancedEffects( true );
+
+  mContext.setIsGuiPreview( true );
 }
 
 
 void QgsTextPreview::paintEvent( QPaintEvent *e )
 {
-  Q_UNUSED( e );
+  Q_UNUSED( e )
   QPainter p( this );
 
   p.setRenderHint( QPainter::Antialiasing );

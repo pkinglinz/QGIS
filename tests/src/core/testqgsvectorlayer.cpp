@@ -12,6 +12,7 @@
  *   (at your option) any later version.                                   *
  *                                                                         *
  ***************************************************************************/
+
 #include "qgstest.h"
 #include <QObject>
 #include <QString>
@@ -26,6 +27,7 @@
 #include <qgsmaplayer.h>
 #include <qgsvectordataprovider.h>
 #include <qgsvectorlayer.h>
+#include <qgsvectorlayerutils.h>
 #include "qgsfeatureiterator.h"
 #include <qgsapplication.h>
 #include <qgsproviderregistry.h>
@@ -41,14 +43,12 @@ class TestSignalReceiver : public QObject
 
   public:
     TestSignalReceiver()
-      : QObject( 0 )
-      , rendererChanged( false )
+      : QObject( nullptr )
       , featureBlendMode( QPainter::CompositionMode( 0 ) )
-      , opacity( 1.0 )
     {}
-    bool rendererChanged;
+    bool rendererChanged =  false ;
     QPainter::CompositionMode featureBlendMode;
-    double opacity;
+    double opacity =  1.0 ;
   public slots:
     void onRendererChanged()
     {
@@ -64,23 +64,18 @@ class TestSignalReceiver : public QObject
     }
 };
 
-/** \ingroup UnitTests
+/**
+ * \ingroup UnitTests
  * This is a unit test for the vector layer class.
  */
 class TestQgsVectorLayer : public QObject
 {
     Q_OBJECT
   public:
-    TestQgsVectorLayer()
-      : mTestHasError( false )
-      , mpPointsLayer( 0 )
-      , mpLinesLayer( 0 )
-      , mpPolysLayer( 0 )
-      , mpNonSpatialLayer( 0 )
-    {}
+    TestQgsVectorLayer() = default;
 
   private:
-    bool mTestHasError;
+    bool mTestHasError =  false ;
     QgsMapLayer *mpPointsLayer = nullptr;
     QgsMapLayer *mpLinesLayer = nullptr;
     QgsMapLayer *mpPolysLayer = nullptr;
@@ -214,48 +209,54 @@ void TestQgsVectorLayer::QgsVectorLayerGetValues()
   layer->selectByIds( ids );
 
   bool ok;
-  QList<QVariant> varList = layer->getValues( QStringLiteral( "col1" ), ok );
+  QList<QVariant> varList = QgsVectorLayerUtils::getValues( layer, QStringLiteral( "col1" ), ok );
   QVERIFY( ok );
   QCOMPARE( varList.length(), 4 );
-  QCOMPARE( varList.at( 0 ), QVariant( 1 ) );
-  QCOMPARE( varList.at( 1 ), QVariant( 2 ) );
-  QCOMPARE( varList.at( 2 ), QVariant( 3 ) );
-  QCOMPARE( varList.at( 3 ), QVariant() );
+  std::sort( varList.begin(), varList.end() );
+  QCOMPARE( varList.at( 0 ), QVariant() );
+  QCOMPARE( varList.at( 1 ), QVariant( 1 ) );
+  QCOMPARE( varList.at( 2 ), QVariant( 2 ) );
+  QCOMPARE( varList.at( 3 ), QVariant( 3 ) );
 
   //check with selected features
-  varList = layer->getValues( QStringLiteral( "col1" ), ok, true );
+  varList = QgsVectorLayerUtils::getValues( layer, QStringLiteral( "col1" ), ok, true );
   QVERIFY( ok );
   QCOMPARE( varList.length(), 2 );
+  std::sort( varList.begin(), varList.end() );
   QCOMPARE( varList.at( 0 ), QVariant( 2 ) );
   QCOMPARE( varList.at( 1 ), QVariant( 3 ) );
 
   int nulls = 0;
-  QList<double> doubleList = layer->getDoubleValues( QStringLiteral( "col1" ), ok, false, &nulls );
+  QList<double> doubleList = QgsVectorLayerUtils::getDoubleValues( layer, QStringLiteral( "col1" ), ok, false, &nulls );
   QVERIFY( ok );
   QCOMPARE( doubleList.length(), 3 );
+  std::sort( doubleList.begin(), doubleList.end() );
   QCOMPARE( doubleList.at( 0 ), 1.0 );
   QCOMPARE( doubleList.at( 1 ), 2.0 );
   QCOMPARE( doubleList.at( 2 ), 3.0 );
   QCOMPARE( nulls, 1 );
 
   //check with selected features
-  doubleList = layer->getDoubleValues( QStringLiteral( "col1" ), ok, true, &nulls );
+  doubleList = QgsVectorLayerUtils::getDoubleValues( layer, QStringLiteral( "col1" ), ok, true, &nulls );
   QVERIFY( ok );
+  std::sort( doubleList.begin(), doubleList.end() );
   QCOMPARE( doubleList.length(), 2 );
   QCOMPARE( doubleList.at( 0 ), 2.0 );
   QCOMPARE( doubleList.at( 1 ), 3.0 );
   QCOMPARE( nulls, 0 );
 
-  QList<QVariant> expVarList = layer->getValues( QStringLiteral( "tostring(col1) || ' '" ), ok );
+  QList<QVariant> expVarList = QgsVectorLayerUtils::getValues( layer, QStringLiteral( "tostring(col1) || ' '" ), ok );
   QVERIFY( ok );
   QCOMPARE( expVarList.length(), 4 );
-  QCOMPARE( expVarList.at( 0 ).toString(), QString( "1 " ) );
-  QCOMPARE( expVarList.at( 1 ).toString(), QString( "2 " ) );
-  QCOMPARE( expVarList.at( 2 ).toString(), QString( "3 " ) );
-  QCOMPARE( expVarList.at( 3 ), QVariant() );
+  std::sort( expVarList.begin(), expVarList.end() );
+  QCOMPARE( expVarList.at( 0 ), QVariant() );
+  QCOMPARE( expVarList.at( 1 ).toString(), QString( "1 " ) );
+  QCOMPARE( expVarList.at( 2 ).toString(), QString( "2 " ) );
+  QCOMPARE( expVarList.at( 3 ).toString(), QString( "3 " ) );
 
-  QList<double> expDoubleList = layer->getDoubleValues( QStringLiteral( "col1 * 2" ), ok, false, &nulls );
+  QList<double> expDoubleList = QgsVectorLayerUtils::getDoubleValues( layer, QStringLiteral( "col1 * 2" ), ok, false, &nulls );
   QVERIFY( ok );
+  std::sort( expDoubleList.begin(), expDoubleList.end() );
   QCOMPARE( expDoubleList.length(), 3 );
   QCOMPARE( expDoubleList.at( 0 ), 2.0 );
   QCOMPARE( expDoubleList.at( 1 ), 4.0 );
@@ -345,10 +346,10 @@ void TestQgsVectorLayer::testAddTopologicalPoints()
   QgsVectorLayer *layerLine = new QgsVectorLayer( QStringLiteral( "LineString?crs=EPSG:27700" ), QStringLiteral( "layer line" ), QStringLiteral( "memory" ) );
   QVERIFY( layerLine->isValid() );
 
-  QgsPolyline line1;
+  QgsPolylineXY line1;
   line1 << QgsPointXY( 2, 1 ) << QgsPointXY( 1, 1 ) << QgsPointXY( 1, 3 );
   QgsFeature lineF1;
-  lineF1.setGeometry( QgsGeometry::fromPolyline( line1 ) );
+  lineF1.setGeometry( QgsGeometry::fromPolylineXY( line1 ) );
 
   layerLine->startEditing();
   layerLine->addFeature( lineF1 );
@@ -358,22 +359,22 @@ void TestQgsVectorLayer::testAddTopologicalPoints()
   QCOMPARE( layerLine->undoStack()->index(), 1 );
 
   // outside of the linestring - nothing should happen
-  layerLine->addTopologicalPoints( QgsPointXY( 2, 2 ) );
+  layerLine->addTopologicalPoints( QgsPoint( 2, 2 ) );
 
   QCOMPARE( layerLine->undoStack()->index(), 1 );
-  QCOMPARE( layerLine->getFeature( fidLineF1 ).geometry(), QgsGeometry::fromWkt( "LINESTRING(2 1, 1 1, 1 3)" ) );
+  QCOMPARE( layerLine->getFeature( fidLineF1 ).geometry().asWkt(), QgsGeometry::fromWkt( "LINESTRING(2 1, 1 1, 1 3)" ).asWkt() );
 
   // add point at an existing vertex
-  layerLine->addTopologicalPoints( QgsPointXY( 1, 1 ) );
+  layerLine->addTopologicalPoints( QgsPoint( 1, 1 ) );
 
   QCOMPARE( layerLine->undoStack()->index(), 1 );
-  QCOMPARE( layerLine->getFeature( fidLineF1 ).geometry(), QgsGeometry::fromWkt( "LINESTRING(2 1, 1 1, 1 3)" ) );
+  QCOMPARE( layerLine->getFeature( fidLineF1 ).geometry().asWkt(), QgsGeometry::fromWkt( "LINESTRING(2 1, 1 1, 1 3)" ).asWkt() );
 
   // add point on segment of linestring
-  layerLine->addTopologicalPoints( QgsPointXY( 1, 2 ) );
+  layerLine->addTopologicalPoints( QgsPoint( 1, 2 ) );
 
   QCOMPARE( layerLine->undoStack()->index(), 2 );
-  QCOMPARE( layerLine->getFeature( fidLineF1 ).geometry(), QgsGeometry::fromWkt( "LINESTRING(2 1, 1 1, 1 2, 1 3)" ) );
+  QCOMPARE( layerLine->getFeature( fidLineF1 ).geometry().asWkt(), QgsGeometry::fromWkt( "LINESTRING(2 1, 1 1, 1 2, 1 3)" ).asWkt() );
 
   delete layerLine;
 }

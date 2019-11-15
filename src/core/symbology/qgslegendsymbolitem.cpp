@@ -18,14 +18,6 @@
 #include "qgsdatadefinedsizelegend.h"
 #include "qgssymbol.h"
 
-QgsLegendSymbolItem::QgsLegendSymbolItem()
-  : mCheckable( false )
-  , mScaleMinDenom( -1 )
-  , mScaleMaxDenom( -1 )
-  , mLevel( 0 )
-{
-}
-
 QgsLegendSymbolItem::QgsLegendSymbolItem( QgsSymbol *symbol, const QString &label, const QString &ruleKey, bool checkable, int scaleMinDenom, int scaleMaxDenom, int level, const QString &parentRuleKey )
   : mSymbol( symbol ? symbol->clone() : nullptr )
   , mLabel( label )
@@ -40,7 +32,6 @@ QgsLegendSymbolItem::QgsLegendSymbolItem( QgsSymbol *symbol, const QString &labe
 }
 
 QgsLegendSymbolItem::QgsLegendSymbolItem( const QgsLegendSymbolItem &other )
-
 {
   *this = other;
 }
@@ -56,7 +47,8 @@ QgsLegendSymbolItem &QgsLegendSymbolItem::operator=( const QgsLegendSymbolItem &
   if ( this == &other )
     return *this;
 
-  setSymbol( other.mSymbol );
+  delete mSymbol;
+  mSymbol = other.mSymbol ? other.mSymbol->clone() : nullptr;
   mLabel = other.mLabel;
   mKey = other.mKey;
   mCheckable = other.mCheckable;

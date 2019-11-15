@@ -26,12 +26,14 @@
 #include "qgsproject.h"
 #include "qgsmessagelog.h"
 #include "qgsexception.h"
+#include "qgsexpressioncontextutils.h"
 
 QgsVectorLayerFeatureSource::QgsVectorLayerFeatureSource( const QgsVectorLayer *layer )
 {
   QMutexLocker locker( &layer->mFeatureSourceConstructorMutex );
   mProviderFeatureSource = layer->dataProvider()->featureSource();
   mFields = layer->fields();
+  mId = layer->id();
 
   // update layer's join caches if necessary
   if ( layer->mJoinBuffer->containsJoins() )
@@ -107,6 +109,11 @@ QgsCoordinateReferenceSystem QgsVectorLayerFeatureSource::crs() const
   return mCrs;
 }
 
+QString QgsVectorLayerFeatureSource::id() const
+{
+  return mId;
+}
+
 
 QgsVectorLayerFeatureIterator::QgsVectorLayerFeatureIterator( QgsVectorLayerFeatureSource *source, bool ownSource, const QgsFeatureRequest &request )
   : QgsAbstractFeatureIteratorFromSource<QgsVectorLayerFeatureSource>( source, ownSource, request )
@@ -115,7 +122,7 @@ QgsVectorLayerFeatureIterator::QgsVectorLayerFeatureIterator( QgsVectorLayerFeat
 {
   if ( mRequest.destinationCrs().isValid() && mRequest.destinationCrs() != mSource->mCrs )
   {
-    mTransform = QgsCoordinateTransform( mSource->mCrs, mRequest.destinationCrs() );
+    mTransform = QgsCoordinateTransform( mSource->mCrs, mRequest.destinationCrs(), mRequest.transformContext() );
   }
   try
   {
@@ -124,7 +131,7 @@ QgsVectorLayerFeatureIterator::QgsVectorLayerFeatureIterator( QgsVectorLayerFeat
   catch ( QgsCsException & )
   {
     // can't reproject mFilterRect
-    mClosed = true;
+    close();
     return;
   }
   if ( !mFilterRect.isNull() )
@@ -158,16 +165,16 @@ QgsVectorLayerFeatureIterator::QgsVectorLayerFeatureIterator( QgsVectorLayerFeat
   // values
   if ( mRequest.destinationCrs().isValid() )
   {
-    mProviderRequest.setDestinationCrs( QgsCoordinateReferenceSystem() );
+    mProviderRequest.setDestinationCrs( QgsCoordinateReferenceSystem(), mRequest.transformContext() );
   }
 
   if ( mProviderRequest.flags() & QgsFeatureRequest::SubsetOfAttributes )
   {
     // prepare list of attributes to match provider fields
     QSet<int> providerSubset;
-    QgsAttributeList subset = mProviderRequest.subsetOfAttributes();
+    const QgsAttributeList subset = mProviderRequest.subsetOfAttributes();
     int nPendingFields = mSource->mFields.count();
-    Q_FOREACH ( int attrIndex, subset )
+    for ( int attrIndex : subset )
     {
       if ( attrIndex < 0 || attrIndex >= nPendingFields )
         continue;
@@ -182,9 +189,10 @@ QgsVectorLayerFeatureIterator::QgsVectorLayerFeatureIterator( QgsVectorLayerFeat
     // and only modify the subset if we cannot.
     if ( !mProviderRequest.orderBy().isEmpty() )
     {
-      Q_FOREACH ( const QString &attr, mProviderRequest.orderBy().usedAttributes() )
+      const auto usedAttributeIndices = mProviderRequest.orderBy().usedAttributeIndices( mSource->mFields );
+      for ( int attrIndex : usedAttributeIndices )
       {
-        providerSubset << mSource->mFields.lookupField( attr );
+        providerSubset << attrIndex;
       }
     }
 
@@ -193,7 +201,9 @@ QgsVectorLayerFeatureIterator::QgsVectorLayerFeatureIterator( QgsVectorLayerFeat
 
   if ( mProviderRequest.filterType() == QgsFeatureRequest::FilterExpression )
   {
-    Q_FOREACH ( const QString &field, mProviderRequest.filterExpression()->referencedColumns() )
+    const bool needsGeom = mProviderRequest.filterExpression()->needsGeometry();
+    const auto constReferencedColumns = mProviderRequest.filterExpression()->referencedColumns();
+    for ( const QString &field : constReferencedColumns )
     {
       int idx = source->mFields.lookupField( field );
 
@@ -204,6 +214,12 @@ QgsVectorLayerFeatureIterator::QgsVectorLayerFeatureIterator( QgsVectorLayerFeat
         mProviderRequest.disableFilter();
         // can't limit at provider side
         mProviderRequest.setLimit( -1 );
+        if ( needsGeom )
+        {
+          // have to get geometry from provider in order to evaluate expression on client
+          mProviderRequest.setFlags( mProviderRequest.flags() & ~QgsFeatureRequest::NoGeometry );
+        }
+        break;
       }
     }
   }
@@ -270,7 +286,67 @@ QgsVectorLayerFeatureIterator::~QgsVectorLayerFeatureIterator()
   close();
 }
 
+/// @cond private
 
+/**
+ * This class guards against infinite recursion.
+ * The counter will be created per thread and hasStackOverflow will return
+ * true if more than maxDepth instances are created in parallel in a thread.
+ */
+class QgsThreadStackOverflowGuard
+{
+  public:
+
+    QgsThreadStackOverflowGuard( QThreadStorage<QStack<QString>> &storage, const QString &stackFrameInformation, int maxDepth )
+      : mStorage( storage )
+      , mMaxDepth( maxDepth )
+    {
+      if ( !storage.hasLocalData() )
+      {
+        storage.setLocalData( QStack<QString>() );
+      }
+
+      storage.localData().push( stackFrameInformation );
+    }
+
+    ~QgsThreadStackOverflowGuard()
+    {
+      mStorage.localData().pop();
+    }
+
+    bool hasStackOverflow() const
+    {
+      if ( mStorage.localData().size() > mMaxDepth )
+        return true;
+      else
+        return false;
+    }
+
+    QString topFrames() const
+    {
+      QStringList dumpStack;
+      const QStack<QString> &stack = mStorage.localData();
+
+      int dumpSize = std::min( stack.size(), 10 );
+      for ( int i = 0; i < dumpSize; ++i )
+      {
+        dumpStack += stack.at( i );
+      }
+
+      return dumpStack.join( '\n' );
+    }
+
+    int depth() const
+    {
+      return mStorage.localData().size();
+    }
+
+  private:
+    QThreadStorage<QStack<QString>> &mStorage;
+    int mMaxDepth;
+};
+
+/// @endcond private
 
 bool QgsVectorLayerFeatureIterator::fetchFeature( QgsFeature &f )
 {
@@ -278,6 +354,16 @@ bool QgsVectorLayerFeatureIterator::fetchFeature( QgsFeature &f )
 
   if ( mClosed )
     return false;
+
+  static QThreadStorage<QStack<QString>> sStack;
+
+  QgsThreadStackOverflowGuard guard( sStack, mSource->id(), 4 );
+
+  if ( guard.hasStackOverflow() )
+  {
+    QgsMessageLog::logMessage( QObject::tr( "Stack overflow, too many nested feature iterators.\nIterated layers:\n%3\n..." ).arg( mSource->id(), guard.topFrames() ), QObject::tr( "General" ), Qgis::Critical );
+    return false;
+  }
 
   if ( mRequest.filterType() == QgsFeatureRequest::FilterFid )
   {
@@ -402,10 +488,15 @@ bool QgsVectorLayerFeatureIterator::close()
   return true;
 }
 
-void QgsVectorLayerFeatureIterator::setInterruptionChecker( QgsInterruptionChecker *interruptionChecker )
+void QgsVectorLayerFeatureIterator::setInterruptionChecker( QgsFeedback *interruptionChecker )
 {
   mProviderIterator.setInterruptionChecker( interruptionChecker );
   mInterruptionChecker = interruptionChecker;
+}
+
+bool QgsVectorLayerFeatureIterator::isValid() const
+{
+  return mProviderIterator.isValid();
 }
 
 bool QgsVectorLayerFeatureIterator::fetchNextAddedFeature( QgsFeature &f )
@@ -602,48 +693,60 @@ void QgsVectorLayerFeatureIterator::prepareJoin( int fieldIdx )
   mFetchJoinInfo[ joinInfo ].attributes.push_back( sourceLayerIndex );
 }
 
+
 void QgsVectorLayerFeatureIterator::prepareExpression( int fieldIdx )
 {
+  static QThreadStorage<QStack<QString>> sStack;
+
+  QgsThreadStackOverflowGuard guard( sStack, mSource->id(), 4 );
+
+  if ( guard.hasStackOverflow() )
+  {
+    QgsMessageLog::logMessage( QObject::tr( "Stack overflow when preparing field %1 of layer %2.\nLast frames:\n%3\n..." ).arg( mSource->fields().at( fieldIdx ).name(), mSource->id(), guard.topFrames() ), QObject::tr( "General" ), Qgis::Critical );
+    return;
+  }
+
   const QList<QgsExpressionFieldBuffer::ExpressionField> &exps = mSource->mExpressionFieldBuffer->expressions();
 
   int oi = mSource->mFields.fieldOriginIndex( fieldIdx );
-  QgsExpression *exp = new QgsExpression( exps[oi].cachedExpression );
+  std::unique_ptr<QgsExpression> exp = qgis::make_unique<QgsExpression>( exps[oi].cachedExpression );
 
   QgsDistanceArea da;
-  da.setSourceCrs( mSource->mCrs );
+  da.setSourceCrs( mSource->mCrs, QgsProject::instance()->transformContext() );
   da.setEllipsoid( QgsProject::instance()->ellipsoid() );
   exp->setGeomCalculator( &da );
   exp->setDistanceUnits( QgsProject::instance()->distanceUnits() );
   exp->setAreaUnits( QgsProject::instance()->areaUnits() );
 
+  if ( !mExpressionContext )
+    createExpressionContext();
   exp->prepare( mExpressionContext.get() );
-  Q_FOREACH ( const QString &col, exp->referencedColumns() )
-  {
-    if ( mSource->fields().lookupField( col ) == fieldIdx )
-    {
-      // circular reference - expression depends on column itself
-      delete exp;
-      return;
-    }
-  }
-  mExpressionFieldInfo.insert( fieldIdx, exp );
+  const QSet<int> referencedColumns = exp->referencedAttributeIndexes( mSource->fields() );
 
-  Q_FOREACH ( const QString &col, exp->referencedColumns() )
+  QSet<int> requestedAttributes = mRequest.subsetOfAttributes().toSet();
+
+  for ( int dependentFieldIdx : referencedColumns )
   {
-    int dependentFieldIdx = mSource->mFields.lookupField( col );
     if ( mRequest.flags() & QgsFeatureRequest::SubsetOfAttributes )
     {
-      mRequest.setSubsetOfAttributes( mRequest.subsetOfAttributes() << dependentFieldIdx );
+      requestedAttributes += dependentFieldIdx;
     }
     // also need to fetch this dependent field
     if ( !mPreparedFields.contains( dependentFieldIdx ) && !mFieldsToPrepare.contains( dependentFieldIdx ) )
       mFieldsToPrepare << dependentFieldIdx;
   }
 
+  if ( mRequest.flags() & QgsFeatureRequest::SubsetOfAttributes )
+  {
+    mRequest.setSubsetOfAttributes( requestedAttributes.toList() );
+  }
+
   if ( exp->needsGeometry() )
   {
     mRequest.setFlags( mRequest.flags() & ~QgsFeatureRequest::NoGeometry );
   }
+
+  mExpressionFieldInfo.insert( fieldIdx, exp.release() );
 }
 
 void QgsVectorLayerFeatureIterator::prepareFields()
@@ -653,10 +756,7 @@ void QgsVectorLayerFeatureIterator::prepareFields()
   mFetchJoinInfo.clear();
   mOrderedJoinInfoList.clear();
 
-  mExpressionContext.reset( new QgsExpressionContext() );
-  mExpressionContext->appendScope( QgsExpressionContextUtils::globalScope() );
-  mExpressionContext->appendScope( QgsExpressionContextUtils::projectScope( QgsProject::instance() ) );
-  mExpressionContext->appendScope( new QgsExpressionContextScope( mSource->mLayerScope ) );
+  mExpressionContext.reset();
 
   mFieldsToPrepare = ( mRequest.flags() & QgsFeatureRequest::SubsetOfAttributes ) ? mRequest.subsetOfAttributes() : mSource->mFields.allAttributesList();
 
@@ -717,12 +817,11 @@ void QgsVectorLayerFeatureIterator::createOrderedJoinList()
       int joinField = mOrderedJoinInfoList.at( i ).joinField;
 
       QgsAttributeList attributes = mOrderedJoinInfoList.at( i ).attributes;
-      QgsAttributeList::const_iterator attIt = attributes.constBegin();
-      for ( ; attIt != attributes.constEnd(); ++attIt )
+      for ( int n = 0; n < attributes.size(); n++ )
       {
-        if ( *attIt != joinField )
+        if ( n != joinField )
         {
-          resolvedFields.insert( joinField < *attIt ? *attIt + offset - 1 : *attIt + offset );
+          resolvedFields.insert( joinField < n ? n + offset - 1 : n + offset );
         }
       }
     }
@@ -757,7 +856,7 @@ bool QgsVectorLayerFeatureIterator::checkGeometryValidity( const QgsFeature &fea
     {
       if ( !feature.geometry().isGeosValid() )
       {
-        QgsMessageLog::logMessage( QObject::tr( "Geometry error: One or more input features have invalid geometry." ), QString(), QgsMessageLog::CRITICAL );
+        QgsMessageLog::logMessage( QObject::tr( "Geometry error: One or more input features have invalid geometry." ), QString(), Qgis::Critical );
         if ( mRequest.invalidGeometryCallback() )
         {
           mRequest.invalidGeometryCallback()( feature );
@@ -770,7 +869,7 @@ bool QgsVectorLayerFeatureIterator::checkGeometryValidity( const QgsFeature &fea
     case QgsFeatureRequest::GeometryAbortOnInvalid:
       if ( !feature.geometry().isGeosValid() )
       {
-        QgsMessageLog::logMessage( QObject::tr( "Geometry error: One or more input features have invalid geometry." ), QString(), QgsMessageLog::CRITICAL );
+        QgsMessageLog::logMessage( QObject::tr( "Geometry error: One or more input features have invalid geometry." ), QString(), Qgis::Critical );
         close();
         if ( mRequest.invalidGeometryCallback() )
         {
@@ -868,9 +967,12 @@ void QgsVectorLayerFeatureIterator::addExpressionAttribute( QgsFeature &f, int a
   QgsExpression *exp = mExpressionFieldInfo.value( attrIndex );
   if ( exp )
   {
+    if ( !mExpressionContext )
+      createExpressionContext();
+
     mExpressionContext->setFeature( f );
     QVariant val = exp->evaluate( mExpressionContext.get() );
-    mSource->mFields.at( attrIndex ).convertCompatible( val );
+    ( void )mSource->mFields.at( attrIndex ).convertCompatible( val );
     f.setAttribute( attrIndex, val );
   }
   else
@@ -881,13 +983,13 @@ void QgsVectorLayerFeatureIterator::addExpressionAttribute( QgsFeature &f, int a
 
 bool QgsVectorLayerFeatureIterator::prepareSimplification( const QgsSimplifyMethod &simplifyMethod )
 {
-  Q_UNUSED( simplifyMethod );
+  Q_UNUSED( simplifyMethod )
   return false;
 }
 
 bool QgsVectorLayerFeatureIterator::providerCanSimplify( QgsSimplifyMethod::MethodType methodType ) const
 {
-  Q_UNUSED( methodType );
+  Q_UNUSED( methodType )
   return false;
 }
 
@@ -944,10 +1046,12 @@ void QgsVectorLayerFeatureIterator::FetchJoinInfo::addJoinedAttributesDirect( Qg
 
   // maybe user requested just a subset of layer's attributes
   // so we do not have to cache everything
-  bool hasSubset = joinInfo->joinFieldNamesSubset();
   QVector<int> subsetIndices;
-  if ( hasSubset )
-    subsetIndices = QgsVectorLayerJoinBuffer::joinSubsetIndices( joinLayer, *joinInfo->joinFieldNamesSubset() );
+  if ( joinInfo->hasSubset() )
+  {
+    const QStringList subsetNames = QgsVectorLayerJoinInfo::joinFieldNamesSubset( *joinInfo );
+    subsetIndices = QgsVectorLayerJoinBuffer::joinSubsetIndices( joinLayer, subsetNames );
+  }
 
   // select (no geometry)
   QgsFeatureRequest request;
@@ -963,7 +1067,7 @@ void QgsVectorLayerFeatureIterator::FetchJoinInfo::addJoinedAttributesDirect( Qg
   {
     int index = indexOffset;
     QgsAttributes attr = fet.attributes();
-    if ( hasSubset )
+    if ( joinInfo->hasSubset() )
     {
       for ( int i = 0; i < subsetIndices.count(); ++i )
         f.setAttribute( index++, attr.at( subsetIndices.at( i ) ) );
@@ -1061,9 +1165,17 @@ void QgsVectorLayerFeatureIterator::updateFeatureGeometry( QgsFeature &f )
     f.setGeometry( mSource->mChangedGeometries[f.id()] );
 }
 
+void QgsVectorLayerFeatureIterator::createExpressionContext()
+{
+  mExpressionContext = qgis::make_unique< QgsExpressionContext >();
+  mExpressionContext->appendScope( QgsExpressionContextUtils::globalScope() );
+  mExpressionContext->appendScope( QgsExpressionContextUtils::projectScope( QgsProject::instance() ) );
+  mExpressionContext->appendScope( new QgsExpressionContextScope( mSource->mLayerScope ) );
+}
+
 bool QgsVectorLayerFeatureIterator::prepareOrderBy( const QList<QgsFeatureRequest::OrderByClause> &orderBys )
 {
-  Q_UNUSED( orderBys );
+  Q_UNUSED( orderBys )
   return true;
 }
 
@@ -1077,13 +1189,20 @@ QgsVectorLayerSelectedFeatureSource::QgsVectorLayerSelectedFeatureSource( QgsVec
   , mSelectedFeatureIds( layer->selectedFeatureIds() )
   , mWkbType( layer->wkbType() )
   , mName( layer->name() )
+  , mLayer( layer )
 {}
 
 QgsFeatureIterator QgsVectorLayerSelectedFeatureSource::getFeatures( const QgsFeatureRequest &request ) const
 {
   QgsFeatureRequest req( request );
 
-  if ( req.filterFids().isEmpty() && req.filterType() != QgsFeatureRequest::FilterFid )
+  // while QgsVectorLayerSelectedFeatureIterator will reject any features not in mSelectedFeatureIds,
+  // we still tweak the feature request to only request selected feature ids wherever we can -- this
+  // allows providers to optimise the request and avoid requesting features we don't need
+  // note that we can't do this for some request types - e.g. expression based requests, so
+  // in that case we just pass the request on to the provider and let QgsVectorLayerSelectedFeatureIterator
+  // do ALL the filtering
+  if ( req.filterFids().isEmpty() && req.filterType() == QgsFeatureRequest::FilterNone )
   {
     req.setFilterFids( mSelectedFeatureIds );
   }
@@ -1094,7 +1213,7 @@ QgsFeatureIterator QgsVectorLayerSelectedFeatureSource::getFeatures( const QgsFe
     req.setFilterFids( reqIds );
   }
 
-  return mSource.getFeatures( req );
+  return QgsFeatureIterator( new QgsVectorLayerSelectedFeatureIterator( mSelectedFeatureIds, req, mSource ) );
 }
 
 QgsCoordinateReferenceSystem QgsVectorLayerSelectedFeatureSource::sourceCrs() const
@@ -1121,3 +1240,53 @@ QString QgsVectorLayerSelectedFeatureSource::sourceName() const
 {
   return mName;
 }
+
+QgsExpressionContextScope *QgsVectorLayerSelectedFeatureSource::createExpressionContextScope() const
+{
+  if ( mLayer )
+    return mLayer->createExpressionContextScope();
+  else
+    return nullptr;
+}
+
+//
+// QgsVectorLayerSelectedFeatureIterator
+//
+
+///@cond PRIVATE
+QgsVectorLayerSelectedFeatureIterator::QgsVectorLayerSelectedFeatureIterator( const QgsFeatureIds &selectedFeatureIds, const QgsFeatureRequest &request, QgsVectorLayerFeatureSource &source )
+  : QgsAbstractFeatureIterator( request )
+  , mSelectedFeatureIds( selectedFeatureIds )
+{
+  QgsFeatureRequest sourceRequest = request;
+  if ( sourceRequest.filterType() == QgsFeatureRequest::FilterExpression && sourceRequest.limit() > 0 )
+  {
+    // we can't pass the request limit to the provider here - otherwise the provider will
+    // limit the number of returned features and may only return a bunch of matching features
+    // which AREN'T in the selected feature set
+    sourceRequest.setLimit( -1 );
+  }
+  mIterator = source.getFeatures( sourceRequest );
+}
+
+bool QgsVectorLayerSelectedFeatureIterator::rewind()
+{
+  return mIterator.rewind();
+}
+
+bool QgsVectorLayerSelectedFeatureIterator::close()
+{
+  return mIterator.close();
+}
+
+bool QgsVectorLayerSelectedFeatureIterator::fetchFeature( QgsFeature &f )
+{
+  while ( mIterator.nextFeature( f ) )
+  {
+    if ( mSelectedFeatureIds.contains( f.id() ) )
+      return true;
+  }
+  return false;
+}
+
+///@endcond

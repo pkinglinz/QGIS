@@ -23,9 +23,10 @@
 #include "qgsguiutils.h"
 #include "qgis_gui.h"
 
-class QgsAuthConfigSelect;
+class QgsAuthSettingsWidget;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \brief Dialog to allow the user to configure and save connection
  * information for an HTTP Server for WMS, etc.
  */
@@ -55,6 +56,8 @@ class GUI_EXPORT QgsNewHttpConnection : public QDialog, private Ui::QgsNewHttpCo
     enum Flag
     {
       FlagShowTestConnection = 1 << 1, //!< Display the 'test connection' button
+      FlagHideAuthenticationGroup = 1 << 2, //!< Hide the Authentication group
+      FlagShowHttpSettings = 1 << 3, //!< Display the 'http' group
     };
     Q_DECLARE_FLAGS( Flags, Flag )
 
@@ -71,7 +74,7 @@ class GUI_EXPORT QgsNewHttpConnection : public QDialog, private Ui::QgsNewHttpCo
                           QgsNewHttpConnection::ConnectionTypes types = ConnectionWms,
                           const QString &baseKey = "qgis/connections-wms/",
                           const QString &connectionName = QString(),
-                          QgsNewHttpConnection::Flags flags = 0,
+                          QgsNewHttpConnection::Flags flags = nullptr,
                           Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags );
 
     /**
@@ -95,11 +98,23 @@ class GUI_EXPORT QgsNewHttpConnection : public QDialog, private Ui::QgsNewHttpCo
     void nameChanged( const QString & );
     void urlChanged( const QString & );
     void updateOkButtonState();
+    void wfsVersionCurrentIndexChanged( int index );
+    void wfsFeaturePagingStateChanged( int state );
 
   protected:
 
+    //! Index of wfsVersionComboBox
+    enum WfsVersionIndex
+    {
+      WFS_VERSION_MAX = 0,
+      WFS_VERSION_1_0 = 1,
+      WFS_VERSION_1_1 = 2,
+      WFS_VERSION_2_0 = 3,
+      WFS_VERSION_API_FEATURES_1_0 = 4,
+    };
+
     /**
-     * Returns true if dialog settings are valid, or false if current
+     * Returns TRUE if dialog settings are valid, or FALSE if current
      * settings are not valid and the dialog should not be acceptable.
      * \since QGIS 3.0
      */
@@ -110,6 +125,42 @@ class GUI_EXPORT QgsNewHttpConnection : public QDialog, private Ui::QgsNewHttpCo
      * \since QGIS 3.0
      */
     QPushButton *testConnectButton();
+
+    /**
+     * Returns the current authentication settings widget.
+     * \since QGIS 3.8
+     */
+    QgsAuthSettingsWidget *authSettingsWidget() SIP_SKIP;
+
+    /**
+     * Returns the "WFS version detect" button.
+     * \since QGIS 3.2
+     */
+    QPushButton *wfsVersionDetectButton() SIP_SKIP;
+
+    /**
+     * Returns the "WFS version" combobox.
+     * \since QGIS 3.2
+     */
+    QComboBox *wfsVersionComboBox() SIP_SKIP;
+
+    /**
+     * Returns the "WFS paging enabled" checkbox
+     * \since QGIS 3.2
+     */
+    QCheckBox *wfsPagingEnabledCheckBox() SIP_SKIP;
+
+    /**
+     * Returns the "WFS page size" edit
+     * \since QGIS 3.2
+     */
+    QLineEdit *wfsPageSizeLineEdit() SIP_SKIP;
+
+    /**
+     * Returns the url.
+     * \since QGIS 3.2
+     */
+    QUrl urlTrimmed() const SIP_SKIP;
 
     /**
      * Returns the QSettings key for WFS related settings for the connection.
@@ -139,7 +190,6 @@ class GUI_EXPORT QgsNewHttpConnection : public QDialog, private Ui::QgsNewHttpCo
     QString mBaseKey;
     QString mCredentialsBaseKey;
     QString mOriginalConnName; //store initial name to delete entry in case of rename
-    QgsAuthConfigSelect *mAuthConfigSelect = nullptr;
     void showHelp();
 
 };

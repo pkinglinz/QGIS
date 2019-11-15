@@ -20,10 +20,10 @@
 #include "qgsguiutils.h"
 #include "qgsproviderregistry.h"
 #include "qgsabstractdatasourcewidget.h"
+#include "qgsdelimitedtextfile.h"
 
 class QButtonGroup;
 class QgisInterface;
-class QgsDelimitedTextFile;
 
 /**
  * \class QgsDelimitedTextSourceSelect
@@ -34,14 +34,10 @@ class QgsDelimitedTextSourceSelect : public QgsAbstractDataSourceWidget, private
 
   public:
     QgsDelimitedTextSourceSelect( QWidget *parent = nullptr, Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags, QgsProviderRegistry::WidgetMode widgetMode = QgsProviderRegistry::WidgetMode::None );
-    ~QgsDelimitedTextSourceSelect();
-
-    QStringList splitLine( QString line );
 
   private:
     bool loadDelimitedFileDefinition();
     void updateFieldLists();
-    void getOpenFileName();
     QString selectedChars();
     void setSelectedChars( const QString &delimiters );
     void loadSettings( const QString &subkey = QString(), bool loadGeomSettings = true );
@@ -51,17 +47,14 @@ class QgsDelimitedTextSourceSelect : public QgsAbstractDataSourceWidget, private
     bool trySetXYField( QStringList &fields, QList<bool> &isValidNumber, const QString &xname, const QString &yname );
 
   private:
-    QgsDelimitedTextFile *mFile = nullptr;
-    int mExampleRowCount;
-    int mBadRowCount;
-    QString mPluginKey;
+    std::unique_ptr<QgsDelimitedTextFile> mFile;
+    int mExampleRowCount = 20;
+    int mBadRowCount = 0;
+    QString mSettingsKey;
     QString mLastFileType;
     QButtonGroup *bgFileFormat = nullptr;
     QButtonGroup *bgGeomType = nullptr;
     void showHelp();
-
-  private slots:
-    void on_btnBrowseForFile_clicked();
 
   public slots:
     void addButtonClicked() override;

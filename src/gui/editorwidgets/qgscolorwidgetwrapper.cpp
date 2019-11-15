@@ -18,8 +18,8 @@
 #include <QLayout>
 
 
-QgsColorWidgetWrapper::QgsColorWidgetWrapper( QgsVectorLayer *vl, int fieldIdx, QWidget *editor, QWidget *parent )
-  : QgsEditorWidgetWrapper( vl, fieldIdx, editor, parent )
+QgsColorWidgetWrapper::QgsColorWidgetWrapper( QgsVectorLayer *layer, int fieldIdx, QWidget *editor, QWidget *parent )
+  : QgsEditorWidgetWrapper( layer, fieldIdx, editor, parent )
 
 {
 }
@@ -66,7 +66,7 @@ void QgsColorWidgetWrapper::initWidget( QWidget *editor )
   }
 
   mColorButton->setShowNull( true );
-  connect( mColorButton, &QgsColorButton::colorChanged, this, static_cast<void ( QgsEditorWidgetWrapper::* )()>( &QgsEditorWidgetWrapper::valueChanged ) );
+  connect( mColorButton, &QgsColorButton::colorChanged, this, static_cast<void ( QgsEditorWidgetWrapper::* )()>( &QgsEditorWidgetWrapper::emitValueChanged ) );
 }
 
 bool QgsColorWidgetWrapper::valid() const
@@ -74,13 +74,13 @@ bool QgsColorWidgetWrapper::valid() const
   return mColorButton;
 }
 
-void QgsColorWidgetWrapper::setValue( const QVariant &value )
+void QgsColorWidgetWrapper::updateValues( const QVariant &value, const QVariantList & )
 {
   if ( mColorButton )
     mColorButton->setColor( !value.isNull() ? QColor( value.toString() ) : QColor() );
 }
 
-void QgsColorWidgetWrapper::updateConstraintWidgetStatus( ConstraintResult /*constraintValid*/ )
+void QgsColorWidgetWrapper::updateConstraintWidgetStatus()
 {
   // nothing
 }

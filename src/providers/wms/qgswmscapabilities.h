@@ -25,6 +25,9 @@
 #include "qgsraster.h"
 #include "qgsrectangle.h"
 #include "qgsrasteriterator.h"
+#include "qgsapplication.h"
+#include "qgsdataprovider.h"
+
 
 class QNetworkReply;
 
@@ -40,7 +43,7 @@ struct QgsWmsOnlineResourceAttribute
   QString xlinkHref;
 };
 
-//! Get Property structure
+//! Gets Property structure
 // TODO: Fill to WMS specifications
 struct QgsWmsGetProperty
 {
@@ -138,9 +141,9 @@ struct QgsWmsServiceProperty
   QgsWmsContactInformationProperty   contactInformation;
   QString                            fees;
   QString                            accessConstraints;
-  uint                               layerLimit;
-  uint                               maxWidth;
-  uint                               maxHeight;
+  uint                               layerLimit = 0;
+  uint                               maxWidth = 0;
+  uint                               maxHeight = 0;
 };
 
 //! Bounding Box Property structure
@@ -305,7 +308,7 @@ struct QgsWmtsTheme
   QgsWmtsTheme *subTheme = nullptr;
   QStringList layerRefs;
 
-  QgsWmtsTheme() : subTheme( nullptr ) {}
+  QgsWmtsTheme() = default;
   ~QgsWmtsTheme() { delete subTheme; }
 };
 
@@ -324,16 +327,22 @@ struct QgsWmtsTileMatrix
   int matrixHeight;  //!< Number of tiles vertically
   double tres;       //!< Pixel span in map units
 
-  //! Returns extent of a tile in map coordinates.
-  //! (same function as tileBBox() but returns QRectF instead of QgsRectangle)
+  /**
+   * Returns extent of a tile in map coordinates.
+   * (same function as tileBBox() but returns QRectF instead of QgsRectangle)
+   */
   QRectF tileRect( int col, int row ) const;
 
-  //! Returns extent of a tile in map coordinates
-  //! (same function as tileRect() but returns QgsRectangle instead of QRectF)
+  /**
+   * Returns extent of a tile in map coordinates
+   * (same function as tileRect() but returns QgsRectangle instead of QRectF)
+   */
   QgsRectangle tileBBox( int col, int row ) const;
 
-  //! Returns range of tiles that intersects with the view extent
-  //! (tml may be null)
+  /**
+   * Returns range of tiles that intersects with the view extent
+   * (\a tml may be NULLPTR)
+   */
   void viewExtentIntersection( const QgsRectangle &viewExtent, const QgsWmtsTileMatrixLimits *tml, int &col0, int &row0, int &col1, int &row1 ) const;
 
 };
@@ -352,7 +361,7 @@ struct QgsWmtsTileMatrixSet
   //! Returns closest tile resolution to the requested one. (resolution = width [map units] / with [pixels])
   const QgsWmtsTileMatrix *findNearestResolution( double vres ) const;
 
-  //! Return tile matrix for other near resolution from given tres (positive offset = lower resolution tiles)
+  //! Returns the tile matrix for other near resolution from given tres (positive offset = lower resolution tiles)
   const QgsWmtsTileMatrix *findOtherResolution( double tres, int offset ) const;
 };
 
@@ -416,6 +425,7 @@ struct QgsWmtsTileLayer
   QStringList formats;
   QStringList infoFormats;
   QString defaultStyle;
+  int dpi = -1;   //!< DPI of the tile layer (-1 for unknown DPI)
   //! available dimensions (optional, for multi-dimensional data)
   QHash<QString, QgsWmtsDimension> dimensions;
   QHash<QString, QgsWmtsStyle> styles;
@@ -500,25 +510,25 @@ struct QgsWmsAuthorization
   {
     if ( !mAuthCfg.isEmpty() )
     {
-      return QgsAuthManager::instance()->updateNetworkRequest( request, mAuthCfg );
+      return QgsApplication::authManager()->updateNetworkRequest( request, mAuthCfg );
     }
-    else if ( !mUserName.isNull() || !mPassword.isNull() )
+    else if ( !mUserName.isEmpty() || !mPassword.isEmpty() )
     {
       request.setRawHeader( "Authorization", "Basic " + QStringLiteral( "%1:%2" ).arg( mUserName, mPassword ).toLatin1().toBase64() );
     }
 
-    if ( !mReferer.isNull() )
+    if ( !mReferer.isEmpty() )
     {
       request.setRawHeader( "Referer", QStringLiteral( "%1" ).arg( mReferer ).toLatin1() );
     }
     return true;
   }
-  //! set authorization reply
+  //! Sets authorization reply
   bool setAuthorizationReply( QNetworkReply *reply ) const
   {
     if ( !mAuthCfg.isEmpty() )
     {
-      return QgsAuthManager::instance()->updateNetworkReply( reply, mAuthCfg );
+      return QgsApplication::authManager()->updateNetworkReply( reply, mAuthCfg );
     }
     return true;
   }
@@ -583,6 +593,7 @@ class QgsWmsSettings
 
     bool mIgnoreGetMapUrl;
     bool mIgnoreGetFeatureInfoUrl;
+    bool mIgnoreReportedLayerExtents = false;
     bool mSmoothPixmapTransform;
     enum QgsWmsDpiMode mDpiMode;
 
@@ -618,7 +629,11 @@ class QgsWmsSettings
 class QgsWmsCapabilities
 {
   public:
-    QgsWmsCapabilities();
+
+    /**
+     * Constructs a QgsWmsCapabilities object with the given \a coordinateTransformContext
+     */
+    QgsWmsCapabilities( const QgsCoordinateTransformContext &coordinateTransformContext = QgsCoordinateTransformContext() );
 
     bool isValid() const { return mValid; }
 
@@ -632,13 +647,13 @@ class QgsWmsCapabilities
     /**
      * \brief   Returns a list of the supported layers of the WMS server
      *
-     * \retval The list of layers will be placed here.
+     * \returns The list of layers will be placed here.
      *
      * \todo Document this better
      */
     QVector<QgsWmsLayerProperty> supportedLayers() const { return mLayersSupported; }
 
-    //! get raster image encodings supported by the WMS, expressed as MIME types
+    //! Gets raster image encodings supported by the WMS, expressed as MIME types
     QStringList supportedImageEncodings() const { return mCapabilities.capability.request.getMap.format; }
 
     /**
@@ -649,7 +664,7 @@ class QgsWmsCapabilities
     /**
      * \brief   Returns a list of the supported tile layers of the WMS server
      *
-     * \retval The list of tile sets will be placed here.
+     * \returns The list of tile sets will be placed here.
      */
     QList<QgsWmtsTileLayer> supportedTileLayers() const { return mTileLayersSupported; }
 
@@ -700,7 +715,7 @@ class QgsWmsCapabilities
     bool detectTileLayerBoundingBox( QgsWmtsTileLayer &l );
 
   protected:
-    bool mValid;
+    bool mValid = false;
 
     QString mError;
     QString mErrorCaption;
@@ -709,7 +724,7 @@ class QgsWmsCapabilities
     QgsWmsParserSettings mParserSettings;
 
     //! number of layers and parents
-    int mLayerCount;
+    int mLayerCount = -1;
     QMap<int, int> mLayerParents;
     QMap<int, QStringList> mLayerParentNames;
 
@@ -751,12 +766,17 @@ class QgsWmsCapabilities
     //temporarily caches invert axis setting for each crs
     QHash<QString, bool> mCrsInvertAxis;
 
+  private:
+
+    QgsCoordinateTransformContext mCoordinateTransformContext;
+
     friend class QgsWmsProvider;
 };
 
 
 
-/** Class that handles download of capabilities.
+/**
+ * Class that handles download of capabilities.
  */
 class QgsWmsCapabilitiesDownload : public QObject
 {
@@ -767,7 +787,7 @@ class QgsWmsCapabilitiesDownload : public QObject
 
     QgsWmsCapabilitiesDownload( const QString &baseUrl, const QgsWmsAuthorization &auth, bool forceRefresh, QObject *parent = nullptr );
 
-    virtual ~QgsWmsCapabilitiesDownload();
+    ~QgsWmsCapabilitiesDownload() override;
 
     bool downloadCapabilities();
 

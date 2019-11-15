@@ -18,7 +18,6 @@
 #ifndef QGSREFERENCEDGEOMETRY_H
 #define QGSREFERENCEDGEOMETRY_H
 
-#include "qgis.h"
 #include "qgis_sip.h"
 #include "qgis_core.h"
 #include "qgscoordinatereferencesystem.h"
@@ -33,8 +32,8 @@
  * (such as rectangles) which have an optional coordinate reference system
  * associated with them.
  *
- * \since QGIS 3.0
  * \see QgsReferencedRectangle
+ * \since QGIS 3.0
  */
 class CORE_EXPORT QgsReferencedGeometryBase
 {
@@ -91,6 +90,17 @@ class CORE_EXPORT QgsReferencedRectangle : public QgsRectangle, public QgsRefere
       return QVariant::fromValue( *this );
     }
 
+    bool operator==( const QgsReferencedRectangle &other );
+    bool operator!=( const QgsReferencedRectangle &other );
+
+#ifdef SIP_RUN
+    SIP_PYOBJECT __repr__();
+    % MethodCode
+    QString str = QStringLiteral( "<QgsReferencedRectangle: %1 (%2)>" ).arg( sipCpp->asWktCoordinates(), sipCpp->crs().authid() );
+    sipRes = PyUnicode_FromString( str.toUtf8().constData() );
+    % End
+#endif
+
 };
 
 Q_DECLARE_METATYPE( QgsReferencedRectangle )
@@ -120,6 +130,17 @@ class CORE_EXPORT QgsReferencedPointXY : public QgsPointXY, public QgsReferenced
     {
       return QVariant::fromValue( *this );
     }
+
+    bool operator==( const QgsReferencedPointXY &other );
+    bool operator!=( const QgsReferencedPointXY &other );
+
+#ifdef SIP_RUN
+    SIP_PYOBJECT __repr__();
+    % MethodCode
+    QString str = QStringLiteral( "<QgsReferencedPointXY: %1 (%2)>" ).arg( sipCpp->asWkt(), sipCpp->crs().authid() );
+    sipRes = PyUnicode_FromString( str.toUtf8().constData() );
+    % End
+#endif
 
 };
 

@@ -24,8 +24,6 @@
 
 QgsTransactionGroup::QgsTransactionGroup( QObject *parent )
   : QObject( parent )
-  , mEditingStarting( false )
-  , mEditingStopping( false )
 {
 
 }
@@ -35,8 +33,7 @@ bool QgsTransactionGroup::addLayer( QgsVectorLayer *layer )
   if ( !QgsTransaction::supportsTransaction( layer ) )
     return false;
 
-  QString connString = QgsDataSourceUri( layer->source() ).connectionInfo();
-
+  QString connString = QgsTransaction::connectionString( layer->source() );
   if ( mConnString.isEmpty() )
   {
     mConnString = connString;
@@ -62,7 +59,8 @@ QSet<QgsVectorLayer *> QgsTransactionGroup::layers() const
 
 bool QgsTransactionGroup::modified() const
 {
-  Q_FOREACH ( QgsVectorLayer *layer, mLayers )
+  const auto constMLayers = mLayers;
+  for ( QgsVectorLayer *layer : constMLayers )
   {
     if ( layer->isModified() )
       return true;
@@ -76,11 +74,14 @@ void QgsTransactionGroup::onEditingStarted()
     return;
 
   mTransaction.reset( QgsTransaction::create( mConnString, mProviderKey ) );
+  if ( !mTransaction )
+    return;
 
   QString errorMsg;
   mTransaction->begin( errorMsg );
 
-  Q_FOREACH ( QgsVectorLayer *layer, mLayers )
+  const auto constMLayers = mLayers;
+  for ( QgsVectorLayer *layer : constMLayers )
   {
     mTransaction->addLayer( layer );
     layer->startEditing();
@@ -106,7 +107,8 @@ void QgsTransactionGroup::onCommitChanges()
   QString errMsg;
   if ( mTransaction->commit( errMsg ) )
   {
-    Q_FOREACH ( QgsVectorLayer *layer, mLayers )
+    const auto constMLayers = mLayers;
+    for ( QgsVectorLayer *layer : constMLayers )
     {
       if ( layer != sender() )
         layer->commitChanges();
@@ -118,7 +120,7 @@ void QgsTransactionGroup::onCommitChanges()
   {
     emit commitError( errMsg );
     // Restart editing the calling layer in the next event loop cycle
-    QTimer::singleShot( 0, triggeringLayer, SLOT( startEditing() ) );
+    QTimer::singleShot( 0, triggeringLayer, &QgsVectorLayer::startEditing );
   }
   mEditingStopping = false;
 }
@@ -135,7 +137,8 @@ void QgsTransactionGroup::onRollback()
   QString errMsg;
   if ( mTransaction->rollback( errMsg ) )
   {
-    Q_FOREACH ( QgsVectorLayer *layer, mLayers )
+    const auto constMLayers = mLayers;
+    for ( QgsVectorLayer *layer : constMLayers )
     {
       if ( layer != triggeringLayer )
         layer->rollBack();
@@ -145,7 +148,7 @@ void QgsTransactionGroup::onRollback()
   else
   {
     // Restart editing the calling layer in the next event loop cycle
-    QTimer::singleShot( 0, triggeringLayer, SLOT( startEditing() ) );
+    QTimer::singleShot( 0, triggeringLayer, &QgsVectorLayer::startEditing );
   }
   mEditingStopping = false;
 }
@@ -154,7 +157,8 @@ void QgsTransactionGroup::disableTransaction()
 {
   mTransaction.reset();
 
-  Q_FOREACH ( QgsVectorLayer *layer, mLayers )
+  const auto constMLayers = mLayers;
+  for ( QgsVectorLayer *layer : constMLayers )
   {
     disconnect( layer, &QgsVectorLayer::beforeCommitChanges, this, &QgsTransactionGroup::onCommitChanges );
     disconnect( layer, &QgsVectorLayer::beforeRollBack, this, &QgsTransactionGroup::onRollback );

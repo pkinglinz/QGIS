@@ -46,13 +46,6 @@ class CORE_EXPORT QgsLayoutGuide : public QObject
 
   public:
 
-    //! Guide orientation
-    enum Orientation
-    {
-      Horizontal, //!< Horizontal guide
-      Vertical, //!< Vertical guide
-    };
-
     /**
      * Constructor for a new guide with the specified \a orientation and
      * initial \a position.
@@ -61,9 +54,9 @@ class CORE_EXPORT QgsLayoutGuide : public QObject
      * Adding the guide to a QgsLayoutGuideCollection will automatically set
      * the corresponding layout for you.
      */
-    QgsLayoutGuide( Orientation orientation, const QgsLayoutMeasurement &position, QgsLayoutItemPage *page );
+    QgsLayoutGuide( Qt::Orientation orientation, QgsLayoutMeasurement position, QgsLayoutItemPage *page );
 
-    ~QgsLayoutGuide();
+    ~QgsLayoutGuide() override;
 
     /**
      * Returns the layout the guide belongs to.
@@ -84,7 +77,7 @@ class CORE_EXPORT QgsLayoutGuide : public QObject
     /**
      * Returns the guide's orientation.
      */
-    Orientation orientation() const;
+    Qt::Orientation orientation() const;
 
     /**
      * Returns the guide's position within the page.
@@ -104,7 +97,7 @@ class CORE_EXPORT QgsLayoutGuide : public QObject
      *
      * \see position()
      */
-    void setPosition( const QgsLayoutMeasurement &position );
+    void setPosition( QgsLayoutMeasurement position );
 
     /**
      * Returns the page the guide is contained within.
@@ -151,7 +144,7 @@ class CORE_EXPORT QgsLayoutGuide : public QObject
 
   private:
 
-    Orientation mOrientation = Vertical;
+    Qt::Orientation mOrientation = Qt::Vertical;
 
     //! Horizontal/vertical position of guide on page
     QgsLayoutMeasurement mPosition;
@@ -194,7 +187,7 @@ class CORE_EXPORT QgsLayoutGuideCollection : public QAbstractTableModel, public 
      * and linked to the specified \a pageCollection.
      */
     QgsLayoutGuideCollection( QgsLayout *layout, QgsLayoutPageCollection *pageCollection );
-    ~QgsLayoutGuideCollection();
+    ~QgsLayoutGuideCollection() override;
 
     QString stringType() const override { return QStringLiteral( "LayoutGuideCollection" ); }
     QgsLayout *layout() override;
@@ -243,12 +236,17 @@ class CORE_EXPORT QgsLayoutGuideCollection : public QAbstractTableModel, public 
     void update();
 
     /**
+     * Returns a list of all guides contained in the collection.
+     */
+    QList< QgsLayoutGuide * > guides();
+
+    /**
      * Returns the list of guides contained in the collection with the specified
      * \a orientation and on a matching \a page.
      * If \a page is -1, guides from all pages will be returned.
      * \see guidesOnPage()
      */
-    QList< QgsLayoutGuide * > guides( QgsLayoutGuide::Orientation orientation, int page = -1 );
+    QList< QgsLayoutGuide * > guides( Qt::Orientation orientation, int page = -1 );
 
     /**
      * Returns the list of guides contained on a matching \a page.
@@ -257,7 +255,7 @@ class CORE_EXPORT QgsLayoutGuideCollection : public QAbstractTableModel, public 
     QList< QgsLayoutGuide * > guidesOnPage( int page );
 
     /**
-     * Returns true if the guide lines should be drawn.
+     * Returns TRUE if the guide lines should be drawn.
      * \see setVisible()
      */
     bool visible() const;
@@ -323,7 +321,7 @@ class CORE_EXPORT QgsLayoutGuideProxyModel : public QSortFilterProxyModel
      *
      * Page numbers begin at 0.
      */
-    explicit QgsLayoutGuideProxyModel( QObject *parent SIP_TRANSFERTHIS, QgsLayoutGuide::Orientation orientation, int page );
+    explicit QgsLayoutGuideProxyModel( QObject *parent SIP_TRANSFERTHIS, Qt::Orientation orientation, int page );
 
     /**
      * Sets the current \a page for filtering matching guides. Page numbers begin at 0.
@@ -334,7 +332,7 @@ class CORE_EXPORT QgsLayoutGuideProxyModel : public QSortFilterProxyModel
     bool lessThan( const QModelIndex &left, const QModelIndex &right ) const override;
 
   private:
-    QgsLayoutGuide::Orientation mOrientation = QgsLayoutGuide::Horizontal;
+    Qt::Orientation mOrientation = Qt::Horizontal;
     int mPage = 0;
 
 };

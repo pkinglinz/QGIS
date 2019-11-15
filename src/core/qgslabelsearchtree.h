@@ -23,15 +23,24 @@
 #include "qgis_sip.h"
 #include <QList>
 #include <QVector>
-#include "pointset.h"
-#include "labelposition.h"
 #include "qgspallabeling.h"
 #include "rtree.hpp"
+#include "qgsmapsettings.h"
 
 class QgsPointXY;
 
-/** \ingroup core
- * A class to query the labeling structure at a given point (small wraper around pal RTree class)
+#ifndef SIP_RUN
+namespace pal
+{
+  class LabelPosition;
+}
+#endif
+
+// TODO QGIS 4.0 - this should be private, not exposed to SIP
+
+/**
+ * \ingroup core
+ * A class to query the labeling structure at a given point (small wrapper around pal RTree class)
  */
 class CORE_EXPORT QgsLabelSearchTree
 {
@@ -51,28 +60,39 @@ class CORE_EXPORT QgsLabelSearchTree
     //! Removes and deletes all the entries
     void clear();
 
-    /** Returns label position(s) at a given point. QgsLabelSearchTree keeps ownership, don't delete the LabelPositions
+    /**
+     * Returns label position(s) at a given point. QgsLabelSearchTree keeps ownership, don't delete the LabelPositions
      * \note not available in Python bindings
      * TODO: why does this break bindings with QList<QgsLabelPosition>?
      */
     void label( const QgsPointXY &p, QList<QgsLabelPosition *> &posList ) const SIP_SKIP;
 
-    /** Returns label position(s) in given rectangle. QgsLabelSearchTree keeps ownership, don't delete the LabelPositions
+    /**
+     * Returns label position(s) in given rectangle. QgsLabelSearchTree keeps ownership, don't delete the LabelPositions
      * \note not available in Python bindings
      * TODO: why does this break bindings with QList<QgsLabelPosition>?
      */
     void labelsInRect( const QgsRectangle &r, QList<QgsLabelPosition *> &posList ) const SIP_SKIP;
 
-    /** Inserts label position. Does not take ownership of labelPos
-     * \returns true in case of success
+    /**
+     * Inserts label position. Does not take ownership of labelPos
+     * \returns TRUE in case of success
      * \note not available in Python bindings
      */
-    bool insertLabel( pal::LabelPosition *labelPos, int featureId, const QString &layerName, const QString &labeltext, const QFont &labelfont, bool diagram = false, bool pinned = false, const QString &providerId = QString() ) SIP_SKIP;
+    bool insertLabel( pal::LabelPosition *labelPos, QgsFeatureId featureId, const QString &layerName, const QString &labeltext, const QFont &labelfont, bool diagram = false, bool pinned = false, const QString &providerId = QString(), bool isUnplaced = false ) SIP_SKIP;
+
+    /**
+     * Sets the map \a settings associated with the labeling run.
+     * \since QGIS 3.4.8
+     */
+    void setMapSettings( const QgsMapSettings &settings );
 
   private:
     // set as mutable because RTree template is not const-correct
     mutable pal::RTree<QgsLabelPosition *, double, 2, double> mSpatialIndex;
-    QList< QgsLabelPosition * > mOwnedPositions;
+    std::vector< std::unique_ptr< QgsLabelPosition > > mOwnedPositions;
+    QgsMapSettings mMapSettings;
+    QTransform mTransform;
 
 #ifdef SIP_RUN
     //! QgsLabelSearchTree cannot be copied.

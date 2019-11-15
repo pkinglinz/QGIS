@@ -25,8 +25,10 @@ class QRectF;
 
 #include "qgslegendstyle.h"
 
+class QgsExpressionContext;
 
-/** \ingroup core
+/**
+ * \ingroup core
  * \brief The QgsLegendSettings class stores the appearance and layout settings
  * for legend drawing with QgsLegendRenderer. The content of the legend is given
  * in QgsLegendModel class.
@@ -41,15 +43,15 @@ class CORE_EXPORT QgsLegendSettings
     void setTitle( const QString &t ) { mTitle = t; }
     QString title() const { return mTitle; }
 
-    /** Returns the alignment of the legend title
-     * \returns Qt::AlignmentFlag for the legend title
-     * \see setTitleAlignment
+    /**
+     * Returns the alignment of the legend title.
+     * \see setTitleAlignment()
      */
     Qt::AlignmentFlag titleAlignment() const { return mTitleAlignment; }
 
-    /** Sets the alignment of the legend title
-     * \param alignment Text alignment for drawing the legend title
-     * \see titleAlignment
+    /**
+     * Sets the \a alignment of the legend title.
+     * \see titleAlignment()
      */
     void setTitleAlignment( Qt::AlignmentFlag alignment ) { mTitleAlignment = alignment; }
 
@@ -84,10 +86,49 @@ class CORE_EXPORT QgsLegendSettings
     QColor fontColor() const {return mFontColor;}
     void setFontColor( const QColor &c ) {mFontColor = c;}
 
+    /**
+     * Returns layer font color, defaults to fontColor()
+     * \see setLayerFontColor()
+     * \see fontColor()
+     * \since QGIS 3.4.7
+     */
+    QColor layerFontColor() const {return mLayerFontColor.isValid() ? mLayerFontColor : fontColor() ;}
+
+    /**
+     * Sets layer font color to \a fontColor
+     * Overrides fontColor()
+     * \see layerFontColor()
+     * \see fontColor()
+     * \since QGIS 3.4.7
+     */
+    void setLayerFontColor( const QColor &fontColor ) {mLayerFontColor = fontColor;}
+
+
     QSizeF symbolSize() const {return mSymbolSize;}
     void setSymbolSize( QSizeF s ) {mSymbolSize = s;}
 
-    /** Returns whether a stroke will be drawn around raster symbol items.
+    /**
+     * Sets the \a alignment for placement of legend symbols.
+     *
+     * Only Qt::AlignLeft or Qt::AlignRight are supported values.
+     *
+     * \see symbolAlignment()
+     * \since QGIS 3.10
+     */
+    void setSymbolAlignment( Qt::AlignmentFlag alignment ) { mSymbolAlignment = alignment; }
+
+    /**
+     * Returns the alignment for placement of legend symbols.
+     *
+     * Only Qt::AlignLeft or Qt::AlignRight are supported values.
+     *
+     * \see setSymbolAlignment()
+     * \since QGIS 3.10
+     */
+    Qt::AlignmentFlag symbolAlignment() const { return mSymbolAlignment; }
+
+    /**
+     * Returns whether a stroke will be drawn around raster symbol items.
      * \see setDrawRasterStroke()
      * \see rasterStrokeColor()
      * \see rasterStrokeWidth()
@@ -95,8 +136,9 @@ class CORE_EXPORT QgsLegendSettings
      */
     bool drawRasterStroke() const { return mRasterSymbolStroke; }
 
-    /** Sets whether a stroke will be drawn around raster symbol items.
-     * \param enabled set to true to draw borders
+    /**
+     * Sets whether a stroke will be drawn around raster symbol items.
+     * \param enabled set to TRUE to draw borders
      * \see drawRasterStroke()
      * \see setRasterStrokeColor()
      * \see setRasterStrokeWidth()
@@ -104,8 +146,9 @@ class CORE_EXPORT QgsLegendSettings
      */
     void setDrawRasterStroke( bool enabled ) { mRasterSymbolStroke = enabled; }
 
-    /** Returns the stroke color for the stroke drawn around raster symbol items. The stroke is
-     * only drawn if drawRasterStroke() is true.
+    /**
+     * Returns the stroke color for the stroke drawn around raster symbol items. The stroke is
+     * only drawn if drawRasterStroke() is TRUE.
      * \see setRasterStrokeColor()
      * \see drawRasterStroke()
      * \see rasterStrokeWidth()
@@ -113,8 +156,9 @@ class CORE_EXPORT QgsLegendSettings
      */
     QColor rasterStrokeColor() const { return mRasterStrokeColor; }
 
-    /** Sets the stroke color for the stroke drawn around raster symbol items. The stroke is
-     * only drawn if drawRasterStroke() is true.
+    /**
+     * Sets the stroke color for the stroke drawn around raster symbol items. The stroke is
+     * only drawn if drawRasterStroke() is TRUE.
      * \param color stroke color
      * \see rasterStrokeColor()
      * \see setDrawRasterStroke()
@@ -123,8 +167,9 @@ class CORE_EXPORT QgsLegendSettings
      */
     void setRasterStrokeColor( const QColor &color ) { mRasterStrokeColor = color; }
 
-    /** Returns the stroke width (in millimeters) for the stroke drawn around raster symbol items. The stroke is
-     * only drawn if drawRasterStroke() is true.
+    /**
+     * Returns the stroke width (in millimeters) for the stroke drawn around raster symbol items. The stroke is
+     * only drawn if drawRasterStroke() is TRUE.
      * \see setRasterStrokeWidth()
      * \see drawRasterStroke()
      * \see rasterStrokeColor()
@@ -132,8 +177,9 @@ class CORE_EXPORT QgsLegendSettings
      */
     double rasterStrokeWidth() const { return mRasterStrokeWidth; }
 
-    /** Sets the stroke width for the stroke drawn around raster symbol items. The stroke is
-     * only drawn if drawRasterStroke() is true.
+    /**
+     * Sets the stroke width for the stroke drawn around raster symbol items. The stroke is
+     * only drawn if drawRasterStroke() is TRUE.
      * \param width stroke width in millimeters
      * \see rasterStrokeWidth()
      * \see setDrawRasterStroke()
@@ -168,22 +214,54 @@ class CORE_EXPORT QgsLegendSettings
      */
     void setMapScale( double scale ) { mMapScale = scale; }
 
+    /**
+     * Returns the factor of map units per pixel for symbols with size given in map units calculated by dpi and mmPerMapUnit
+     * \see setMapUnitsPerPixel()
+     * \since QGIS 3.8
+     */
+    double mapUnitsPerPixel() const;
+
+    /**
+     * Sets the mmPerMapUnit calculated by \a mapUnitsPerPixel mostly taken from the map settings.
+     * \see mapUnitsPerPixel()
+     * \since QGIS 3.8
+     */
+    void setMapUnitsPerPixel( double mapUnitsPerPixel );
+
     int dpi() const { return mDpi; }
     void setDpi( int dpi ) { mDpi = dpi; }
 
     // utility functions
 
-    /** Splits a string using the wrap char taking into account handling empty
+    /**
+     * Splits a string using the wrap char taking into account handling empty
+     * wrap char which means no wrapping
+     */
+
+    /**
+     * Returns the actual text to render for a legend item, split into separate lines.
+     *
+     * The expression \a context argument is used to correctly evaluated expressions contained
+     * within legend item text.
+     *
+     * \since QGIS 3.6
+     */
+    QStringList evaluateItemText( const QString &text, const QgsExpressionContext &context ) const;
+
+    /**
+     * Splits a string using the wrap char taking into account handling empty
      * wrap char which means no wrapping
      */
     QStringList splitStringForWrapping( const QString &stringToSplt ) const;
 
-    /** Draws Text. Takes care about all the composer specific issues (calculation to
+    /**
+     * Draws Text. Takes care about all the composer specific issues (calculation to
      * pixel, scaling of font and painter to work around the Qt font bug)
      */
     void drawText( QPainter *p, double x, double y, const QString &text, const QFont &font ) const;
 
-    /** Like the above, but with a rectangle for multiline text
+    /**
+     * Like the above, but with a rectangle for multiline text
      * \param p painter to use
      * \param rect rectangle to draw into
      * \param text text to draw
@@ -217,14 +295,14 @@ class CORE_EXPORT QgsLegendSettings
     QString mTitle;
 
     //! Title alignment, one of Qt::AlignLeft, Qt::AlignHCenter, Qt::AlignRight)
-    Qt::AlignmentFlag mTitleAlignment;
+    Qt::AlignmentFlag mTitleAlignment = Qt::AlignLeft;
 
     QString mWrapChar;
 
     QColor mFontColor;
 
     //! Space between item box and contents
-    qreal mBoxSpace;
+    qreal mBoxSpace = 2;
 
     //! Width and height of symbol icon
     QSizeF mSymbolSize;
@@ -233,37 +311,43 @@ class CORE_EXPORT QgsLegendSettings
     QSizeF mWmsLegendSize;
 
     //! Spacing between lines when wrapped
-    double mLineSpacing;
+    double mLineSpacing = 1;
 
     //! Space between columns
-    double mColumnSpace;
+    double mColumnSpace = 2;
 
     //! Number of legend columns
-    int mColumnCount;
+    int mColumnCount = 1;
 
     //! Allow splitting layers into multiple columns
-    bool mSplitLayer;
+    bool mSplitLayer = false;
 
     //! Use the same width (maximum) for all columns
-    bool mEqualColumnWidth;
+    bool mEqualColumnWidth = false;
 
-    bool mRasterSymbolStroke;
+    bool mRasterSymbolStroke = true;
     QColor mRasterStrokeColor;
-    double mRasterStrokeWidth;
+    double mRasterStrokeWidth = 0.0;
 
     QMap<QgsLegendStyle::Style, QgsLegendStyle> mStyleMap;
 
     //! Conversion ratio between millimeters and map units - for symbols with size given in map units
-    double mMmPerMapUnit;
+    double mMmPerMapUnit = 1;
 
     //! Whether to use advanced effects like opacity for symbols - may require their rasterization
-    bool mUseAdvancedEffects;
+    bool mUseAdvancedEffects = true;
 
     //! Denominator of map's scale
-    double mMapScale;
+    double mMapScale = 1;
 
     //! DPI to be used when rendering legend
-    int mDpi;
+    int mDpi = 96;
+
+    //! Font color for layers, overrides font color
+    QColor mLayerFontColor;
+
+    //! Symbol alignment
+    Qt::AlignmentFlag mSymbolAlignment = Qt::AlignLeft;
 };
 
 

@@ -26,6 +26,8 @@ QgsSingleBandGrayRendererWidget::QgsSingleBandGrayRendererWidget( QgsRasterLayer
   , mDisableMinMaxWidgetRefresh( false )
 {
   setupUi( this );
+  connect( mMinLineEdit, &QLineEdit::textChanged, this, &QgsSingleBandGrayRendererWidget::mMinLineEdit_textChanged );
+  connect( mMaxLineEdit, &QLineEdit::textChanged, this, &QgsSingleBandGrayRendererWidget::mMaxLineEdit_textChanged );
 
   mGradientComboBox->insertItem( 0, tr( "Black to white" ), QgsSingleBandGrayRenderer::BlackToWhite );
   mGradientComboBox->insertItem( 1, tr( "White to black" ), QgsSingleBandGrayRenderer::WhiteToBlack );
@@ -111,12 +113,12 @@ void QgsSingleBandGrayRendererWidget::setMapCanvas( QgsMapCanvas *canvas )
   mMinMaxWidget->setMapCanvas( canvas );
 }
 
-void QgsSingleBandGrayRendererWidget::on_mMinLineEdit_textChanged( const QString & )
+void QgsSingleBandGrayRendererWidget::mMinLineEdit_textChanged( const QString & )
 {
   minMaxModified();
 }
 
-void QgsSingleBandGrayRendererWidget::on_mMaxLineEdit_textChanged( const QString & )
+void QgsSingleBandGrayRendererWidget::mMaxLineEdit_textChanged( const QString & )
 {
   minMaxModified();
 }
@@ -138,9 +140,9 @@ void QgsSingleBandGrayRendererWidget::minMaxModified()
 
 void QgsSingleBandGrayRendererWidget::loadMinMax( int bandNo, double min, double max )
 {
-  Q_UNUSED( bandNo );
+  Q_UNUSED( bandNo )
 
-  QgsDebugMsg( QString( "theBandNo = %1 min = %2 max = %3" ).arg( bandNo ).arg( min ).arg( max ) );
+  QgsDebugMsg( QStringLiteral( "theBandNo = %1 min = %2 max = %3" ).arg( bandNo ).arg( min ).arg( max ) );
 
   mDisableMinMaxWidgetRefresh = true;
   if ( std::isnan( min ) )
@@ -178,17 +180,21 @@ void QgsSingleBandGrayRendererWidget::setFromRenderer( const QgsRasterRenderer *
   {
     //band
     mGrayBandComboBox->setBand( gr->grayBand() );
-    const QgsContrastEnhancement *ce = gr->contrastEnhancement();
-
+    mMinMaxWidget->setBands( QList< int >() << gr->grayBand() );
     mGradientComboBox->setCurrentIndex( mGradientComboBox->findData( gr->gradient() ) );
-    //minmax
-    mDisableMinMaxWidgetRefresh = true;
-    mMinLineEdit->setText( QString::number( ce->minimumValue() ) );
-    mMaxLineEdit->setText( QString::number( ce->maximumValue() ) );
-    mDisableMinMaxWidgetRefresh = false;
-    //contrast enhancement algorithm
-    mContrastEnhancementComboBox->setCurrentIndex(
-      mContrastEnhancementComboBox->findData( ( int )( ce->contrastEnhancementAlgorithm() ) ) );
+
+    const QgsContrastEnhancement *ce = gr->contrastEnhancement();
+    if ( ce )
+    {
+      //minmax
+      mDisableMinMaxWidgetRefresh = true;
+      mMinLineEdit->setText( QString::number( ce->minimumValue() ) );
+      mMaxLineEdit->setText( QString::number( ce->maximumValue() ) );
+      mDisableMinMaxWidgetRefresh = false;
+      //contrast enhancement algorithm
+      mContrastEnhancementComboBox->setCurrentIndex(
+        mContrastEnhancementComboBox->findData( ( int )( ce->contrastEnhancementAlgorithm() ) ) );
+    }
 
     mMinMaxWidget->setFromMinMaxOrigin( gr->minMaxOrigin() );
   }

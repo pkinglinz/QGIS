@@ -19,8 +19,8 @@
 
 #include <QSettings>
 
-QgsValueMapWidgetWrapper::QgsValueMapWidgetWrapper( QgsVectorLayer *vl, int fieldIdx, QWidget *editor, QWidget *parent )
-  : QgsEditorWidgetWrapper( vl, fieldIdx, editor, parent )
+QgsValueMapWidgetWrapper::QgsValueMapWidgetWrapper( QgsVectorLayer *layer, int fieldIdx, QWidget *editor, QWidget *parent )
+  : QgsEditorWidgetWrapper( layer, fieldIdx, editor, parent )
 
 {
 }
@@ -58,16 +58,9 @@ void QgsValueMapWidgetWrapper::initWidget( QWidget *editor )
 
   if ( mComboBox )
   {
-    const QVariantMap map = config().value( QStringLiteral( "map" ) ).toMap();
-    QVariantMap::ConstIterator it = map.constBegin();
-
-    while ( it != map.constEnd() )
-    {
-      mComboBox->addItem( it.key(), it.value() );
-      ++it;
-    }
+    QgsValueMapConfigDlg::populateComboBox( mComboBox, config(), false );
     connect( mComboBox, static_cast<void ( QComboBox::* )( int )>( &QComboBox::currentIndexChanged ),
-             this, static_cast<void ( QgsEditorWidgetWrapper::* )()>( &QgsEditorWidgetWrapper::valueChanged ) );
+             this, static_cast<void ( QgsEditorWidgetWrapper::* )()>( &QgsEditorWidgetWrapper::emitValueChanged ) );
   }
 }
 
@@ -76,7 +69,7 @@ bool QgsValueMapWidgetWrapper::valid() const
   return mComboBox;
 }
 
-void QgsValueMapWidgetWrapper::setValue( const QVariant &value )
+void QgsValueMapWidgetWrapper::updateValues( const QVariant &value, const QVariantList & )
 {
   QString v;
   if ( value.isNull() )

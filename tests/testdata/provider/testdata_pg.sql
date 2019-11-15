@@ -1,4 +1,5 @@
-﻿--
+
+--
 -- PostgreSQL database dump
 --
 
@@ -19,9 +20,23 @@ SET client_min_messages = warning;
 --
 
 CREATE EXTENSION IF NOT EXISTS postgis;
+CREATE EXTENSION IF NOT EXISTS citext;
 
+
+--- Create qgis_test schema
 DROP SCHEMA IF EXISTS qgis_test CASCADE;
 CREATE SCHEMA qgis_test;
+GRANT ALL ON SCHEMA qgis_test TO public;
+ALTER DEFAULT PRIVILEGES IN SCHEMA qgis_test GRANT ALL ON TABLES TO public;
+ALTER DEFAULT PRIVILEGES IN SCHEMA qgis_test GRANT ALL ON SEQUENCES TO public;
+
+
+--- Create "CamelCaseSchema" schema
+DROP SCHEMA IF EXISTS "CamelCaseSchema" CASCADE;
+CREATE SCHEMA "CamelCaseSchema";
+GRANT ALL ON SCHEMA "CamelCaseSchema" TO public;
+ALTER DEFAULT PRIVILEGES IN SCHEMA "CamelCaseSchema" GRANT ALL ON TABLES TO public;
+ALTER DEFAULT PRIVILEGES IN SCHEMA "CamelCaseSchema" GRANT ALL ON SEQUENCES TO public;
 
 
 SET default_tablespace = '';
@@ -30,7 +45,7 @@ SET default_with_oids = false;
 
 --
 -- TOC entry 171 (class 1259 OID 377761)
--- Name: someData; Type: TABLE; Schema: qgis_test; Owner: postgres; Tablespace: 
+-- Name: someData; Type: TABLE; Schema: qgis_test; Owner: postgres; Tablespace:
 --
 
 CREATE TABLE qgis_test."someData" (
@@ -41,6 +56,8 @@ CREATE TABLE qgis_test."someData" (
     num_char text,
     geom public.geometry(Point,4326)
 );
+
+COMMENT ON TABLE qgis_test."someData" IS 'QGIS Test Table';
 
 CREATE TABLE qgis_test."some_poly_data" (
     pk SERIAL NOT NULL,
@@ -73,6 +90,14 @@ INSERT INTO qgis_test."some_poly_data" (pk, geom) VALUES
 (4, NULL)
 ;
 
+
+CREATE TABLE qgis_test.array_tbl (id serial PRIMARY KEY, location int[], geom geometry(Point,3857));
+
+INSERT INTO qgis_test.array_tbl (location, geom) VALUES ('{1, 2, 3}', 'srid=3857;Point(913209.0358 5606025.2373)'::geometry);
+INSERT INTO qgis_test.array_tbl (location, geom) VALUES ('{}', 'srid=3857;Point(913214.6741 5606017.8743)'::geometry);
+INSERT INTO qgis_test.array_tbl (geom) VALUES ('srid=3857;Point(913204.9128 5606011.4565)'::geometry);
+
+
 -- Provider check with compound key
 
 CREATE TABLE qgis_test."someDataCompound" (
@@ -97,7 +122,7 @@ INSERT INTO qgis_test."someDataCompound" ( key1, key2, pk, cnt, name, name2, num
 
 --
 -- TOC entry 3953 (class 2606 OID 377768)
--- Name: someData_pkey; Type: CONSTRAINT; Schema: qgis_test; Owner: postgres; Tablespace: 
+-- Name: someData_pkey; Type: CONSTRAINT; Schema: qgis_test; Owner: postgres; Tablespace:
 --
 
 ALTER TABLE ONLY qgis_test."someData"
@@ -235,6 +260,17 @@ CREATE TABLE qgis_test.mls3d(
 );
 
 INSERT INTO qgis_test.mls3d values (1, 'srid=4326;MultiLineString((0 0 0, 1 1 1),(2 2 2, 3 3 3))'::geometry);
+
+
+-- Test of 4D geometries (with Z and M values)
+
+CREATE TABLE qgis_test.pt4d(
+       id int,
+       geom Geometry(PointZM,4326)
+);
+
+INSERT INTO qgis_test.pt4d values (1, 'srid=4326;PointZM(1 2 3 4)'::geometry);
+
 
 
 -----------------------------------------
@@ -445,6 +481,8 @@ INSERT INTO qgis_test.rename_table (field1,field2) VALUES ('a','b');
 -- Table for editor widget types
 --
 
+DROP TABLE IF EXISTS qgis_editor_widget_styles;
+
 CREATE TABLE qgis_editor_widget_styles
 (
   schema_name TEXT NOT NULL,
@@ -479,6 +517,37 @@ INSERT INTO qgis_test.boolean_table VALUES
 (2, FALSE),
 (3, NULL);
 
+
+--------------------------------------
+-- Table for citext
+--
+
+CREATE TABLE qgis_test.citext_table
+(
+  id int PRIMARY KEY,
+  fld1 citext
+);
+
+INSERT INTO qgis_test.citext_table VALUES
+(1, 'test val'),
+(2, NULL);
+
+
+--------------------------------------
+-- Table for bytea
+--
+
+CREATE TABLE qgis_test.byte_a_table
+(
+  id int PRIMARY KEY,
+  fld1 bytea
+);
+
+INSERT INTO qgis_test.byte_a_table VALUES
+(1, encode('binvalue', 'base64')::bytea),
+(2, NULL);
+
+
 -----------------------------
 -- Table for constraint tests
 --
@@ -498,3 +567,107 @@ CREATE UNIQUE INDEX constraints_uniq
   ON qgis_test.constraints
   USING btree
   (name COLLATE pg_catalog."default"); -- unique index
+
+CREATE TABLE qgis_test.check_constraints (
+  id integer PRIMARY KEY,
+  a integer,
+  b integer, CHECK (a > b)
+);
+INSERT INTO qgis_test.check_constraints VALUES (
+  1, -- id
+  4, -- a
+  3  -- b
+);
+
+
+---------------------------------------------
+--
+-- Table and view for tests on  checkPrimaryKeyUnicity
+--
+
+DROP TABLE IF EXISTS qgis_test.b21839_pk_unicity CASCADE;
+CREATE TABLE qgis_test.b21839_pk_unicity
+(
+  pk serial NOT NULL,
+  an_int integer NOT NULL,
+  a_unique_int integer NOT NULL,
+  geom geometry(Point),
+  CONSTRAINT b21839_pk_unicity_pkey PRIMARY KEY (pk)
+)
+WITH (
+  OIDS=FALSE
+);
+
+
+INSERT INTO qgis_test.b21839_pk_unicity(
+            pk, an_int, a_unique_int , geom)
+    VALUES (1, 1, 1, ST_GeomFromText('point( 1 1)'));
+
+
+INSERT INTO qgis_test.b21839_pk_unicity(
+            pk, an_int, a_unique_int, geom)
+    VALUES (2, 1, 2, ST_GeomFromText('point( 1 3)'));
+
+
+
+CREATE OR REPLACE VIEW qgis_test.b21839_pk_unicity_view AS
+ SELECT b21839_pk_unicity.pk,
+    b21839_pk_unicity.an_int,
+    b21839_pk_unicity.a_unique_int,
+    b21839_pk_unicity.geom
+   FROM qgis_test.b21839_pk_unicity;
+
+
+
+---------------------------------------------
+--
+-- Table and views for tests on QgsAbstractProviderConnection
+--
+
+CREATE TABLE qgis_test.geometries_table (name VARCHAR, geom GEOMETRY);
+
+INSERT INTO qgis_test.geometries_table VALUES
+  ('Point', 'POINT(0 0)'),
+  ('Point4326', 'SRID=4326;POINT(7 45)'),
+  ('Point3857', 'SRID=3857;POINT(100 100)'),
+  ('Linestring', 'LINESTRING(0 0, 1 1, 2 1, 2 2)'),
+  ('Polygon', 'POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'),
+  ('PolygonWithHole', 'POLYGON((0 0, 10 0, 10 10, 0 10, 0 0),(1 1, 1 2, 2 2, 2 1, 1 1))'),
+  ('Collection', 'GEOMETRYCOLLECTION(POINT(2 0),POLYGON((0 0, 1 0, 1 1, 0 1, 0 0)))');
+
+CREATE VIEW qgis_test.geometries_view AS (SELECT * FROM qgis_test.geometries_table);
+
+CREATE TABLE qgis_test.geometryless_table (name VARCHAR, value INTEGER);
+
+---------------------------------------------
+--
+-- View with separate bbox field
+--
+
+CREATE VIEW qgis_test.some_poly_data_shift_bbox AS
+ SELECT pk,
+        geom,
+        ST_Translate(
+          ST_Envelope(geom),
+          ST_XMax(ST_Envelope(geom)) - ST_XMin(ST_Envelope(geom)),
+          0.0
+        ) AS shiftbox
+   FROM qgis_test.some_poly_data;
+
+
+---------------------------------------------
+--
+-- View with tid PK field
+--
+
+CREATE TABLE qgis_test.b31799_test_table AS (SELECT (ST_DumpPoints(ST_GeneratePoints(ST_Expand('SRID=4326;POINT(0 0)'::geometry,90),10))).geom, random());
+CREATE VIEW qgis_test.b31799_test_view_ctid AS (SELECT ctid, geom, random() FROM qgis_test.b31799_test_table, pg_sleep(0.1));
+
+---------------------------------------------
+--
+-- Geometryless view
+-- See https://github.com/qgis/QGIS/issues/32523
+--
+CREATE VIEW qgis_test.b32523 AS
+  SELECT pk, random()
+  FROM qgis_test.some_poly_data;

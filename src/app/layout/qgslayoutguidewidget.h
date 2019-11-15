@@ -32,6 +32,13 @@ class QgsLayoutGuideWidget: public QgsPanelWidget, private Ui::QgsLayoutGuideWid
   public:
     QgsLayoutGuideWidget( QWidget *parent, QgsLayout *layout, QgsLayoutView *layoutView );
 
+  public slots:
+
+    /**
+     * Sets the current page number to manage the guides for.
+     */
+    void setCurrentPage( int page );
+
   private slots:
 
     void addHorizontalGuide();
@@ -40,11 +47,11 @@ class QgsLayoutGuideWidget: public QgsPanelWidget, private Ui::QgsLayoutGuideWid
     void deleteHorizontalGuide();
     void deleteVerticalGuide();
 
-    void pageChanged( int page );
-
     void clearAll();
 
     void applyToAll();
+
+    void updatePageCount();
 
   private:
 
@@ -62,18 +69,12 @@ class QgsLayoutGuidePositionDelegate : public QStyledItemDelegate
 
   public:
 
-    QgsLayoutGuidePositionDelegate( QgsLayout *layout, QAbstractItemModel *model );
+    QgsLayoutGuidePositionDelegate( QObject *parent );
 
   protected:
     QWidget *createEditor( QWidget *parent, const QStyleOptionViewItem & /*option*/, const QModelIndex &index ) const override;
     void setModelData( QWidget *editor, QAbstractItemModel *model, const QModelIndex &index ) const override;
 
-    void setModelData( const QModelIndex &index, const QVariant &value, int role ) const;
-
-  private:
-
-    QgsLayout *mLayout = nullptr;
-    QAbstractItemModel *mModel = nullptr;
 };
 
 class QgsLayoutGuideUnitDelegate : public QStyledItemDelegate
@@ -82,19 +83,12 @@ class QgsLayoutGuideUnitDelegate : public QStyledItemDelegate
 
   public:
 
-    QgsLayoutGuideUnitDelegate( QgsLayout *layout, QAbstractItemModel *model );
+    QgsLayoutGuideUnitDelegate( QObject *parent );
 
   protected:
     QWidget *createEditor( QWidget *parent, const QStyleOptionViewItem & /*option*/, const QModelIndex &index ) const override;
     void setModelData( QWidget *editor, QAbstractItemModel *model, const QModelIndex &index ) const override;
 
-    void setModelData( const QModelIndex &index, const QVariant &value, int role ) const;
-
-  private:
-
-    QgsLayout *mLayout = nullptr;
-
-    QAbstractItemModel *mModel = nullptr;
 };
 
 #endif // QGSLAYOUTGUIDEWIDGET_H

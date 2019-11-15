@@ -9,13 +9,18 @@ the Free Software Foundation; either version 2 of the License, or
 __author__ = 'Germán Carrillo'
 __date__ = '06/10/2012'
 __copyright__ = 'Copyright 2012, The QGIS Project'
-# This will get replaced with a git SHA1 when you do a git archive
-__revision__ = '$Format:%H$'
 
 import qgis  # NOQA
 
 import os
-from qgis.core import QgsFeature, QgsGeometry, QgsPointXY, QgsVectorLayer, NULL, QgsFields, QgsField
+from qgis.core import (QgsFeature,
+                       QgsPoint,
+                       QgsGeometry,
+                       QgsPointXY,
+                       QgsVectorLayer,
+                       NULL,
+                       QgsFields,
+                       QgsField)
 from qgis.testing import start_app, unittest
 from utilities import unitTestDataPath
 
@@ -28,7 +33,7 @@ class TestQgsFeature(unittest.TestCase):
         feat = QgsFeature()
         feat.initAttributes(1)
         feat.setAttribute(0, "text")
-        feat.setGeometry(QgsGeometry.fromPoint(QgsPointXY(123, 456)))
+        feat.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(123, 456)))
         myId = feat.id()
         myExpectedId = 0
         myMessage = '\nExpected: %s\nGot: %s' % (myExpectedId, myId)
@@ -132,11 +137,15 @@ class TestQgsFeature(unittest.TestCase):
 
     def test_SetGeometry(self):
         feat = QgsFeature()
-        feat.setGeometry(QgsGeometry.fromPoint(QgsPointXY(123, 456)))
+        feat.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(123, 456)))
         myGeometry = feat.geometry()
         myExpectedGeometry = "!None"
         myMessage = '\nExpected: %s\nGot: %s' % (myExpectedGeometry, myGeometry)
         assert myGeometry is not None, myMessage
+
+        # set from QgsAbstractGeometry
+        feat.setGeometry(QgsPoint(12, 34))
+        self.assertEqual(feat.geometry().asWkt(), 'Point (12 34)')
 
 
 if __name__ == '__main__':

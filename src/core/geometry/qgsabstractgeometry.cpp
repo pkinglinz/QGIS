@@ -19,13 +19,11 @@ email                : marco.hugentobler at sourcepole dot com
 #include "qgsgeos.h"
 #include "qgsmaptopixel.h"
 #include "qgspoint.h"
+#include "qgsgeometrycollection.h"
 
+#include <nlohmann/json.hpp>
 #include <limits>
 #include <QTransform>
-
-QgsAbstractGeometry::QgsAbstractGeometry(): mWkbType( QgsWkbTypes::Unknown )
-{
-}
 
 QgsAbstractGeometry::QgsAbstractGeometry( const QgsAbstractGeometry &geom )
 {
@@ -41,17 +39,6 @@ QgsAbstractGeometry &QgsAbstractGeometry::operator=( const QgsAbstractGeometry &
   }
   return *this;
 }
-
-bool QgsAbstractGeometry::is3D() const
-{
-  return QgsWkbTypes::hasZ( mWkbType );
-}
-
-bool QgsAbstractGeometry::isMeasure() const
-{
-  return QgsWkbTypes::hasM( mWkbType );
-}
-
 
 void QgsAbstractGeometry::setZMTypeFromSubGeometry( const QgsAbstractGeometry *subgeom, QgsWkbTypes::Type baseGeomType )
 {
@@ -87,7 +74,7 @@ void QgsAbstractGeometry::setZMTypeFromSubGeometry( const QgsAbstractGeometry *s
   }
   else if ( hasM )
   {
-    mWkbType =  QgsWkbTypes::addM( baseGeomType );
+    mWkbType = QgsWkbTypes::addM( baseGeomType );
   }
   else
   {
@@ -165,6 +152,16 @@ QString QgsAbstractGeometry::wktTypeStr() const
   if ( isMeasure() )
     wkt += 'M';
   return wkt;
+}
+
+QString QgsAbstractGeometry::asJson( int precision )
+{
+  return QString::fromStdString( asJsonObject( precision ).dump() );
+}
+
+json QgsAbstractGeometry::asJsonObject( int precision ) const
+{
+  Q_UNUSED( precision ) return nullptr;
 }
 
 QgsPoint QgsAbstractGeometry::centroid() const
@@ -250,6 +247,54 @@ bool QgsAbstractGeometry::convertTo( QgsWkbTypes::Type type )
   return true;
 }
 
+void QgsAbstractGeometry::filterVertices( const std::function<bool ( const QgsPoint & )> & )
+{
+  // Ideally this would be pure virtual, but SIP has issues with that
+}
+
+void QgsAbstractGeometry::transformVertices( const std::function<QgsPoint( const QgsPoint & )> & )
+{
+  // Ideally this would be pure virtual, but SIP has issues with that
+}
+
+QgsAbstractGeometry::part_iterator QgsAbstractGeometry::parts_end()
+{
+  const QgsGeometryCollection *collection = qgsgeometry_cast< const QgsGeometryCollection * >( this );
+  return part_iterator( this, collection ? collection->partCount() : 1 );
+}
+
+QgsGeometryPartIterator QgsAbstractGeometry::parts()
+{
+  return QgsGeometryPartIterator( this );
+}
+
+QgsGeometryConstPartIterator QgsAbstractGeometry::parts() const
+{
+  return QgsGeometryConstPartIterator( this );
+}
+
+QgsAbstractGeometry::const_part_iterator QgsAbstractGeometry::const_parts_end() const
+{
+  const QgsGeometryCollection *collection = qgsgeometry_cast< const QgsGeometryCollection * >( this );
+  return const_part_iterator( this, collection ? collection->partCount() : 1 );
+}
+
+QgsVertexIterator QgsAbstractGeometry::vertices() const
+{
+  return QgsVertexIterator( this );
+}
+
+bool QgsAbstractGeometry::hasChildGeometries() const
+{
+  return QgsWkbTypes::isMultiType( wkbType() ) || dimension() == 2;
+}
+
+QgsPoint QgsAbstractGeometry::childPoint( int index ) const
+{
+  Q_UNUSED( index )
+  return QgsPoint();
+}
+
 bool QgsAbstractGeometry::isEmpty() const
 {
   QgsVertexId vId;
@@ -264,8 +309,231 @@ bool QgsAbstractGeometry::hasCurvedSegments() const
 
 QgsAbstractGeometry *QgsAbstractGeometry::segmentize( double tolerance, SegmentationToleranceType toleranceType ) const
 {
-  Q_UNUSED( tolerance );
-  Q_UNUSED( toleranceType );
+  Q_UNUSED( tolerance )
+  Q_UNUSED( toleranceType )
   return clone();
 }
 
+
+QgsAbstractGeometry::vertex_iterator::vertex_iterator( const QgsAbstractGeometry *g, int index )
+  : depth( 0 )
+{
+  ::memset( levels, 0, sizeof( Level ) * 3 );  // make sure we clean up also the padding areas (for memcmp test in operator==)
+  levels[0].g = g;
+  levels[0].index = index;
+
+  digDown();  // go to the leaf level of the first vertex
+}
+
+QgsAbstractGeometry::vertex_iterator &QgsAbstractGeometry::vertex_iterator::operator++()
+{
+  if ( depth == 0 && levels[0].index >= levels[0].g->childCount() )
+    return *this;  // end of geometry - nowhere else to go
+
+  Q_ASSERT( !levels[depth].g->hasChildGeometries() );  // we should be at a leaf level
+
+  ++levels[depth].index;
+
+  // traverse up if we are at the end in the current level
+  while ( depth > 0 && levels[depth].index >= levels[depth].g->childCount() )
+  {
+    --depth;
+    ++levels[depth].index;
+  }
+
+  digDown();  // go to the leaf level again
+
+  return *this;
+}
+
+QgsAbstractGeometry::vertex_iterator QgsAbstractGeometry::vertex_iterator::operator++( int )
+{
+  vertex_iterator it( *this );
+  ++*this;
+  return it;
+}
+
+QgsPoint QgsAbstractGeometry::vertex_iterator::operator*() const
+{
+  Q_ASSERT( !levels[depth].g->hasChildGeometries() );
+  return levels[depth].g->childPoint( levels[depth].index );
+}
+
+QgsVertexId QgsAbstractGeometry::vertex_iterator::vertexId() const
+{
+  int part = 0, ring = 0, vertex = levels[depth].index;
+  if ( depth == 0 )
+  {
+    // nothing else to do
+  }
+  else if ( depth == 1 )
+  {
+    if ( QgsWkbTypes::isMultiType( levels[0].g->wkbType() ) )
+      part = levels[0].index;
+    else
+      ring = levels[0].index;
+  }
+  else if ( depth == 2 )
+  {
+    part = levels[0].index;
+    ring = levels[1].index;
+  }
+  else
+  {
+    Q_ASSERT( false );
+    return QgsVertexId();
+  }
+
+  // get the vertex type: find out from the leaf geometry
+  QgsVertexId::VertexType vertexType = QgsVertexId::SegmentVertex;
+  if ( const QgsCurve *curve = dynamic_cast<const QgsCurve *>( levels[depth].g ) )
+  {
+    QgsPoint p;
+    curve->pointAt( vertex, p, vertexType );
+  }
+
+  return QgsVertexId( part, ring, vertex, vertexType );
+}
+
+bool QgsAbstractGeometry::vertex_iterator::operator==( const QgsAbstractGeometry::vertex_iterator &other ) const
+{
+  if ( depth != other.depth )
+    return false;
+  int res = ::memcmp( levels, other.levels, sizeof( Level ) * ( depth + 1 ) );
+  return res == 0;
+}
+
+void QgsAbstractGeometry::vertex_iterator::digDown()
+{
+  if ( levels[depth].g->hasChildGeometries() && levels[depth].index >= levels[depth].g->childCount() )
+    return;  // first check we are not already at the end
+
+  // while not "final" depth for the geom: go one level down.
+  while ( levels[depth].g->hasChildGeometries() )
+  {
+    ++depth;
+    Q_ASSERT( depth < 3 );  // that's capacity of the levels array
+    levels[depth].index = 0;
+    levels[depth].g = levels[depth - 1].g->childGeometry( levels[depth - 1].index );
+  }
+}
+
+QgsPoint QgsVertexIterator::next()
+{
+  n = i++;
+  return *n;
+}
+
+QgsAbstractGeometry::part_iterator::part_iterator( QgsAbstractGeometry *g, int index )
+  : mIndex( index )
+  , mGeometry( g )
+{
+}
+
+QgsAbstractGeometry::part_iterator &QgsAbstractGeometry::part_iterator::operator++()
+{
+  const QgsGeometryCollection *collection = qgsgeometry_cast< const QgsGeometryCollection * >( mGeometry );
+  if ( !collection )
+  {
+    mIndex = 1;
+    return *this; // end of geometry -- nowhere else to go
+  }
+
+  if ( mIndex >= collection->partCount() )
+    return *this; // end of geometry - nowhere else to go
+
+  mIndex++;
+  return *this;
+}
+
+QgsAbstractGeometry::part_iterator QgsAbstractGeometry::part_iterator::operator++( int )
+{
+  part_iterator it( *this );
+  ++*this;
+  return it;
+}
+
+QgsAbstractGeometry *QgsAbstractGeometry::part_iterator::operator*() const
+{
+  QgsGeometryCollection *collection = qgsgeometry_cast< QgsGeometryCollection * >( mGeometry );
+  if ( !collection )
+  {
+    return mGeometry;
+  }
+
+  return collection->geometryN( mIndex );
+}
+
+int QgsAbstractGeometry::part_iterator::partNumber() const
+{
+  return mIndex;
+}
+
+bool QgsAbstractGeometry::part_iterator::operator==( QgsAbstractGeometry::part_iterator other ) const
+{
+  return mGeometry == other.mGeometry && mIndex == other.mIndex;
+}
+
+QgsAbstractGeometry *QgsGeometryPartIterator::next()
+{
+  n = i++;
+  return *n;
+}
+
+
+
+QgsAbstractGeometry::const_part_iterator::const_part_iterator( const QgsAbstractGeometry *g, int index )
+  : mIndex( index )
+  , mGeometry( g )
+{
+}
+
+QgsAbstractGeometry::const_part_iterator &QgsAbstractGeometry::const_part_iterator::operator++()
+{
+  const QgsGeometryCollection *collection = qgsgeometry_cast< const QgsGeometryCollection * >( mGeometry );
+  if ( !collection )
+  {
+    mIndex = 1;
+    return *this; // end of geometry -- nowhere else to go
+  }
+
+  if ( mIndex >= collection->partCount() )
+    return *this; // end of geometry - nowhere else to go
+
+  mIndex++;
+  return *this;
+}
+
+QgsAbstractGeometry::const_part_iterator QgsAbstractGeometry::const_part_iterator::operator++( int )
+{
+  const_part_iterator it( *this );
+  ++*this;
+  return it;
+}
+
+const QgsAbstractGeometry *QgsAbstractGeometry::const_part_iterator::operator*() const
+{
+  const QgsGeometryCollection *collection = qgsgeometry_cast< const QgsGeometryCollection * >( mGeometry );
+  if ( !collection )
+  {
+    return mGeometry;
+  }
+
+  return collection->geometryN( mIndex );
+}
+
+int QgsAbstractGeometry::const_part_iterator::partNumber() const
+{
+  return mIndex;
+}
+
+bool QgsAbstractGeometry::const_part_iterator::operator==( QgsAbstractGeometry::const_part_iterator other ) const
+{
+  return mGeometry == other.mGeometry && mIndex == other.mIndex;
+}
+
+const QgsAbstractGeometry *QgsGeometryConstPartIterator::next()
+{
+  n = i++;
+  return *n;
+}

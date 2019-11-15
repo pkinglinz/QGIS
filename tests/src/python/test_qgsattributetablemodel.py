@@ -9,8 +9,6 @@ the Free Software Foundation; either version 2 of the License, or
 __author__ = 'Matthias Kuhn'
 __date__ = '27/05/2015'
 __copyright__ = 'Copyright 2015, The QGIS Project'
-# This will get replaced with a git SHA1 when you do a git archive
-__revision__ = '$Format:%H$'
 
 from qgis.gui import (
     QgsAttributeTableModel,
@@ -56,7 +54,7 @@ class TestQgsAttributeTableModel(unittest.TestCase):
         for i in range(10):
             f = QgsFeature()
             f.setAttributes(["test", i])
-            f.setGeometry(QgsGeometry.fromPoint(QgsPointXY(100 * i, 2 ^ i)))
+            f.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(100 * i, 2 ^ i)))
             features.append(f)
 
         self.assertTrue(pr.addFeatures(features))
@@ -79,7 +77,7 @@ class TestQgsAttributeTableModel(unittest.TestCase):
 
         f = QgsFeature()
         f.setAttributes(["test", 8])
-        f.setGeometry(QgsGeometry.fromPoint(QgsPointXY(100, 200)))
+        f.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(100, 200)))
         self.layer.addFeature(f)
 
         self.assertEqual(self.am.rowCount(), 11)

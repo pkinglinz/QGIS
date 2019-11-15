@@ -16,16 +16,10 @@
 *                                                                         *
 ***************************************************************************
 """
-from builtins import str
-from builtins import range
 
 __author__ = 'Alexander Bruy'
 __date__ = 'August 2013'
 __copyright__ = '(C) 2013, Alexander Bruy'
-
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
 
 from osgeo import gdal
 from qgis.core import (QgsFeatureRequest,
@@ -35,16 +29,15 @@ from qgis.core import (QgsFeatureRequest,
                        QgsFeatureSink,
                        QgsGeometry,
                        QgsWkbTypes,
-                       QgsProcessingParameterBand,
                        QgsPoint,
                        QgsProcessing,
+                       QgsProcessingException,
                        QgsProcessingParameterRasterLayer,
                        QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterFeatureSink)
 from qgis.PyQt.QtCore import QVariant
 from processing.algs.qgis.QgisAlgorithm import QgisAlgorithm
 from processing.tools import raster
-from processing.tools.dataobjects import exportRasterLayer
 
 
 class PointsFromPolygons(QgisAlgorithm):
@@ -56,6 +49,9 @@ class PointsFromPolygons(QgisAlgorithm):
     def group(self):
         return self.tr('Vector creation')
 
+    def groupId(self):
+        return 'vectorcreation'
+
     def __init__(self):
         super().__init__()
 
@@ -64,7 +60,7 @@ class PointsFromPolygons(QgisAlgorithm):
                                                             self.tr('Raster layer')))
         self.addParameter(QgsProcessingParameterFeatureSource(self.INPUT_VECTOR,
                                                               self.tr('Vector layer'), [QgsProcessing.TypeVectorPolygon]))
-        self.addParameter(QgsProcessingParameterFeatureSink(self.OUTPUT, self.tr('Points from polygons'), QgsProcessing.TypeVectorPoint))
+        self.addParameter(QgsProcessingParameterFeatureSink(self.OUTPUT, self.tr('Points inside polygons'), QgsProcessing.TypeVectorPoint))
 
     def name(self):
         return 'generatepointspixelcentroidsinsidepolygons'
@@ -74,9 +70,11 @@ class PointsFromPolygons(QgisAlgorithm):
 
     def processAlgorithm(self, parameters, context, feedback):
         source = self.parameterAsSource(parameters, self.INPUT_VECTOR, context)
+        if source is None:
+            raise QgsProcessingException(self.invalidSourceError(parameters, self.INPUT_VECTOR))
 
         raster_layer = self.parameterAsRasterLayer(parameters, self.INPUT_RASTER, context)
-        rasterPath = exportRasterLayer(raster_layer)
+        rasterPath = raster_layer.source()
 
         rasterDS = gdal.Open(rasterPath, gdal.GA_ReadOnly)
         geoTransform = rasterDS.GetGeoTransform()
@@ -88,6 +86,8 @@ class PointsFromPolygons(QgisAlgorithm):
 
         (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT, context,
                                                fields, QgsWkbTypes.Point, raster_layer.crs())
+        if sink is None:
+            raise QgsProcessingException(self.invalidSinkError(parameters, self.OUTPUT))
 
         outFeature = QgsFeature()
         outFeature.setFields(fields)
@@ -96,7 +96,7 @@ class PointsFromPolygons(QgisAlgorithm):
         polyId = 0
         pointId = 0
 
-        features = source.getFeatures(QgsFeatureRequest().setDestinationCrs(raster_layer.crs()))
+        features = source.getFeatures(QgsFeatureRequest().setDestinationCrs(raster_layer.crs(), context.transformContext()))
         total = 100.0 / source.featureCount() if source.featureCount() else 0
         for current, f in enumerate(features):
             if feedback.isCanceled():
@@ -117,7 +117,7 @@ class PointsFromPolygons(QgisAlgorithm):
             (endRow, endColumn) = raster.mapToPixel(xMax, yMin, geoTransform)
 
             # use prepared geometries for faster intersection tests
-            engine = QgsGeometry.createGeometryEngine(geom.geometry())
+            engine = QgsGeometry.createGeometryEngine(geom.constGet())
             engine.prepareGeometry()
 
             for row in range(startRow, endRow + 1):

@@ -9,12 +9,10 @@ the Free Software Foundation; either version 2 of the License, or
 __author__ = 'Nyall Dawson'
 __date__ = '18/07/2017'
 __copyright__ = 'Copyright 2017, The QGIS Project'
-# This will get replaced with a git SHA1 when you do a git archive
-__revision__ = '$Format:%H$'
 
 import qgis  # NOQA
 
-from qgis.core import QgsUnitTypes, QgsLayoutSize, QgsLayoutPoint, QgsLayoutItem
+from qgis.core import QgsUnitTypes, QgsLayoutSize, QgsLayoutPoint, QgsLayoutItem, QgsProject, QgsLayout
 from qgis.gui import QgsLayoutItemPropertiesDialog
 
 from qgis.testing import start_app, unittest
@@ -27,6 +25,10 @@ class TestQgsLayoutItemPropertiesDialog(unittest.TestCase):
     def testGettersSetters(self):
         """ test dialog getters/setters """
         dlg = qgis.gui.QgsLayoutItemPropertiesDialog()
+
+        l = QgsLayout(QgsProject.instance())
+        l.initializeDefaults()
+        dlg.setLayout(l)
 
         dlg.setItemPosition(QgsLayoutPoint(5, 6, QgsUnitTypes.LayoutPixels))
         self.assertEqual(dlg.itemPosition().x(), 5.0)

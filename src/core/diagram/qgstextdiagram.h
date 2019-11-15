@@ -30,7 +30,8 @@ class QgsDiagramInterpolationSettings;
 class QgsFeature;
 class QgsRenderContext;
 
-/** \ingroup core
+/**
+ * \ingroup core
  * \class QgsTextDiagram
  */
 class CORE_EXPORT QgsTextDiagram: public QgsDiagram
@@ -50,7 +51,7 @@ class CORE_EXPORT QgsTextDiagram: public QgsDiagram
     };
 
     QgsTextDiagram();
-    virtual QgsTextDiagram *clone() const override SIP_FACTORY;
+    QgsTextDiagram *clone() const override SIP_FACTORY;
 
     void renderDiagram( const QgsFeature &feature, QgsRenderContext &c, const QgsDiagramSettings &s, QPointF position ) override;
 
@@ -61,12 +62,13 @@ class CORE_EXPORT QgsTextDiagram: public QgsDiagram
     QString diagramName() const override;
 
   private:
-    Orientation mOrientation;
-    Shape mShape;
+    Orientation mOrientation = Vertical;
+    Shape mShape = Circle;
     QBrush mBrush; //transparent brush
     QPen mPen;
 
-    /** Calculates intersection points between a line and an ellipse
+    /**
+     * Calculates intersection points between a line and an ellipse
       \returns intersection points*/
     void lineEllipseIntersection( QPointF lineStart, QPointF lineEnd, QPointF ellipseMid, double r1, double r2, QList<QPointF> &result ) const;
 };

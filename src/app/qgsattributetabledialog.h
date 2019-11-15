@@ -2,7 +2,7 @@
   QgsAttributeTableDialog.h - dialog for attribute table
   -------------------
          date                 : Feb 2009
-         copyright            : Vita Cizek
+         copyright            : (C) 2009 by Vita Cizek
          email                : weetya (at) gmail.com
 
  ***************************************************************************
@@ -27,6 +27,7 @@
 #include "qgssearchwidgetwrapper.h"
 #include "qgsdockwidget.h"
 #include "qgis_app.h"
+#include "qgsstoredexpressionmanager.h"
 
 class QDialogButtonBox;
 class QPushButton;
@@ -37,6 +38,7 @@ class QSignalMapper;
 class QgsAttributeTableModel;
 class QgsAttributeTableFilterModel;
 class QgsRubberBand;
+struct QgsStoredExpression;
 
 class APP_EXPORT QgsAttributeTableDialog : public QDialog, private Ui::QgsAttributeTableDialog, private QgsExpressionContextGenerator
 {
@@ -47,11 +49,11 @@ class APP_EXPORT QgsAttributeTableDialog : public QDialog, private Ui::QgsAttrib
     /**
      * Constructor
      * \param layer layer pointer
+     * \param initialMode initial filter for dialog
      * \param parent parent object
      * \param flags window flags
      */
-    QgsAttributeTableDialog( QgsVectorLayer *layer, QWidget *parent = nullptr, Qt::WindowFlags flags = Qt::Window );
-    ~QgsAttributeTableDialog();
+    QgsAttributeTableDialog( QgsVectorLayer *layer, QgsAttributeTableFilterModel::FilterMode initialMode = QgsAttributeTableFilterModel::ShowAll, QWidget *parent = nullptr, Qt::WindowFlags flags = Qt::Window );
 
     QgsExpressionContext createExpressionContext() const override;
 
@@ -73,79 +75,84 @@ class APP_EXPORT QgsAttributeTableDialog : public QDialog, private Ui::QgsAttrib
   private slots:
 
     /**
+     * Cut selected rows to the clipboard
+     */
+    void mActionCutSelectedRows_triggered();
+
+    /**
      * Copies selected rows to the clipboard
      */
-    void on_mActionCopySelectedRows_triggered();
+    void mActionCopySelectedRows_triggered();
 
     /**
      * Paste features from the clipboard
      */
-    void on_mActionPasteFeatures_triggered();
+    void mActionPasteFeatures_triggered();
 
     /**
      * Toggles editing mode
      */
-    void on_mActionToggleEditing_toggled( bool );
+    void mActionToggleEditing_toggled( bool );
 
     /**
      * Saves edits
      */
-    void on_mActionSaveEdits_triggered();
+    void mActionSaveEdits_triggered();
 
     /**
      * Reload the data
      */
-    void on_mActionReload_triggered();
+    void mActionReload_triggered();
 
     /**
      * Inverts selection
      */
-    void on_mActionInvertSelection_triggered();
+    void mActionInvertSelection_triggered();
 
     /**
      * Clears selection
      */
-    void on_mActionRemoveSelection_triggered();
+    void mActionRemoveSelection_triggered();
 
     /**
      * Select all
      */
-    void on_mActionSelectAll_triggered();
+    void mActionSelectAll_triggered();
 
     /**
      * Zooms to selected features
      */
-    void on_mActionZoomMapToSelectedRows_triggered();
+    void mActionZoomMapToSelectedRows_triggered();
 
     /**
      * Pans to selected features
      */
-    void on_mActionPanMapToSelectedRows_triggered();
+    void mActionPanMapToSelectedRows_triggered();
 
     /**
      * Moves selected lines to the top
      */
-    void on_mActionSelectedToTop_toggled( bool );
+    void mActionSelectedToTop_toggled( bool );
 
     /**
      * Opens dialog to add new attribute
      */
-    void on_mActionAddAttribute_triggered();
+    void mActionAddAttribute_triggered();
 
     /**
      * Opens dialog to remove attribute
      */
-    void on_mActionRemoveAttribute_triggered();
+    void mActionRemoveAttribute_triggered();
 
     /**
      * Opens field calculator dialog
      */
-    void on_mActionOpenFieldCalculator_triggered();
+    void mActionOpenFieldCalculator_triggered();
 
     /**
      * deletes the selected features
      */
-    void on_mActionDeleteSelected_triggered();
+    void mActionDeleteSelected_triggered();
 
     /**
      * Called when the current index changes in the main view
@@ -154,14 +161,14 @@ class APP_EXPORT QgsAttributeTableDialog : public QDialog, private Ui::QgsAttrib
      *
      * Will adjust the button state
      */
-    void on_mMainView_currentChanged( int );
+    void mMainView_currentChanged( int );
 
     /**
      * add feature
      */
-    void on_mActionAddFeature_triggered();
+    void mActionAddFeature_triggered();
 
-    void on_mActionExpressionSelect_triggered();
+    void mActionExpressionSelect_triggered();
     void filterColumnChanged( QObject *filterAction );
     void filterExpressionBuilder();
     void filterShowAll();
@@ -170,6 +177,35 @@ class APP_EXPORT QgsAttributeTableDialog : public QDialog, private Ui::QgsAttrib
     void filterEdited();
     void filterQueryChanged( const QString &query );
     void filterQueryAccepted();
+
+    /**
+    * Handles the expression (save or delete) when the bookmark button for stored
+    * filter expressions is triggered.
+    */
+    void handleStoreFilterExpression();
+
+    /**
+    * Opens dialog and give the possibility to save the expression with a name.
+    */
+    void saveAsStoredFilterExpression();
+
+    /**
+    * Opens dialog and give the possibility to edit the name and the expression
+    * of the stored expression.
+    */
+    void editStoredFilterExpression();
+
+    /**
+     * Updates the bookmark button and it's actions regarding the stored filter
+     * expressions according to the values
+     */
+    void updateCurrentStoredFilterExpression( );
+
+    /**
+     * Starts timer with timeout 300 ms.
+     */
+    void onFilterQueryTextChanged( const QString &value );
+
     void openConditionalStyles();
 
     /**
@@ -193,47 +229,52 @@ class APP_EXPORT QgsAttributeTableDialog : public QDialog, private Ui::QgsAttrib
 
   protected:
 
-    /**
-     * Handle closing of the window
-     * \param event unused
-     */
-    void closeEvent( QCloseEvent *event ) override;
-
     /*
      * Handle KeyPress event of the window
      * \param event
      */
     void keyPressEvent( QKeyEvent *event ) override;
 
+    bool eventFilter( QObject *object, QEvent *ev ) override;
+
   private slots:
 
-    /**
-     * Initialize column box
-     */
+    //! Initialize column box
     void columnBoxInit();
+
+    //! Initialize storedexpression box e.g after adding/deleting/edditing stored expression
+    void storedFilterExpressionBoxInit();
+    //! Functionalities of store expression button changes regarding the status of it
+    void storeExpressionButtonInit();
 
     void runFieldCalculation( QgsVectorLayer *layer, const QString &fieldName, const QString &expression, const QgsFeatureIds &filteredIds = QgsFeatureIds() );
     void updateFieldFromExpression();
     void updateFieldFromExpressionSelected();
-    void viewModeChanged( QgsAttributeForm::Mode mode );
+    void viewModeChanged( QgsAttributeEditorContext::Mode mode );
     void formFilterSet( const QString &filter, QgsAttributeForm::FilterType type );
+    void showContextMenu( QgsActionMenu *menu, QgsFeatureId fid );
+    void toggleDockMode( bool docked );
 
   private:
     QMenu *mMenuActions = nullptr;
+    QToolButton *mActionFeatureActions = nullptr;
 
     QgsDockWidget *mDock = nullptr;
-    QgsDistanceArea *myDa = nullptr;
-
+    QDialog *mDialog = nullptr;
 
     QMenu *mFilterColumnsMenu = nullptr;
     QSignalMapper *mFilterActionMapper = nullptr;
+    QMenu *mStoredFilterExpressionMenu = nullptr;
 
-    QgsVectorLayer *mLayer = nullptr;
+    QPointer< QgsVectorLayer > mLayer = nullptr;
     QgsSearchWidgetWrapper *mCurrentSearchWidgetWrapper = nullptr;
     QStringList mVisibleFields;
     QgsAttributeEditorContext mEditorContext;
 
+    QTimer mFilterQueryTimer;
+
     void updateMultiEditButtonState();
+    void deleteFeature( QgsFeatureId fid );
 
     friend class TestQgsAttributeTable;
 };
@@ -244,9 +285,9 @@ class QgsAttributeTableDock : public QgsDockWidget
     Q_OBJECT
 
   public:
-    QgsAttributeTableDock( const QString &title, QWidget *parent = nullptr, Qt::WindowFlags flags = 0 );
+    QgsAttributeTableDock( const QString &title, QWidget *parent = nullptr, Qt::WindowFlags flags = nullptr );
 
-    virtual void closeEvent( QCloseEvent *ev ) override;
+    void closeEvent( QCloseEvent *ev ) override;
 };
 
 

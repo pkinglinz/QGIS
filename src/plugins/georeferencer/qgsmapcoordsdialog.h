@@ -13,13 +13,14 @@
 #define MAPCOORDSDIALOG_H
 
 #include <QDialog>
-#include <QMouseEvent>
 
 #include "qgsmaptoolemitpoint.h"
+#include "qgssnapindicator.h"
 #include "qgssnappingutils.h"
 #include "qgspointxy.h"
-#include "qgsvertexmarker.h"
 #include "qgsmapcanvas.h"
+#include "qgspointlocator.h"
+
 
 #include "ui_qgsmapcoordsdialogbase.h"
 
@@ -30,84 +31,25 @@ class QgsGeorefMapToolEmitPoint : public QgsMapTool
     Q_OBJECT
 
   public:
-    explicit QgsGeorefMapToolEmitPoint( QgsMapCanvas *canvas )
-      : QgsMapTool( canvas )
-    {
-    }
+    explicit QgsGeorefMapToolEmitPoint( QgsMapCanvas *canvas );
 
-    virtual ~QgsGeorefMapToolEmitPoint()
-    {
-      delete mSnappingMarker;
-      mSnappingMarker = nullptr;
-    }
+    void canvasMoveEvent( QgsMapMouseEvent *e ) override;
 
-    void canvasMoveEvent( QgsMapMouseEvent *e ) override
-    {
-      MappedPoint mapped = mapPoint( e );
+    void canvasPressEvent( QgsMapMouseEvent *e ) override;
 
-      if ( !mapped.snapped )
-      {
-        delete mSnappingMarker;
-        mSnappingMarker = nullptr;
-      }
-      else
-      {
-        if ( !mSnappingMarker )
-        {
-          mSnappingMarker = new QgsVertexMarker( mCanvas );
-          mSnappingMarker->setIconType( QgsVertexMarker::ICON_CROSS );
-          mSnappingMarker->setColor( Qt::magenta );
-          mSnappingMarker->setPenWidth( 3 );
-        }
-        mSnappingMarker->setCenter( mapped.point );
-      }
-    }
+    void canvasReleaseEvent( QgsMapMouseEvent *e ) override;
 
-    void canvasPressEvent( QgsMapMouseEvent *e ) override
-    {
-      MappedPoint mapped = mapPoint( e );
-      emit canvasClicked( mapped.point, e->button() );
-    }
-
-    void canvasReleaseEvent( QgsMapMouseEvent *e ) override
-    {
-      QgsMapTool::canvasReleaseEvent( e );
-      emit mouseReleased();
-    }
-
-    void deactivate() override
-    {
-      delete mSnappingMarker;
-      mSnappingMarker = 0;
-
-      QgsMapTool::deactivate();
-    }
+    void deactivate() override;
 
   signals:
     void canvasClicked( const QgsPointXY &point, Qt::MouseButton button );
     void mouseReleased();
 
   private:
-    struct MappedPoint
-    {
-      MappedPoint() : snapped( false ) {}
-      QgsPointXY point;
-      bool snapped;
-    };
 
-    MappedPoint mapPoint( QMouseEvent *e )
-    {
-      QgsPointXY pnt = toMapCoordinates( e->pos() );
-      QgsSnappingUtils *snappingUtils = canvas()->snappingUtils();
-      QgsPointLocator::Match match = snappingUtils->snapToMap( pnt );
+    QgsPointLocator::Match mapPointMatch( QMouseEvent *e );
 
-      MappedPoint ret;
-      ret.snapped = match.isValid();
-      ret.point = ret.snapped ? match.point() : pnt;
-      return ret;
-    }
-
-    QgsVertexMarker *mSnappingMarker = nullptr;
+    std::unique_ptr<QgsSnapIndicator> mSnapIndicator;
 };
 
 class QgsMapCoordsDialog : public QDialog, private Ui::QgsMapCoordsDialogBase
@@ -116,10 +58,10 @@ class QgsMapCoordsDialog : public QDialog, private Ui::QgsMapCoordsDialogBase
 
   public:
     QgsMapCoordsDialog( QgsMapCanvas *qgisCanvas, const QgsPointXY &pixelCoords, QWidget *parent = nullptr );
-    ~QgsMapCoordsDialog();
+    ~QgsMapCoordsDialog() override;
 
   private slots:
-    void on_buttonBox_accepted();
+    void buttonBox_accepted();
 
     void setToolEmitPoint( bool isEnable );
 

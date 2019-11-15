@@ -21,13 +21,10 @@ __author__ = 'Alexander Bruy'
 __date__ = 'January 2016'
 __copyright__ = '(C) 2016, Alexander Bruy'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 import os
 
 from qgis.core import (QgsVectorDataProvider,
+                       QgsProcessingAlgorithm,
                        QgsProcessingParameterVectorLayer,
                        QgsProcessingOutputVectorLayer,
                        QgsProcessing)
@@ -45,6 +42,9 @@ class SpatialIndex(QgisAlgorithm):
     def group(self):
         return self.tr('Vector general')
 
+    def groupId(self):
+        return 'vectorgeneral'
+
     def __init__(self):
         super().__init__()
 
@@ -53,6 +53,9 @@ class SpatialIndex(QgisAlgorithm):
                                                             self.tr('Input Layer'),
                                                             [QgsProcessing.TypeVectorPolygon, QgsProcessing.TypeVectorPoint, QgsProcessing.TypeVectorLine]))
         self.addOutput(QgsProcessingOutputVectorLayer(self.OUTPUT, self.tr('Indexed layer')))
+
+    def flags(self):
+        return super().flags() | QgsProcessingAlgorithm.FlagNoThreading
 
     def name(self):
         return 'createspatialindex'

@@ -16,7 +16,7 @@
 #define QGSFEATURESTORE_H
 
 #include "qgis_core.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsfeature.h"
 #include "qgsfields.h"
 #include "qgsfeaturesink.h"
@@ -25,7 +25,8 @@
 #include <QMetaType>
 #include <QVariant>
 
-/** \ingroup core
+/**
+ * \ingroup core
  * A container for features with the same fields and crs.
  */
 class CORE_EXPORT QgsFeatureStore : public QgsFeatureSink
@@ -61,8 +62,8 @@ class CORE_EXPORT QgsFeatureStore : public QgsFeatureSink
      */
     void setCrs( const QgsCoordinateReferenceSystem &crs ) { mCrs = crs; }
 
-    bool addFeature( QgsFeature &feature, QgsFeatureSink::Flags flags = 0 ) override;
-    bool addFeatures( QgsFeatureList &features, QgsFeatureSink::Flags flags = 0 ) override;
+    bool addFeature( QgsFeature &feature, QgsFeatureSink::Flags flags = nullptr ) override;
+    bool addFeatures( QgsFeatureList &features, QgsFeatureSink::Flags flags = nullptr ) override;
 
     /**
      * Returns the number of features contained in the store.
@@ -77,6 +78,12 @@ class CORE_EXPORT QgsFeatureStore : public QgsFeatureSink
     int __len__() const;
     % MethodCode
     sipRes = sipCpp->count();
+    % End
+
+    //! Ensures that bool(obj) returns TRUE (otherwise __len__() would be used)
+    int __bool__() const;
+    % MethodCode
+    sipRes = true;
     % End
 #endif
 

@@ -33,24 +33,8 @@
 QgsDelimitedTextFile::QgsDelimitedTextFile( const QString &url )
   : mFileName( QString() )
   , mEncoding( QStringLiteral( "UTF-8" ) )
-  , mUseWatcher( false )
-  , mDefinitionValid( false )
-  , mUseHeader( true )
-  , mDiscardEmptyFields( false )
-  , mTrimFields( false )
-  , mSkipLines( 0 )
-  , mMaxFields( 0 )
-  , mMaxNameLength( 200 ) // Don't want field names to be too unweildy!
-  , mAnchoredRegexp( false )
-  , mLineNumber( -1 )
-  , mRecordLineNumber( -1 )
-  , mRecordNumber( -1 )
-  , mHoldCurrentRecord( false )
-  , mMaxRecordNumber( -1 )
-  , mMaxFieldCount( 0 )
   , mDefaultFieldName( QStringLiteral( "field_%1" ) )
-    // field_ is optional in following regexp to simplify QgsDelimitedTextFile::fieldNumber()
-  , mDefaultFieldRegexp( "^(?:field_)?(\\d+)$", Qt::CaseInsensitive )
+  , mDefaultFieldRegexp( "^(?:field_)(\\d+)$", Qt::CaseInsensitive )
 {
   // The default type is CSV
   setTypeCSV();
@@ -104,7 +88,7 @@ bool QgsDelimitedTextFile::open()
       mStream = new QTextStream( mFile );
       if ( ! mEncoding.isEmpty() )
       {
-        QTextCodec *codec =  QTextCodec::codecForName( mEncoding.toLatin1() );
+        QTextCodec *codec = QTextCodec::codecForName( mEncoding.toLatin1() );
         mStream->setCodec( codec );
       }
       if ( mUseWatcher )
@@ -184,13 +168,13 @@ bool QgsDelimitedTextFile::setFromUrl( const QUrl &url )
     if ( type == QLatin1String( "plain" ) )
     {
       quote = QStringLiteral( "'\"" );
-      escape = QLatin1String( "" );
+      escape.clear();
     }
     else if ( type == QLatin1String( "regexp " ) )
     {
-      delimiter = QLatin1String( "" );
-      quote = QLatin1String( "" );
-      escape = QLatin1String( "" );
+      delimiter.clear();
+      quote.clear();
+      escape.clear();
     }
   }
   if ( url.hasQueryItem( QStringLiteral( "delimiter" ) ) )
@@ -380,7 +364,7 @@ void QgsDelimitedTextFile::setTypeCSV( const QString &delim, const QString &quot
   mDefinitionValid = !mDelimChars.isEmpty();
   if ( ! mDefinitionValid )
   {
-    QgsDebugMsg( "Invalid empty delimiter defined for text file delimiter" );
+    QgsDebugMsg( QStringLiteral( "Invalid empty delimiter defined for text file delimiter" ) );
   }
 }
 
@@ -418,7 +402,8 @@ void QgsDelimitedTextFile::setDiscardEmptyFields( bool discardEmptyFields )
 void QgsDelimitedTextFile::setFieldNames( const QStringList &names )
 {
   mFieldNames.clear();
-  Q_FOREACH ( QString name, names )
+  const auto constNames = names;
+  for ( QString name : constNames )
   {
     bool nameOk = true;
     int fieldNo = mFieldNames.size() + 1;
@@ -770,7 +755,7 @@ QgsDelimitedTextFile::Status QgsDelimitedTextFile::parseQuoted( QString &buffer,
         else
         {
           quoted = false;
-          ended =  true;
+          ended = true;
         }
       }
       // quote char at start of field .. start of quoted fields

@@ -35,7 +35,8 @@
 //qgis test includes
 #include "qgsrenderchecker.h"
 
-/** \ingroup UnitTests
+/**
+ * \ingroup UnitTests
  * This is a unit test for simple marker symbol types.
  */
 class TestQgsSimpleMarkerSymbol : public QObject
@@ -43,13 +44,7 @@ class TestQgsSimpleMarkerSymbol : public QObject
     Q_OBJECT
 
   public:
-    TestQgsSimpleMarkerSymbol()
-      : mTestHasError( false )
-      , mpPointsLayer( 0 )
-      , mSimpleMarkerLayer( 0 )
-      , mMarkerSymbol( 0 )
-      , mSymbolRenderer( 0 )
-    {}
+    TestQgsSimpleMarkerSymbol() = default;
 
   private slots:
     void initTestCase();// will be called before the first testfunction is executed.
@@ -58,6 +53,7 @@ class TestQgsSimpleMarkerSymbol : public QObject
     void cleanup() {} // will be called after every testfunction.
 
     void simpleMarkerSymbol();
+    void simpleMarkerSymbolRotation();
     void simpleMarkerSymbolBevelJoin();
     void simpleMarkerSymbolMiterJoin();
     void simpleMarkerSymbolRoundJoin();
@@ -68,7 +64,7 @@ class TestQgsSimpleMarkerSymbol : public QObject
     void colors();
 
   private:
-    bool mTestHasError;
+    bool mTestHasError =  false ;
 
     bool imageCheck( const QString &type );
     QgsMapSettings mMapSettings;
@@ -146,6 +142,20 @@ void TestQgsSimpleMarkerSymbol::simpleMarkerSymbol()
   QVERIFY( imageCheck( "simplemarker" ) );
 }
 
+void TestQgsSimpleMarkerSymbol::simpleMarkerSymbolRotation()
+{
+  mReport += QLatin1String( "<h2>Simple marker symbol layer test</h2>\n" );
+
+  mSimpleMarkerLayer->setColor( Qt::blue );
+  mSimpleMarkerLayer->setStrokeColor( Qt::black );
+  mSimpleMarkerLayer->setShape( QgsSimpleMarkerSymbolLayerBase::Square );
+  mSimpleMarkerLayer->setSize( 15 );
+  mSimpleMarkerLayer->setAngle( 45 );
+  mSimpleMarkerLayer->setStrokeWidth( 0.2 );
+  mSimpleMarkerLayer->setPenJoinStyle( Qt::BevelJoin );
+  QVERIFY( imageCheck( "simplemarker_rotation" ) );
+}
+
 void TestQgsSimpleMarkerSymbol::simpleMarkerSymbolBevelJoin()
 {
   mReport += QLatin1String( "<h2>Simple marker symbol layer test</h2>\n" );
@@ -154,6 +164,7 @@ void TestQgsSimpleMarkerSymbol::simpleMarkerSymbolBevelJoin()
   mSimpleMarkerLayer->setStrokeColor( Qt::black );
   mSimpleMarkerLayer->setShape( QgsSimpleMarkerSymbolLayerBase::Triangle );
   mSimpleMarkerLayer->setSize( 25 );
+  mSimpleMarkerLayer->setAngle( 0 );
   mSimpleMarkerLayer->setStrokeWidth( 3 );
   mSimpleMarkerLayer->setPenJoinStyle( Qt::BevelJoin );
   QVERIFY( imageCheck( "simplemarker_beveljoin" ) );

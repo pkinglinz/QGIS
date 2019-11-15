@@ -35,6 +35,7 @@
 
 #include "qgis_core.h"
 #include "qgsgeometry.h"
+#include "qgsgeos.h"
 #include "qgspallabeling.h"
 #include <QList>
 #include <iostream>
@@ -48,9 +49,6 @@ class QgsAbstractLabelProvider;
 
 namespace pal
 {
-  //! Get GEOS context handle to be used in all GEOS library calls with reentrant API
-  GEOSContextHandle_t geosContext();
-
   class Layer;
   class LabelPosition;
   class PalStat;
@@ -64,7 +62,7 @@ namespace pal
     POPMUSIC_TABU_CHAIN = 1, //!< Is the best but slowest
     POPMUSIC_TABU = 2, //!< Is a little bit better than CHAIN but slower
     POPMUSIC_CHAIN = 3, //!< Is slower and best than TABU, worse and faster than TABU_CHAIN
-    FALP = 4 //! only initial solution
+    FALP = 4 //!< Only initial solution
   };
 
   //! Enumeration line arrangement flags. Flags can be combined.
@@ -77,7 +75,8 @@ namespace pal
   };
   Q_DECLARE_FLAGS( LineArrangementFlags, LineArrangementFlag )
 
-  /** \ingroup core
+  /**
+   * \ingroup core
    *  \brief Main Pal labeling class
    *
    *  A pal object will contains layers and global information such as which search method
@@ -113,12 +112,10 @@ namespace pal
        * \param arrangement Howto place candidates
        * \param defaultPriority layer's prioriry (0 is the best, 1 the worst)
        * \param active is the layer is active (currently displayed)
-       * \param toLabel the layer will be labeled only if toLablel is true
-       * \param displayAll if true, all features will be labelled even though overlaps occur
+       * \param toLabel the layer will be labeled only if toLablel is TRUE
+       * \param displayAll if TRUE, all features will be labelled even though overlaps occur
        *
        * \throws PalException::LayerExists
-       *
-       * @todo add symbolUnit
        */
       Layer *addLayer( QgsAbstractLabelProvider *provider, const QString &layerName, QgsPalLayerSettings::Placement arrangement, double defaultPriority, bool active, bool toLabel, bool displayAll = false );
 
@@ -129,29 +126,36 @@ namespace pal
        */
       void removeLayer( Layer *layer );
 
-      /**
-       * \brief the labeling machine
-       * Will extract all active layers
-       *
-       * \param bbox map extent
-       * \param stats A PalStat object (can be NULL)
-       * \param displayAll if true, all feature will be labelled even though overlaps occur
-       *
-       * \returns A list of label to display on map
-       */
-      QList<LabelPosition *> *labeller( double bbox[4], PalStat **stats, bool displayAll );
-
       typedef bool ( *FnIsCanceled )( void *ctx );
 
       //! Register a function that returns whether this job has been canceled - PAL calls it during the computation
-      void registerCancelationCallback( FnIsCanceled fnCanceled, void *context );
+      void registerCancellationCallback( FnIsCanceled fnCanceled, void *context );
 
       //! Check whether the job has been canceled
       inline bool isCanceled() { return fnIsCanceled ? fnIsCanceled( fnIsCanceledContext ) : false; }
 
-      Problem *extractProblem( double bbox[4] );
+      /**
+       * Extracts the labeling problem for the specified map \a extent - only features within this
+       * extent will be considered. The \a mapBoundary argument specifies the actual geometry of the map
+       * boundary, which will be used to detect whether a label is visible (or partially visible) in
+       * the rendered map. This may differ from \a extent in the case of rotated or non-rectangular
+       * maps.
+       */
+      std::unique_ptr< Problem > extractProblem( const QgsRectangle &extent, const QgsGeometry &mapBoundary );
 
-      QList<LabelPosition *> *solveProblem( Problem *prob, bool displayAll );
+      /**
+       * Solves the labeling problem, selecting the best candidate locations for all labels and returns a list of these
+       * calculated label positions.
+       *
+       * If \a displayAll is true, then the best positions for ALL labels will be returned, regardless of whether these
+       * labels overlap other labels.
+       *
+       * If the optional \a unlabeled list is specified, it will be filled with a list of all feature labels which could
+       * not be placed in the returned solution (e.g. due to overlaps or other constraints).
+       *
+       * Ownership of the returned labels is not transferred - it resides with the pal object.
+       */
+      QList<LabelPosition *> solveProblem( Problem *prob, bool displayAll, QList<pal::LabelPosition *> *unlabeled = nullptr );
 
       /**
        *\brief Set flag show partial label
@@ -161,9 +165,7 @@ namespace pal
       void setShowPartial( bool show );
 
       /**
-       * \brief Get flag show partial label
-       *
-       * \returns value of flag
+       * Returns whether partial labels should be allowed.
        */
       bool getShowPartial();
 
@@ -192,36 +194,19 @@ namespace pal
       void setPolyP( int poly_p );
 
       /**
-       *  \brief get # candidates to generate for point features
+       * Returns the number of candidates to generate for point features.
        */
       int getPointP();
 
       /**
-       *  \brief get maximum  # candidates to generate for line features
+       * Returns the number of candidates to generate for line features.
        */
       int getLineP();
 
       /**
-       *  \brief get maximum # candidates to generate for polygon features
+       * Returns the number of candidates to generate for polygon features.
        */
       int getPolyP();
-
-      /**
-       * \brief Select the search method to use.
-       *
-       * For interactive mapping using CHAIN is a good
-       * idea because it is the fastest. Other methods, ordered by speedness, are POPMUSIC_TABU,
-       * POPMUSIC_CHAIN and POPMUSIC_TABU_CHAIN, defined in pal::_searchMethod enumeration
-       * \param method the method to use
-       */
-      void setSearch( SearchMethod method );
-
-      /**
-       * \brief get the search method in use
-       *
-       * \returns the search method
-       */
-      SearchMethod getSearch();
 
     private:
 
@@ -232,54 +217,46 @@ namespace pal
       /**
        * \brief maximum # candidates for a point
        */
-      int point_p;
+      int point_p = 16;
 
       /**
        * \brief maximum # candidates for a line
        */
-      int line_p;
+      int line_p = 50;
 
       /**
        * \brief maximum # candidates for a polygon
        */
-      int poly_p;
-
-      SearchMethod searchMethod;
+      int poly_p = 30;
 
       /*
        * POPMUSIC Tuning
        */
-      int popmusic_r;
+      int popmusic_r = 30;
 
-      int tabuMaxIt;
-      int tabuMinIt;
+      int tabuMaxIt = 4;
+      int tabuMinIt = 2;
 
-      int ejChainDeg;
-      int tenure;
-      double candListSize;
+      int ejChainDeg = 50;
+      int tenure = 10;
+      double candListSize = 0.2;
 
       /**
        * \brief show partial labels (cut-off by the map canvas) or not
        */
-      bool showPartial;
+      bool showPartial = true;
 
       //! Callback that may be called from PAL to check whether the job has not been canceled in meanwhile
-      FnIsCanceled fnIsCanceled;
-      //! Application-specific context for the cancelation check function
+      FnIsCanceled fnIsCanceled = nullptr;
+      //! Application-specific context for the cancellation check function
       void *fnIsCanceledContext = nullptr;
 
       /**
-       * \brief Problem factory
-       * Extract features to label and generates candidates for them,
-       * respects to a bounding box
-       * \param lambda_min xMin bounding-box
-       * \param phi_min yMin bounding-box
-       * \param lambda_max xMax bounding-box
-       * \param phi_max yMax bounding-box
+       * Creates a Problem, by extracting labels and generating candidates from the given \a extent.
+       * The \a mapBoundary geometry specifies the actual visible region of the map, and is used
+       * for pruning candidates which fall outside the visible region.
        */
-      Problem *extract( double lambda_min, double phi_min,
-                        double lambda_max, double phi_max );
-
+      std::unique_ptr< Problem > extract( const QgsRectangle &extent, const QgsGeometry &mapBoundary );
 
       /**
        * \brief Choose the size of popmusic subpart's
@@ -319,14 +296,14 @@ namespace pal
 
 
       /**
-       * \brief Get the minimum # of iteration doing in POPMUSIC_TABU, POPMUSIC_CHAIN and POPMUSIC_TABU_CHAIN
-       * \returns minimum # of iteration
+       * Returns the minimum number of iterations used for POPMUSIC_TABU, POPMUSIC_CHAIN and POPMUSIC_TABU_CHAIN.
+       * \see getMaxIt()
        */
       int getMinIt();
 
       /**
-       * \brief Get the maximum # of iteration doing in POPMUSIC_TABU, POPMUSIC_CHAIN and POPMUSIC_TABU_CHAIN
-       * \returns maximum # of iteration
+       * Returns the maximum number of iterations allowed for POPMUSIC_TABU, POPMUSIC_CHAIN and POPMUSIC_TABU_CHAIN.
+       * \see getMinIt()
        */
       int getMaxIt();
 

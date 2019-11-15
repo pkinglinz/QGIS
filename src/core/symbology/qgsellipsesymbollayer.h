@@ -12,8 +12,8 @@
  *   (at your option) any later version.                                   *
  *                                                                         *
  ***************************************************************************/
-#ifndef QGSELLIPSESYMBOLLAYERV2_H
-#define QGSELLIPSESYMBOLLAYERV2_H
+#ifndef QGSELLIPSESYMBOLLAYER_H
+#define QGSELLIPSESYMBOLLAYER_H
 
 #define DEFAULT_ELLIPSE_JOINSTYLE    Qt::MiterJoin
 
@@ -24,7 +24,8 @@
 
 class QgsExpression;
 
-/** \ingroup core
+/**
+ * \ingroup core
  * A symbol layer for rendering objects with major and minor axis (e.g. ellipse, rectangle )*/
 class CORE_EXPORT QgsEllipseSymbolLayer: public QgsMarkerSymbolLayer
 {
@@ -49,20 +50,24 @@ class CORE_EXPORT QgsEllipseSymbolLayer: public QgsMarkerSymbolLayer
     void setSymbolName( const QString &name ) { mSymbolName = name; }
     QString symbolName() const { return mSymbolName; }
 
-    void setSymbolWidth( double w ) { mSymbolWidth = w; }
+    void setSize( double size ) override;
+
+    void setSymbolWidth( double w );
     double symbolWidth() const { return mSymbolWidth; }
 
-    void setSymbolHeight( double h ) { mSymbolHeight = h; }
+    void setSymbolHeight( double h );
     double symbolHeight() const { return mSymbolHeight; }
 
     Qt::PenStyle strokeStyle() const { return mStrokeStyle; }
     void setStrokeStyle( Qt::PenStyle strokeStyle ) { mStrokeStyle = strokeStyle; }
 
-    /** Get stroke join style.
+    /**
+     * Gets stroke join style.
      * \since QGIS 2.16 */
     Qt::PenJoinStyle penJoinStyle() const { return mPenJoinStyle; }
 
-    /** Set stroke join style.
+    /**
+     * Set stroke join style.
      * \since QGIS 2.16 */
     void setPenJoinStyle( Qt::PenJoinStyle style ) { mPenJoinStyle = style; }
 
@@ -75,14 +80,16 @@ class CORE_EXPORT QgsEllipseSymbolLayer: public QgsMarkerSymbolLayer
     void setStrokeColor( const QColor &c ) override { mStrokeColor = c; }
     QColor strokeColor() const override { return mStrokeColor; }
 
-    /** Sets the units for the symbol's width.
+    /**
+     * Sets the units for the symbol's width.
      * \param unit symbol units
      * \see symbolWidthUnit()
      * \see setSymbolHeightUnit()
     */
     void setSymbolWidthUnit( QgsUnitTypes::RenderUnit unit ) { mSymbolWidthUnit = unit; }
 
-    /** Returns the units for the symbol's width.
+    /**
+     * Returns the units for the symbol's width.
      * \see setSymbolWidthUnit()
      * \see symbolHeightUnit()
     */
@@ -91,14 +98,16 @@ class CORE_EXPORT QgsEllipseSymbolLayer: public QgsMarkerSymbolLayer
     void setSymbolWidthMapUnitScale( const QgsMapUnitScale &scale ) { mSymbolWidthMapUnitScale = scale; }
     const QgsMapUnitScale &symbolWidthMapUnitScale() const { return mSymbolWidthMapUnitScale; }
 
-    /** Sets the units for the symbol's height.
+    /**
+     * Sets the units for the symbol's height.
      * \param unit symbol units
      * \see symbolHeightUnit()
      * \see setSymbolWidthUnit()
     */
     void setSymbolHeightUnit( QgsUnitTypes::RenderUnit unit ) { mSymbolHeightUnit = unit; }
 
-    /** Returns the units for the symbol's height.
+    /**
+     * Returns the units for the symbol's height.
      * \see setSymbolHeightUnit()
      * \see symbolWidthUnit()
     */
@@ -107,13 +116,15 @@ class CORE_EXPORT QgsEllipseSymbolLayer: public QgsMarkerSymbolLayer
     void setSymbolHeightMapUnitScale( const QgsMapUnitScale &scale ) { mSymbolHeightMapUnitScale = scale; }
     const QgsMapUnitScale &symbolHeightMapUnitScale() const { return mSymbolHeightMapUnitScale; }
 
-    /** Sets the units for the symbol's stroke width.
+    /**
+     * Sets the units for the symbol's stroke width.
      * \param unit symbol units
      * \see strokeWidthUnit()
     */
     void setStrokeWidthUnit( QgsUnitTypes::RenderUnit unit ) { mStrokeWidthUnit = unit; }
 
-    /** Returns the units for the symbol's stroke width.
+    /**
+     * Returns the units for the symbol's stroke width.
      * \see setStrokeWidthUnit()
     */
     QgsUnitTypes::RenderUnit strokeWidthUnit() const { return mStrokeWidthUnit; }
@@ -131,17 +142,17 @@ class CORE_EXPORT QgsEllipseSymbolLayer: public QgsMarkerSymbolLayer
 
   private:
     QString mSymbolName;
-    double mSymbolWidth;
-    QgsUnitTypes::RenderUnit mSymbolWidthUnit;
+    double mSymbolWidth = 4;
+    QgsUnitTypes::RenderUnit mSymbolWidthUnit = QgsUnitTypes::RenderMillimeters;
     QgsMapUnitScale mSymbolWidthMapUnitScale;
-    double mSymbolHeight;
-    QgsUnitTypes::RenderUnit mSymbolHeightUnit;
+    double mSymbolHeight = 3;
+    QgsUnitTypes::RenderUnit mSymbolHeightUnit = QgsUnitTypes::RenderMillimeters;
     QgsMapUnitScale mSymbolHeightMapUnitScale;
     QColor mStrokeColor;
-    Qt::PenStyle mStrokeStyle;
-    Qt::PenJoinStyle mPenJoinStyle;
-    double mStrokeWidth;
-    QgsUnitTypes::RenderUnit mStrokeWidthUnit;
+    Qt::PenStyle mStrokeStyle = Qt::SolidLine;
+    Qt::PenJoinStyle mPenJoinStyle = DEFAULT_ELLIPSE_JOINSTYLE;
+    double mStrokeWidth = 0;
+    QgsUnitTypes::RenderUnit mStrokeWidthUnit = QgsUnitTypes::RenderMillimeters;
     QgsMapUnitScale mStrokeWidthMapUnitScale;
 
     QPainterPath mPainterPath;
@@ -149,7 +160,8 @@ class CORE_EXPORT QgsEllipseSymbolLayer: public QgsMarkerSymbolLayer
     QPen mPen;
     QBrush mBrush;
 
-    /** Setup mPainterPath
+    /**
+     * Setup mPainterPath
       \param symbolName name of symbol
       \param context render context
       \param scaledWidth optional width
@@ -163,6 +175,6 @@ class CORE_EXPORT QgsEllipseSymbolLayer: public QgsMarkerSymbolLayer
 
 // clazy:excludeall=qstring-allocations
 
-#endif // QGSELLIPSESYMBOLLAYERV2_H
+#endif // QGSELLIPSESYMBOLLAYER_H
 
 

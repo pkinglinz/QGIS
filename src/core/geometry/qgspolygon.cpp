@@ -22,29 +22,35 @@
 #include "qgsmultilinestring.h"
 #include "qgswkbptr.h"
 
-QgsPolygonV2::QgsPolygonV2()
-  : QgsCurvePolygon()
+QgsPolygon::QgsPolygon()
 {
   mWkbType = QgsWkbTypes::Polygon;
 }
 
-QString QgsPolygonV2::geometryType() const
+QString QgsPolygon::geometryType() const
 {
   return QStringLiteral( "Polygon" );
 }
 
-QgsPolygonV2 *QgsPolygonV2::clone() const
+QgsPolygon *QgsPolygon::createEmptyWithSameType() const
 {
-  return new QgsPolygonV2( *this );
+  auto result = qgis::make_unique< QgsPolygon >();
+  result->mWkbType = mWkbType;
+  return result.release();
 }
 
-void QgsPolygonV2::clear()
+QgsPolygon *QgsPolygon::clone() const
+{
+  return new QgsPolygon( *this );
+}
+
+void QgsPolygon::clear()
 {
   QgsCurvePolygon::clear();
   mWkbType = QgsWkbTypes::Polygon;
 }
 
-bool QgsPolygonV2::fromWkb( QgsConstWkbPtr &wkbPtr )
+bool QgsPolygon::fromWkb( QgsConstWkbPtr &wkbPtr )
 {
   clear();
   if ( !wkbPtr )
@@ -103,7 +109,7 @@ bool QgsPolygonV2::fromWkb( QgsConstWkbPtr &wkbPtr )
   return true;
 }
 
-QByteArray QgsPolygonV2::asWkb() const
+QByteArray QgsPolygon::asWkb() const
 {
   int binarySize = sizeof( char ) + sizeof( quint32 ) + sizeof( quint32 );
 
@@ -139,7 +145,7 @@ QByteArray QgsPolygonV2::asWkb() const
   return wkbArray;
 }
 
-void QgsPolygonV2::addInteriorRing( QgsCurve *ring )
+void QgsPolygon::addInteriorRing( QgsCurve *ring )
 {
   if ( !ring )
     return;
@@ -170,7 +176,7 @@ void QgsPolygonV2::addInteriorRing( QgsCurve *ring )
   clearCache();
 }
 
-void QgsPolygonV2::setExteriorRing( QgsCurve *ring )
+void QgsPolygon::setExteriorRing( QgsCurve *ring )
 {
   if ( !ring )
   {
@@ -197,7 +203,7 @@ void QgsPolygonV2::setExteriorRing( QgsCurve *ring )
   setZMTypeFromSubGeometry( ring, QgsWkbTypes::Polygon );
 
   //match dimensionality for rings
-  for ( QgsCurve *ring : qgsAsConst( mInteriorRings ) )
+  for ( QgsCurve *ring : qgis::as_const( mInteriorRings ) )
   {
     ring->convertTo( mExteriorRing->wkbType() );
   }
@@ -205,7 +211,7 @@ void QgsPolygonV2::setExteriorRing( QgsCurve *ring )
   clearCache();
 }
 
-QgsAbstractGeometry *QgsPolygonV2::boundary() const
+QgsAbstractGeometry *QgsPolygon::boundary() const
 {
   if ( !mExteriorRing )
     return nullptr;
@@ -217,8 +223,9 @@ QgsAbstractGeometry *QgsPolygonV2::boundary() const
   else
   {
     QgsMultiLineString *multiLine = new QgsMultiLineString();
-    multiLine->addGeometry( mExteriorRing->clone() );
     int nInteriorRings = mInteriorRings.size();
+    multiLine->reserve( nInteriorRings + 1 );
+    multiLine->addGeometry( mExteriorRing->clone() );
     for ( int i = 0; i < nInteriorRings; ++i )
     {
       multiLine->addGeometry( mInteriorRings.at( i )->clone() );
@@ -227,13 +234,13 @@ QgsAbstractGeometry *QgsPolygonV2::boundary() const
   }
 }
 
-double QgsPolygonV2::pointDistanceToBoundary( double x, double y ) const
+double QgsPolygon::pointDistanceToBoundary( double x, double y ) const
 {
   if ( !mExteriorRing )
     return std::numeric_limits< double >::quiet_NaN();
 
   bool inside = false;
-  double minimumDistance = DBL_MAX;
+  double minimumDistance = std::numeric_limits<double>::max();
   double minDistX = 0.0;
   double minDistY = 0.0;
 
@@ -254,19 +261,19 @@ double QgsPolygonV2::pointDistanceToBoundary( double x, double y ) const
            ( x < ( bX - aX ) * ( y - aY ) / ( bY - aY ) + aX ) )
         inside = !inside;
 
-      minimumDistance = std::min( minimumDistance, QgsGeometryUtils::sqrDistToLine( x, y, aX, aY, bX, bY, minDistX, minDistY, 4 * DBL_EPSILON ) );
+      minimumDistance = std::min( minimumDistance, QgsGeometryUtils::sqrDistToLine( x, y, aX, aY, bX, bY, minDistX, minDistY, 4 * std::numeric_limits<double>::epsilon() ) );
     }
   }
 
   return ( inside ? 1 : -1 ) * std::sqrt( minimumDistance );
 }
 
-QgsPolygonV2 *QgsPolygonV2::surfaceToPolygon() const
+QgsPolygon *QgsPolygon::surfaceToPolygon() const
 {
   return clone();
 }
 
-QgsCurvePolygon *QgsPolygonV2::toCurveType() const
+QgsCurvePolygon *QgsPolygon::toCurveType() const
 {
   QgsCurvePolygon *curvePolygon = new QgsCurvePolygon();
   curvePolygon->setExteriorRing( mExteriorRing->clone() );

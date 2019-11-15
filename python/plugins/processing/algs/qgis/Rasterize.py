@@ -8,7 +8,6 @@
         copyright            : (C) 2016 by OPENGIS.ch
         email                : matthias@opengis.ch
  ***************************************************************************/
-
 /***************************************************************************
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -21,7 +20,7 @@
 
 from processing.algs.qgis.QgisAlgorithm import QgisAlgorithm
 
-from qgis.PyQt.QtGui import QImage, QPainter
+from qgis.PyQt.QtGui import QImage, QPainter, QColor
 from qgis.PyQt.QtCore import QSize
 from qgis.core import (
     QgsMapSettings,
@@ -32,6 +31,7 @@ from qgis.core import (
     QgsProcessingParameterExtent,
     QgsProcessingParameterString,
     QgsProcessingParameterNumber,
+    QgsProcessingParameterBoolean,
     QgsProcessingParameterMapLayer,
     QgsProcessingParameterRasterDestination,
     QgsRasterFileWriter
@@ -46,10 +46,6 @@ import math
 __author__ = 'Matthias Kuhn'
 __date__ = '2016-10-05'
 __copyright__ = '(C) 2016 by OPENGIS.ch'
-
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
 
 
 class RasterizeAlgorithm(QgisAlgorithm):
@@ -75,6 +71,7 @@ class RasterizeAlgorithm(QgisAlgorithm):
     EXTENT = 'EXTENT'
     TILE_SIZE = 'TILE_SIZE'
     MAP_UNITS_PER_PIXEL = 'MAP_UNITS_PER_PIXEL'
+    MAKE_BACKGROUND_TRANSPARENT = 'MAKE_BACKGROUND_TRANSPARENT'
 
     def __init__(self):
         super().__init__()
@@ -103,6 +100,12 @@ class RasterizeAlgorithm(QgisAlgorithm):
             minValue=0,
             type=QgsProcessingParameterNumber.Double
         ))
+
+        self.addParameter(
+            QgsProcessingParameterBoolean(
+                self.MAKE_BACKGROUND_TRANSPARENT,
+                self.tr('Make background transparent'),
+                defaultValue=False))
 
         map_theme_param = QgsProcessingParameterString(
             self.MAP_THEME,
@@ -140,10 +143,16 @@ class RasterizeAlgorithm(QgisAlgorithm):
     def group(self):
         return self.tr('Raster tools')
 
+    def groupId(self):
+        return 'rastertools'
+
     def tags(self):
         return self.tr('layer,raster,convert,file,map themes,tiles,render').split(',')
 
-    # def processAlgorithm(self, progress):
+    def prepareAlgorithm(self, parameters, context, feedback):
+        self.mapSettings = qgis.utils.iface.mapCanvas().mapSettings()
+        return True
+
     def processAlgorithm(self, parameters, context, feedback):
         """Here is where the processing itself takes place."""
 
@@ -162,11 +171,17 @@ class RasterizeAlgorithm(QgisAlgorithm):
         extent = self.parameterAsExtent(
             parameters,
             self.EXTENT,
-            context)
+            context,
+            context.project().crs())
 
         tile_size = self.parameterAsInt(
             parameters,
             self.TILE_SIZE,
+            context)
+
+        make_trans = self.parameterAsBoolean(
+            parameters,
+            self.MAKE_BACKGROUND_TRANSPARENT,
             context)
 
         mupp = self.parameterAsDouble(
@@ -179,10 +194,12 @@ class RasterizeAlgorithm(QgisAlgorithm):
             self.OUTPUT,
             context)
 
+        project = context.project()
+
         tile_set = TileSet(map_theme, layer, extent, tile_size, mupp,
-                           output_layer,
-                           qgis.utils.iface.mapCanvas().mapSettings())
-        tile_set.render(feedback)
+                           output_layer, make_trans,
+                           self.mapSettings, project)
+        tile_set.render(feedback, make_trans)
 
         return {self.OUTPUT: output_layer}
 
@@ -194,9 +211,8 @@ class TileSet():
     """
 
     def __init__(self, map_theme, layer, extent, tile_size, mupp, output,
-                 map_settings):
+                 make_trans, map_settings, project):
         """
-
         :param map_theme:
         :param extent:
         :param layer:
@@ -225,7 +241,12 @@ class TileSet():
         xsize = self.x_tile_count * tile_size
         ysize = self.y_tile_count * tile_size
 
-        self.dataset = driver.Create(output, xsize, ysize, 3)  # 3 bands
+        if make_trans:
+            no_bands = 4
+        else:
+            no_bands = 3
+
+        self.dataset = driver.Create(output, xsize, ysize, no_bands)
         self.dataset.SetProjection(str(crs.toWkt()))
         self.dataset.SetGeoTransform(
             [extent.xMinimum(), mupp, 0, extent.yMaximum(), 0, -mupp])
@@ -239,6 +260,16 @@ class TileSet():
         self.settings.setOutputSize(self.image.size())
         self.settings.setFlag(QgsMapSettings.Antialiasing, True)
         self.settings.setFlag(QgsMapSettings.RenderMapTile, True)
+        self.settings.setFlag(QgsMapSettings.UseAdvancedEffects, True)
+
+        r = project.readNumEntry('Gui', '/CanvasColorRedPart', 255)[0]
+        g = project.readNumEntry('Gui', '/CanvasColorGreenPart', 255)[0]
+        b = project.readNumEntry('Gui', '/CanvasColorBluePart', 255)[0]
+        if make_trans:
+            self.bgColor = QColor(r, g, b, 0)
+        else:
+            self.bgColor = QColor(r, g, b)
+        self.settings.setBackgroundColor(self.bgColor)
 
         if QgsProject.instance().mapThemeCollection().hasMapTheme(map_theme):
             self.settings.setLayers(
@@ -256,24 +287,29 @@ class TileSet():
         else:
             self.settings.setLayers(map_settings.layers())
 
-    def render(self, feedback):
+    def render(self, feedback, make_trans):
         for x in range(self.x_tile_count):
             for y in range(self.y_tile_count):
                 if feedback.isCanceled():
                     return
                 cur_tile = x * self.y_tile_count + y
                 num_tiles = self.x_tile_count * self.y_tile_count
-                self.renderTile(x, y, feedback)
+                self.renderTile(x, y, feedback, make_trans)
 
                 feedback.setProgress(int((cur_tile / num_tiles) * 100))
 
-    def renderTile(self, x, y, feedback):
+    def renderTile(self, x, y, feedback, make_trans):
         """
         Render one tile
-
         :param x: The x index of the current tile
         :param y: The y index of the current tile
         """
+
+        if make_trans:
+            self.image.fill(self.bgColor.rgba())
+        else:
+            self.image.fill(self.bgColor.rgb())
+
         painter = QPainter(self.image)
 
         self.settings.setExtent(QgsRectangle(

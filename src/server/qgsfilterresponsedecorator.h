@@ -24,23 +24,29 @@
 
 #include "qgsserverresponse.h"
 #include "qgsserverfilter.h"
+#include "qgsserverexception.h"
 
 /**
  * \ingroup server
  * \class QgsFilterResponseDecorator
- * Class defining decorator for calling filter's hooks
+ * \brief Class defining decorator for calling filter's hooks
+ * \since QGIS 3.0
  */
 class QgsFilterResponseDecorator: public QgsServerResponse
 {
   public:
 
+    /**
+     * Constructor for QgsFilterResponseDecorator.
+     * \param filters Map of filters to apply before terminating the response
+     * \param response Server response
+     */
     QgsFilterResponseDecorator( QgsServerFiltersMap filters, QgsServerResponse &response );
-    ~QgsFilterResponseDecorator();
 
     /**
      * Call filters requestReady() method
      */
-    void start();
+    void start() SIP_THROW( QgsServerException ) SIP_VIRTUALERRORHANDLER( server_exception_handler );
 
     // QgsServerResponse overrides
 

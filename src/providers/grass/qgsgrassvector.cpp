@@ -31,6 +31,9 @@ extern "C"
 #if defined(_MSC_VER) && defined(M_PI_4)
 #undef M_PI_4 //avoid redefinition warning
 #endif
+#if defined(PROJ_VERSION_MAJOR) && PROJ_VERSION_MAJOR>=6
+#define ACCEPT_USE_OF_DEPRECATED_PROJ_API_H
+#endif
 #include <grass/gprojects.h>
 #include <grass/vector.h>
 #include <grass/raster.h>
@@ -38,7 +41,6 @@ extern "C"
 
 QgsGrassVectorLayer::QgsGrassVectorLayer( QObject *parent )
   : QObject( parent )
-  , mNumber( 0 )
 {
 }
 
@@ -119,7 +121,7 @@ QgsFields QgsGrassVectorLayer::fields()
     QgsDebugMsg( "open database " + mDatabase + " by driver " + mDriver );
     QgsGrass::lock();
     QgsGrass::setMapset( mGrassObject.gisdbase(), mGrassObject.location(),  mGrassObject.mapset() );
-    dbDriver *driver = db_start_driver_open_database( mDriver.toUtf8().data(), mDatabase.toUtf8().data() );
+    dbDriver *driver = db_start_driver_open_database( mDriver.toUtf8().constData(), mDatabase.toUtf8().constData() );
 
     if ( !driver )
     {
@@ -132,7 +134,7 @@ QgsFields QgsGrassVectorLayer::fields()
 
       dbString tableName;
       db_init_string( &tableName );
-      db_set_string( &tableName, mTable.toUtf8().data() );
+      db_set_string( &tableName, mTable.toUtf8().constData() );
 
       dbTable *table = nullptr;
       if ( db_describe_table( driver, &tableName, &table ) != DB_OK )
@@ -200,7 +202,8 @@ QgsGrassVector::QgsGrassVector( const QgsGrassObject &grassObject, QObject *pare
 
 bool QgsGrassVector::openHead()
 {
-  Q_FOREACH ( QgsGrassVectorLayer *layer, mLayers )
+  const auto constMLayers = mLayers;
+  for ( QgsGrassVectorLayer *layer : constMLayers )
   {
     layer->deleteLater();
   }
@@ -220,7 +223,7 @@ bool QgsGrassVector::openHead()
   // TODO: We are currently using vectDestroyMapStruct in G_CATCH blocks because we know
   // that it cannot call another G_fatal_error, but once we switch to hypothetical Vect_destroy_map_struct
   // it should be verified if it can still be in G_CATCH
-  struct Map_info *map = 0;
+  struct Map_info *map = nullptr;
   int level = -1;
 
   // Vect_open_old_head GRASS is raising fatal error if topo exists but it is in different (older) version.
@@ -230,7 +233,7 @@ bool QgsGrassVector::openHead()
   G_TRY
   {
     map = QgsGrass::vectNewMapStruct();
-    level = Vect_open_old_head( map, ( char * ) mGrassObject.name().toUtf8().data(), ( char * ) mGrassObject.mapset().toUtf8().data() );
+    level = Vect_open_old_head( map, ( char * ) mGrassObject.name().toUtf8().constData(), ( char * ) mGrassObject.mapset().toUtf8().constData() );
   }
   G_CATCH( QgsGrass::Exception & e )
   {
@@ -348,7 +351,8 @@ int QgsGrassVector::typeCount( int type ) const
 int QgsGrassVector::maxLayerNumber() const
 {
   int max = 0;
-  Q_FOREACH ( QgsGrassVectorLayer *layer, mLayers )
+  const auto constMLayers = mLayers;
+  for ( QgsGrassVectorLayer *layer : constMLayers )
   {
     max = std::max( max, layer->number() );
   }

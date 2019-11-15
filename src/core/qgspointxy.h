@@ -15,8 +15,8 @@
  *                                                                         *
  ***************************************************************************/
 
-#ifndef QGSPOINT_H
-#define QGSPOINT_H
+#ifndef QGSPOINTXY_H
+#define QGSPOINTXY_H
 
 #include "qgis_core.h"
 #include "qgsvector.h"
@@ -30,7 +30,8 @@
 
 class QgsPoint;
 
-/** \ingroup core
+/**
+ * \ingroup core
  * A class to represent a 2D point.
  *
  * A QgsPointXY represents a position with X and Y coordinates.
@@ -48,39 +49,42 @@ class CORE_EXPORT QgsPointXY
 
   public:
     /// Default constructor
-    QgsPointXY()
-      : mX( 0.0 )
-      , mY( 0.0 )
-    {}
+    QgsPointXY() = default;
 
     //! Create a point from another point
     QgsPointXY( const QgsPointXY &p );
 
-    /** Create a point from x,y coordinates
+    /**
+     * Create a point from x,y coordinates
      * \param x x coordinate
      * \param y y coordinate
      */
     QgsPointXY( double x, double y )
       : mX( x )
       , mY( y )
+      , mIsEmpty( false )
     {}
 
-    /** Create a point from a QPointF
+    /**
+     * Create a point from a QPointF
      * \param point QPointF source
      * \since QGIS 2.7
      */
     QgsPointXY( QPointF point )
       : mX( point.x() )
       , mY( point.y() )
+      , mIsEmpty( false )
     {}
 
-    /** Create a point from a QPoint
+    /**
+     * Create a point from a QPoint
      * \param point QPoint source
      * \since QGIS 2.7
      */
     QgsPointXY( QPoint point )
       : mX( point.x() )
       , mY( point.y() )
+      , mIsEmpty( false )
     {}
 
     /**
@@ -96,20 +100,24 @@ class CORE_EXPORT QgsPointXY
     // see https://github.com/qgis/QGIS/pull/4720#issuecomment-308652392
     ~QgsPointXY() = default;
 
-    /** Sets the x value of the point
+    /**
+     * Sets the x value of the point
      * \param x x coordinate
      */
     void setX( double x )
     {
       mX = x;
+      mIsEmpty = false;
     }
 
-    /** Sets the y value of the point
+    /**
+     * Sets the y value of the point
      * \param y y coordinate
      */
     void setY( double y )
     {
       mY = y;
+      mIsEmpty = false;
     }
 
     //! Sets the x and y value of the point
@@ -117,9 +125,11 @@ class CORE_EXPORT QgsPointXY
     {
       mX = x;
       mY = y;
+      mIsEmpty = false;
     }
 
-    /** Get the x value of the point
+    /**
+     * Gets the x value of the point
      * \returns x coordinate
      */
     double x() const
@@ -127,7 +137,8 @@ class CORE_EXPORT QgsPointXY
       return mX;
     }
 
-    /** Get the y value of the point
+    /**
+     * Gets the y value of the point
      * \returns y coordinate
      */
     double y() const
@@ -135,71 +146,68 @@ class CORE_EXPORT QgsPointXY
       return mY;
     }
 
-    /** Converts a point to a QPointF
+    /**
+     * Converts a point to a QPointF
      * \returns QPointF with same x and y values
      * \since QGIS 2.7
      */
-    QPointF toQPointF() const;
+    QPointF toQPointF() const
+    {
+      return QPointF( mX, mY );
+    }
 
-    //! String representation of the point (x,y)
-    QString toString() const;
-
-    //! As above but with precision for string representation of a point
-    QString toString( int precision ) const;
-
-    /** Return a string representation as degrees minutes seconds.
-     *  Its up to the calling function to ensure that this point can
-     *  be meaningfully represented in this form.
-     *  \param precision number of decimal points to use for seconds
-     *  \param useSuffix set to true to include a direction suffix (e.g., 'N'),
-     *  set to false to use a "-" prefix for west and south coordinates
-     *  \param padded set to true to force minutes and seconds to use two decimals,
-     *  e.g., '05' instead of '5'.
+    /**
+     * Returns a string representation of the point (x, y) with a preset \a precision.
+     * If  \a precision is -1, then a default precision will be used.
      */
-    QString toDegreesMinutesSeconds( int precision, const bool useSuffix = true, const bool padded = false ) const;
+    QString toString( int precision = -1 ) const;
 
-    /** Return a string representation as degrees minutes.
-     *  Its up to the calling function to ensure that this point can
-     *  be meaningfully represented in this form.
-     *  \param precision number of decimal points to use for minutes
-     *  \param useSuffix set to true to include a direction suffix (e.g., 'N'),
-     *  set to false to use a "-" prefix for west and south coordinates
-     *  \param padded set to true to force minutes to use two decimals,
-     *  e.g., '05' instead of '5'.
-     */
-    QString toDegreesMinutes( int precision, const bool useSuffix = true, const bool padded = false ) const;
-
-
-    /** Return the well known text representation for the point.
+    /**
+     * Returns the well known text representation for the point (e.g. "POINT(x y)").
      * The wkt is created without an SRID.
-     * \returns Well known text in the form POINT(x y)
      */
-    QString wellKnownText() const;
+    QString asWkt() const;
 
-    /** Returns the squared distance between this point a specified x, y coordinate.
+    /**
+     * Returns the squared distance between this point a specified x, y coordinate.
      * \see distance()
     */
-    double sqrDist( double x, double y ) const;
+    double sqrDist( double x, double y ) const
+    {
+      return ( mX - x ) * ( mX - x ) + ( mY - y ) * ( mY - y );
+    }
 
-    /** Returns the squared distance between this point another point.
+    /**
+     * Returns the squared distance between this point another point.
      * \see distance()
     */
-    double sqrDist( const QgsPointXY &other ) const;
+    double sqrDist( const QgsPointXY &other ) const
+    {
+      return sqrDist( other.x(), other.y() );
+    }
 
-    /** Returns the distance between this point and a specified x, y coordinate.
+    /**
+     * Returns the distance between this point and a specified x, y coordinate.
      * \param x x-coordniate
      * \param y y-coordinate
      * \see sqrDist()
      * \since QGIS 2.16
     */
-    double distance( double x, double y ) const;
+    double distance( double x, double y ) const
+    {
+      return std::sqrt( sqrDist( x, y ) );
+    }
 
-    /** Returns the distance between this point and another point.
+    /**
+     * Returns the distance between this point and another point.
      * \param other other point
      * \see sqrDist()
      * \since QGIS 2.16
     */
-    double distance( const QgsPointXY &other ) const;
+    double distance( const QgsPointXY &other ) const
+    {
+      return std::sqrt( sqrDist( other ) );
+    }
 
     //! Returns the minimum distance between this point and a segment
     double sqrDistToSegment( double x1, double y1, double x2, double y2, QgsPointXY &minDistPoint SIP_OUT, double epsilon = DEFAULT_SEGMENT_EPSILON ) const;
@@ -207,7 +215,8 @@ class CORE_EXPORT QgsPointXY
     //! Calculates azimuth between this point and other one (clockwise in degree, starting from north)
     double azimuth( const QgsPointXY &other ) const;
 
-    /** Returns a new point which corresponds to this point projected by a specified distance
+    /**
+     * Returns a new point which corresponds to this point projected by a specified distance
      * in a specified bearing.
      * \param distance distance to project
      * \param bearing angle to project in, clockwise in degrees starting from north
@@ -215,25 +224,80 @@ class CORE_EXPORT QgsPointXY
      */
     QgsPointXY project( double distance, double bearing ) const;
 
-    /** Compares this point with another point with a fuzzy tolerance
+    /**
+     * Returns TRUE if the geometry is empty.
+     * Unlike QgsPoint, this class is also used to retrieve graphical coordinates like QPointF.
+     * It therefore has the default coordinates (0.0).
+     * A QgsPointXY is considered empty, when the coordinates have not been explicitly filled in.
+     * \since QGIS 3.10
+     */
+    bool isEmpty() const { return mIsEmpty; }
+
+    /**
+     * Compares this point with another point with a fuzzy tolerance
      * \param other point to compare with
      * \param epsilon maximum difference for coordinates between the points
-     * \returns true if points are equal within specified tolerance
+     * \returns TRUE if points are equal within specified tolerance
      * \since QGIS 2.9
      */
-    bool compare( const QgsPointXY &other, double epsilon = 4 * DBL_EPSILON ) const;
+    bool compare( const QgsPointXY &other, double epsilon = 4 * std::numeric_limits<double>::epsilon() ) const
+    {
+      return ( qgsDoubleNear( mX, other.x(), epsilon ) && qgsDoubleNear( mY, other.y(), epsilon ) );
+    }
 
     //! equality operator
-    bool operator==( const QgsPointXY &other );
+    bool operator==( const QgsPointXY &other )
+    {
+      if ( isEmpty() && other.isEmpty() )
+        return true;
+      if ( isEmpty() && !other.isEmpty() )
+        return false;
+      if ( ! isEmpty() && other.isEmpty() )
+        return false;
+
+      bool equal = true;
+      equal &= qgsDoubleNear( other.x(), mX, 1E-8 );
+      equal &= qgsDoubleNear( other.y(), mY, 1E-8 );
+
+      return equal;
+    }
 
     //! Inequality operator
-    bool operator!=( const QgsPointXY &other ) const;
+    bool operator!=( const QgsPointXY &other ) const
+    {
+      if ( isEmpty() && other.isEmpty() )
+        return false;
+      if ( isEmpty() && !other.isEmpty() )
+        return true;
+      if ( ! isEmpty() && other.isEmpty() )
+        return true;
+
+      bool equal = true;
+      equal &= qgsDoubleNear( other.x(), mX, 1E-8 );
+      equal &= qgsDoubleNear( other.y(), mY, 1E-8 );
+
+      return !equal;
+    }
 
     //! Multiply x and y by the given value
-    void multiply( double scalar );
+    void multiply( double scalar )
+    {
+      mX *= scalar;
+      mY *= scalar;
+    }
 
     //! Assignment
-    QgsPointXY &operator=( const QgsPointXY &other );
+    QgsPointXY &operator=( const QgsPointXY &other )
+    {
+      if ( &other != this )
+      {
+        mX = other.x();
+        mY = other.y();
+        mIsEmpty = other.isEmpty();
+      }
+
+      return *this;
+    }
 
     //! Calculates the vector obtained by subtracting a point from this point
     QgsVector operator-( const QgsPointXY &p ) const { return QgsVector( mX - p.mX, mY - p.mY ); }
@@ -271,9 +335,8 @@ class CORE_EXPORT QgsPointXY
 #ifdef SIP_RUN
     SIP_PYOBJECT __repr__();
     % MethodCode
-    QString str = "(" + QString::number( sipCpp->x() ) + "," + QString::number( sipCpp->y() ) + ")";
-    //QString str("(%f,%f)").arg(sipCpp->x()).arg(sipCpp->y());
-    sipRes = PyUnicode_FromString( str.toUtf8().data() );
+    QString str = QStringLiteral( "<QgsPointXY: %1>" ).arg( sipCpp->asWkt() );
+    sipRes = PyUnicode_FromString( str.toUtf8().constData() );
     % End
 
     int __len__();
@@ -308,23 +371,38 @@ class CORE_EXPORT QgsPointXY
   private:
 
     //! x coordinate
-    double mX;
+    double mX = 0; //std::numeric_limits<double>::quiet_NaN();
 
     //! y coordinate
-    double mY;
+    double mY = 0; //std::numeric_limits<double>::quiet_NaN();
+
+    //! is point empty?
+    bool mIsEmpty = true;
 
     friend uint qHash( const QgsPointXY &pnt );
 
-}; // class QgsPoint
+}; // class QgsPointXY
 
 Q_DECLARE_METATYPE( QgsPointXY )
 
 inline bool operator==( const QgsPointXY &p1, const QgsPointXY &p2 ) SIP_SKIP
 {
-  if ( qgsDoubleNear( p1.x(), p2.x() ) && qgsDoubleNear( p1.y(), p2.y() ) )
-  { return true; }
-  else
-  { return false; }
+  const bool nan1X = std::isnan( p1.x() );
+  const bool nan2X = std::isnan( p2.x() );
+  if ( nan1X != nan2X )
+    return false;
+  if ( !nan1X && !qgsDoubleNear( p1.x(), p2.x(), 1E-8 ) )
+    return false;
+
+  const bool nan1Y = std::isnan( p1.y() );
+  const bool nan2Y = std::isnan( p2.y() );
+  if ( nan1Y != nan2Y )
+    return false;
+
+  if ( !nan1Y && !qgsDoubleNear( p1.y(), p2.y(), 1E-8 ) )
+    return false;
+
+  return true;
 }
 
 inline std::ostream &operator << ( std::ostream &os, const QgsPointXY &p ) SIP_SKIP
@@ -344,4 +422,4 @@ inline uint qHash( const QgsPointXY &p ) SIP_SKIP
 }
 
 
-#endif //QGSPOINT_H
+#endif //QGSPOINTXY_H

@@ -14,9 +14,13 @@
  ***************************************************************************/
 #include "qgsquerybuilder.h"
 #include "qgslogger.h"
+#include "qgsproject.h"
 #include "qgssettings.h"
 #include "qgsvectorlayer.h"
 #include "qgsvectordataprovider.h"
+#include "qgsapplication.h"
+#include "qgshelp.h"
+#include "qgsgui.h"
 
 #include <QListView>
 #include <QMessageBox>
@@ -32,10 +36,27 @@ QgsQueryBuilder::QgsQueryBuilder( QgsVectorLayer *layer,
   , mLayer( layer )
 {
   setupUi( this );
+  QgsGui::instance()->enableAutoGeometryRestore( this );
+  connect( btnEqual, &QPushButton::clicked, this, &QgsQueryBuilder::btnEqual_clicked );
+  connect( btnLessThan, &QPushButton::clicked, this, &QgsQueryBuilder::btnLessThan_clicked );
+  connect( btnGreaterThan, &QPushButton::clicked, this, &QgsQueryBuilder::btnGreaterThan_clicked );
+  connect( btnPct, &QPushButton::clicked, this, &QgsQueryBuilder::btnPct_clicked );
+  connect( btnIn, &QPushButton::clicked, this, &QgsQueryBuilder::btnIn_clicked );
+  connect( btnNotIn, &QPushButton::clicked, this, &QgsQueryBuilder::btnNotIn_clicked );
+  connect( btnLike, &QPushButton::clicked, this, &QgsQueryBuilder::btnLike_clicked );
+  connect( btnILike, &QPushButton::clicked, this, &QgsQueryBuilder::btnILike_clicked );
+  connect( lstFields, &QListView::clicked, this, &QgsQueryBuilder::lstFields_clicked );
+  connect( lstFields, &QListView::doubleClicked, this, &QgsQueryBuilder::lstFields_doubleClicked );
+  connect( lstValues, &QListView::doubleClicked, this, &QgsQueryBuilder::lstValues_doubleClicked );
+  connect( btnLessEqual, &QPushButton::clicked, this, &QgsQueryBuilder::btnLessEqual_clicked );
+  connect( btnGreaterEqual, &QPushButton::clicked, this, &QgsQueryBuilder::btnGreaterEqual_clicked );
+  connect( btnNotEqual, &QPushButton::clicked, this, &QgsQueryBuilder::btnNotEqual_clicked );
+  connect( btnAnd, &QPushButton::clicked, this, &QgsQueryBuilder::btnAnd_clicked );
+  connect( btnNot, &QPushButton::clicked, this, &QgsQueryBuilder::btnNot_clicked );
+  connect( btnOr, &QPushButton::clicked, this, &QgsQueryBuilder::btnOr_clicked );
+  connect( btnGetAllValues, &QPushButton::clicked, this, &QgsQueryBuilder::btnGetAllValues_clicked );
+  connect( btnSampleValues, &QPushButton::clicked, this, &QgsQueryBuilder::btnSampleValues_clicked );
   connect( buttonBox, &QDialogButtonBox::helpRequested, this, &QgsQueryBuilder::showHelp );
-
-  QgsSettings settings;
-  restoreGeometry( settings.value( QStringLiteral( "Windows/QueryBuilder/geometry" ) ).toByteArray() );
 
   QPushButton *pbn = new QPushButton( tr( "&Test" ) );
   buttonBox->addButton( pbn, QDialogButtonBox::ActionRole );
@@ -54,13 +75,11 @@ QgsQueryBuilder::QgsQueryBuilder( QgsVectorLayer *layer,
   lblDataUri->setText( tr( "Set provider filter on %1" ).arg( layer->name() ) );
   txtSQL->setText( mOrigSubsetString );
 
-  populateFields();
-}
+  mFilterLineEdit->setShowSearchIcon( true );
+  mFilterLineEdit->setPlaceholderText( tr( "Search…" ) );
+  connect( mFilterLineEdit, &QgsFilterLineEdit::textChanged, this, &QgsQueryBuilder::onTextChanged );
 
-QgsQueryBuilder::~QgsQueryBuilder()
-{
-  QgsSettings settings;
-  settings.setValue( QStringLiteral( "Windows/QueryBuilder/geometry" ), saveGeometry() );
+  populateFields();
 }
 
 void QgsQueryBuilder::showEvent( QShowEvent *event )
@@ -79,7 +98,7 @@ void QgsQueryBuilder::populateFields()
       // only consider native fields
       continue;
     }
-    QStandardItem *myItem = new QStandardItem( fields.at( idx ).name() );
+    QStandardItem *myItem = new QStandardItem( fields.at( idx ).displayNameWithAlias() );
     myItem->setData( idx );
     myItem->setEditable( false );
     mModelFields->insertRow( mModelFields->rowCount(), myItem );
@@ -99,6 +118,8 @@ void QgsQueryBuilder::setupGuiViews()
   //Initialize the models
   mModelFields = new QStandardItemModel();
   mModelValues = new QStandardItemModel();
+  mProxyValues = new QSortFilterProxyModel();
+  mProxyValues->setSourceModel( mModelValues );
   // Modes
   lstFields->setViewMode( QListView::ListMode );
   lstValues->setViewMode( QListView::ListMode );
@@ -110,6 +131,7 @@ void QgsQueryBuilder::setupGuiViews()
   // Colored rows
   lstFields->setAlternatingRowColors( true );
   lstValues->setAlternatingRowColors( true );
+  lstValues->setModel( mProxyValues );
 }
 
 void QgsQueryBuilder::fillValues( int idx, int limit )
@@ -118,13 +140,15 @@ void QgsQueryBuilder::fillValues( int idx, int limit )
   mModelValues->clear();
 
   // determine the field type
-  QSet<QVariant> values = mLayer->uniqueValues( idx, limit );
+  QList<QVariant> values = mLayer->uniqueValues( idx, limit ).toList();
+  std::sort( values.begin(), values.end() );
 
   QString nullValue = QgsApplication::nullRepresentation();
 
-  QgsDebugMsg( QString( "nullValue: %1" ).arg( nullValue ) );
+  QgsDebugMsg( QStringLiteral( "nullValue: %1" ).arg( nullValue ) );
 
-  Q_FOREACH ( const QVariant &var, values )
+  const auto constValues = values;
+  for ( const QVariant &var : constValues )
   {
     QString value;
     if ( var.isNull() )
@@ -138,28 +162,22 @@ void QgsQueryBuilder::fillValues( int idx, int limit )
     myItem->setEditable( false );
     myItem->setData( var, Qt::UserRole + 1 );
     mModelValues->insertRow( mModelValues->rowCount(), myItem );
-    QgsDebugMsg( QString( "Value is null: %1\nvalue: %2" ).arg( var.isNull() ).arg( var.isNull() ? nullValue : var.toString() ) );
+    QgsDebugMsg( QStringLiteral( "Value is null: %1\nvalue: %2" ).arg( var.isNull() ).arg( var.isNull() ? nullValue : var.toString() ) );
   }
 }
 
-void QgsQueryBuilder::on_btnSampleValues_clicked()
+void QgsQueryBuilder::btnSampleValues_clicked()
 {
   lstValues->setCursor( Qt::WaitCursor );
 
   QString prevSubsetString = mLayer->subsetString();
   if ( mUseUnfilteredLayer->isChecked() && !prevSubsetString.isEmpty() )
   {
-    mLayer->setSubsetString( QLatin1String( "" ) );
+    mLayer->setSubsetString( QString() );
   }
 
-  //delete connection mModelValues and lstValues
-  QStandardItemModel *tmp = new QStandardItemModel();
-  lstValues->setModel( tmp );
   //Clear and fill the mModelValues
   fillValues( mModelFields->data( lstFields->currentIndex(), Qt::UserRole + 1 ).toInt(), 25 );
-  lstValues->setModel( mModelValues );
-  //delete the tmp
-  delete tmp;
 
   if ( prevSubsetString != mLayer->subsetString() )
   {
@@ -169,24 +187,18 @@ void QgsQueryBuilder::on_btnSampleValues_clicked()
   lstValues->setCursor( Qt::ArrowCursor );
 }
 
-void QgsQueryBuilder::on_btnGetAllValues_clicked()
+void QgsQueryBuilder::btnGetAllValues_clicked()
 {
   lstValues->setCursor( Qt::WaitCursor );
 
   QString prevSubsetString = mLayer->subsetString();
   if ( mUseUnfilteredLayer->isChecked() && !prevSubsetString.isEmpty() )
   {
-    mLayer->setSubsetString( QLatin1String( "" ) );
+    mLayer->setSubsetString( QString() );
   }
 
-  //delete connection mModelValues and lstValues
-  QStandardItemModel *tmp = new QStandardItemModel();
-  lstValues->setModel( tmp );
   //Clear and fill the mModelValues
   fillValues( mModelFields->data( lstFields->currentIndex(), Qt::UserRole + 1 ).toInt(), -1 );
-  lstValues->setModel( mModelValues );
-  //delete the tmp
-  delete tmp;
 
   if ( prevSubsetString != mLayer->subsetString() )
   {
@@ -213,7 +225,7 @@ void QgsQueryBuilder::test()
   else if ( mLayer->dataProvider()->hasErrors() )
   {
     QMessageBox::warning( this,
-                          tr( "Query Failed" ),
+                          tr( "Query Result" ),
                           tr( "An error occurred when executing the query." )
                           + tr( "\nThe data provider said:\n%1" ).arg( mLayer->dataProvider()->errors().join( QStringLiteral( "\n" ) ) ) );
     mLayer->dataProvider()->clearErrors();
@@ -221,30 +233,33 @@ void QgsQueryBuilder::test()
   else
   {
     QMessageBox::warning( this,
-                          tr( "Query Failed" ),
+                          tr( "Query Result" ),
                           tr( "An error occurred when executing the query." ) );
   }
 }
 
 void QgsQueryBuilder::accept()
 {
-  if ( !mLayer->setSubsetString( txtSQL->text() ) )
+  if ( txtSQL->text() != mOrigSubsetString )
   {
-    //error in query - show the problem
-    if ( mLayer->dataProvider()->hasErrors() )
+    if ( !mLayer->setSubsetString( txtSQL->text() ) )
     {
-      QMessageBox::warning( this,
-                            tr( "Query Failed" ),
-                            tr( "An error occurred when executing the query." )
-                            + tr( "\nThe data provider said:\n%1" ).arg( mLayer->dataProvider()->errors().join( QStringLiteral( "\n" ) ) ) );
-      mLayer->dataProvider()->clearErrors();
-    }
-    else
-    {
-      QMessageBox::warning( this, tr( "Error in Query" ), tr( "The subset string could not be set" ) );
-    }
+      //error in query - show the problem
+      if ( mLayer->dataProvider()->hasErrors() )
+      {
+        QMessageBox::warning( this,
+                              tr( "Query Result" ),
+                              tr( "An error occurred when executing the query." )
+                              + tr( "\nThe data provider said:\n%1" ).arg( mLayer->dataProvider()->errors().join( QStringLiteral( "\n" ) ) ) );
+        mLayer->dataProvider()->clearErrors();
+      }
+      else
+      {
+        QMessageBox::warning( this, tr( "Query Result" ), tr( "Error in query. The subset string could not be set." ) );
+      }
 
-    return;
+      return;
+    }
   }
 
   QDialog::accept();
@@ -258,43 +273,43 @@ void QgsQueryBuilder::reject()
   QDialog::reject();
 }
 
-void QgsQueryBuilder::on_btnEqual_clicked()
+void QgsQueryBuilder::btnEqual_clicked()
 {
   txtSQL->insertText( QStringLiteral( " = " ) );
   txtSQL->setFocus();
 }
 
-void QgsQueryBuilder::on_btnLessThan_clicked()
+void QgsQueryBuilder::btnLessThan_clicked()
 {
   txtSQL->insertText( QStringLiteral( " < " ) );
   txtSQL->setFocus();
 }
 
-void QgsQueryBuilder::on_btnGreaterThan_clicked()
+void QgsQueryBuilder::btnGreaterThan_clicked()
 {
   txtSQL->insertText( QStringLiteral( " > " ) );
   txtSQL->setFocus();
 }
 
-void QgsQueryBuilder::on_btnPct_clicked()
+void QgsQueryBuilder::btnPct_clicked()
 {
   txtSQL->insertText( QStringLiteral( "%" ) );
   txtSQL->setFocus();
 }
 
-void QgsQueryBuilder::on_btnIn_clicked()
+void QgsQueryBuilder::btnIn_clicked()
 {
   txtSQL->insertText( QStringLiteral( " IN " ) );
   txtSQL->setFocus();
 }
 
-void QgsQueryBuilder::on_btnNotIn_clicked()
+void QgsQueryBuilder::btnNotIn_clicked()
 {
   txtSQL->insertText( QStringLiteral( " NOT IN " ) );
   txtSQL->setFocus();
 }
 
-void QgsQueryBuilder::on_btnLike_clicked()
+void QgsQueryBuilder::btnLike_clicked()
 {
   txtSQL->insertText( QStringLiteral( " LIKE " ) );
   txtSQL->setFocus();
@@ -310,7 +325,7 @@ void QgsQueryBuilder::setSql( const QString &sqlStatement )
   txtSQL->setText( sqlStatement );
 }
 
-void QgsQueryBuilder::on_lstFields_clicked( const QModelIndex &index )
+void QgsQueryBuilder::lstFields_clicked( const QModelIndex &index )
 {
   if ( mPreviousFieldRow != index.row() )
   {
@@ -320,23 +335,24 @@ void QgsQueryBuilder::on_lstFields_clicked( const QModelIndex &index )
     btnGetAllValues->setEnabled( true );
 
     mModelValues->clear();
+    mFilterLineEdit->clear();
   }
 }
 
-void QgsQueryBuilder::on_lstFields_doubleClicked( const QModelIndex &index )
+void QgsQueryBuilder::lstFields_doubleClicked( const QModelIndex &index )
 {
   txtSQL->insertText( '\"' + mLayer->fields().at( mModelFields->data( index, Qt::UserRole + 1 ).toInt() ).name() + '\"' );
   txtSQL->setFocus();
 }
 
-void QgsQueryBuilder::on_lstValues_doubleClicked( const QModelIndex &index )
+void QgsQueryBuilder::lstValues_doubleClicked( const QModelIndex &index )
 {
-  QVariant value = mModelValues->data( index, Qt::UserRole + 1 );
+  QVariant value = index.data( Qt::UserRole + 1 );
   if ( value.isNull() )
     txtSQL->insertText( QStringLiteral( "NULL" ) );
   else if ( value.type() == QVariant::Date && mLayer->providerType() == QLatin1String( "ogr" ) && mLayer->storageType() == QLatin1String( "ESRI Shapefile" ) )
     txtSQL->insertText( '\'' + value.toDate().toString( QStringLiteral( "yyyy/MM/dd" ) ) + '\'' );
-  else if ( value.type() == QVariant::Int || value.type() == QVariant::Double || value.type() == QVariant::LongLong )
+  else if ( value.type() == QVariant::Int || value.type() == QVariant::Double || value.type() == QVariant::LongLong || value.type() == QVariant::Bool )
     txtSQL->insertText( value.toString() );
   else
     txtSQL->insertText( '\'' + value.toString().replace( '\'', QLatin1String( "''" ) ) + '\'' );
@@ -344,50 +360,56 @@ void QgsQueryBuilder::on_lstValues_doubleClicked( const QModelIndex &index )
   txtSQL->setFocus();
 }
 
-void QgsQueryBuilder::on_btnLessEqual_clicked()
+void QgsQueryBuilder::btnLessEqual_clicked()
 {
   txtSQL->insertText( QStringLiteral( " <= " ) );
   txtSQL->setFocus();
 }
 
-void QgsQueryBuilder::on_btnGreaterEqual_clicked()
+void QgsQueryBuilder::btnGreaterEqual_clicked()
 {
   txtSQL->insertText( QStringLiteral( " >= " ) );
   txtSQL->setFocus();
 }
 
-void QgsQueryBuilder::on_btnNotEqual_clicked()
+void QgsQueryBuilder::btnNotEqual_clicked()
 {
   txtSQL->insertText( QStringLiteral( " != " ) );
   txtSQL->setFocus();
 }
 
-void QgsQueryBuilder::on_btnAnd_clicked()
+void QgsQueryBuilder::btnAnd_clicked()
 {
   txtSQL->insertText( QStringLiteral( " AND " ) );
   txtSQL->setFocus();
 }
 
-void QgsQueryBuilder::on_btnNot_clicked()
+void QgsQueryBuilder::btnNot_clicked()
 {
   txtSQL->insertText( QStringLiteral( " NOT " ) );
   txtSQL->setFocus();
 }
 
-void QgsQueryBuilder::on_btnOr_clicked()
+void QgsQueryBuilder::btnOr_clicked()
 {
   txtSQL->insertText( QStringLiteral( " OR " ) );
   txtSQL->setFocus();
 }
 
+void QgsQueryBuilder::onTextChanged( const QString &text )
+{
+  mProxyValues->setFilterCaseSensitivity( Qt::CaseInsensitive );
+  mProxyValues->setFilterWildcard( text );
+}
+
 void QgsQueryBuilder::clear()
 {
   txtSQL->clear();
-  mLayer->setSubsetString( QLatin1String( "" ) );
+  mLayer->setSubsetString( QString() );
   mUseUnfilteredLayer->setDisabled( true );
 }
 
-void QgsQueryBuilder::on_btnILike_clicked()
+void QgsQueryBuilder::btnILike_clicked()
 {
   txtSQL->insertText( QStringLiteral( " ILIKE " ) );
   txtSQL->setFocus();

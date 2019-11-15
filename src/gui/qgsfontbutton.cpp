@@ -25,6 +25,9 @@
 #include "qgsunittypes.h"
 #include "qgsmenuheader.h"
 #include "qgsfontutils.h"
+#include "qgsapplication.h"
+#include "qgsexpressioncontextutils.h"
+#include "qgsvectorlayer.h"
 #include <QMenu>
 #include <QClipboard>
 #include <QDrag>
@@ -49,8 +52,9 @@ QgsFontButton::QgsFontButton( QWidget *parent, const QString &dialogTitle )
 
   //make sure height of button looks good under different platforms
   QSize size = QToolButton::minimumSizeHint();
-  int fontHeight = fontMetrics().height() * 1.4;
-  mSizeHint = QSize( size.width(), std::max( size.height(), fontHeight ) );
+  int fontHeight = Qgis::UI_SCALE_FACTOR * fontMetrics().height() * 1.4;
+  int minWidth = Qgis::UI_SCALE_FACTOR * fontMetrics().width( 'X' ) * 20;
+  mSizeHint = QSize( std::max( minWidth, size.width() ), std::max( size.height(), fontHeight ) );
 }
 
 QSize QgsFontButton::minimumSizeHint() const
@@ -69,19 +73,34 @@ void QgsFontButton::showSettingsDialog()
   {
     case ModeTextRenderer:
     {
+      QgsExpressionContext context;
+      if ( mExpressionContextGenerator )
+        context  = mExpressionContextGenerator->createExpressionContext();
+      else
+      {
+        context.appendScopes( QgsExpressionContextUtils::globalProjectLayerScopes( mLayer.data() ) );
+      }
+
+      QgsSymbolWidgetContext symbolContext;
+      symbolContext.setExpressionContext( &context );
+      symbolContext.setMapCanvas( mMapCanvas );
+      symbolContext.setMessageBar( mMessageBar );
+
       QgsPanelWidget *panel = QgsPanelWidget::findParentPanel( this );
       if ( panel && panel->dockMode() )
       {
-        QgsTextFormatPanelWidget *formatWidget = new QgsTextFormatPanelWidget( mFormat, mMapCanvas, this );
+        QgsTextFormatPanelWidget *formatWidget = new QgsTextFormatPanelWidget( mFormat, mMapCanvas, this, mLayer.data() );
         formatWidget->setPanelTitle( mDialogTitle );
+        formatWidget->setContext( symbolContext );
 
         connect( formatWidget, &QgsTextFormatPanelWidget::widgetChanged, this, [ this, formatWidget ] { this->setTextFormat( formatWidget->format() ); } );
         panel->openPanel( formatWidget );
         return;
       }
 
-      QgsTextFormatDialog dialog( mFormat, mMapCanvas, this );
+      QgsTextFormatDialog dialog( mFormat, mMapCanvas, this, QgsGuiUtils::ModalDialogFlags, mLayer.data() );
       dialog.setWindowTitle( mDialogTitle );
+      dialog.setContext( symbolContext );
       if ( dialog.exec() )
       {
         setTextFormat( dialog.format() );
@@ -105,6 +124,7 @@ void QgsFontButton::showSettingsDialog()
 
   // reactivate button's window
   activateWindow();
+  raise();
 }
 
 QgsMapCanvas *QgsFontButton::mapCanvas() const
@@ -115,6 +135,16 @@ QgsMapCanvas *QgsFontButton::mapCanvas() const
 void QgsFontButton::setMapCanvas( QgsMapCanvas *mapCanvas )
 {
   mMapCanvas = mapCanvas;
+}
+
+void QgsFontButton::setMessageBar( QgsMessageBar *bar )
+{
+  mMessageBar = bar;
+}
+
+QgsMessageBar *QgsFontButton::messageBar() const
+{
+  return mMessageBar;
 }
 
 void QgsFontButton::setTextFormat( const QgsTextFormat &format )
@@ -184,7 +214,7 @@ bool QgsFontButton::event( QEvent *e )
         fontSize = mFont.pointSizeF();
         break;
     }
-    toolTip = QStringLiteral( "<b>%1</b><br>%2<br>Size: %3" ).arg( text(), mFormat.font().family() ).arg( fontSize );
+    toolTip = QStringLiteral( "<b>%1</b><br>%2<br>Size: %3" ).arg( text(), mMode == ModeTextRenderer ? mFormat.font().family() : mFont.family() ).arg( fontSize );
     QToolTip::showText( helpEvent->globalPos(), toolTip );
   }
   return QToolButton::event( e );
@@ -234,7 +264,8 @@ void QgsFontButton::mouseMoveEvent( QMouseEvent *e )
       drag->setMimeData( QgsFontUtils::toMimeData( mFont ) );
       break;
   }
-  drag->setPixmap( createDragIcon() );
+  const int iconSize = QgsGuiUtils::scaleIconSize( 50 );
+  drag->setPixmap( createDragIcon( QSize( iconSize, iconSize ) ) );
   drag->exec( Qt::CopyAction );
   setDown( false );
 }
@@ -284,7 +315,7 @@ void QgsFontButton::dragEnterEvent( QDragEnterEvent *e )
 
 void QgsFontButton::dragLeaveEvent( QDragLeaveEvent *e )
 {
-  Q_UNUSED( e );
+  Q_UNUSED( e )
   //reset button color
   updatePreview();
 }
@@ -376,7 +407,8 @@ void QgsFontButton::wheelEvent( QWheelEvent *event )
 QPixmap QgsFontButton::createColorIcon( const QColor &color ) const
 {
   //create an icon pixmap
-  QPixmap pixmap( 16, 16 );
+  const int iconSize = QgsGuiUtils::scaleIconSize( 16 );
+  QPixmap pixmap( iconSize, iconSize );
   pixmap.fill( Qt::transparent );
 
   QPainter p;
@@ -387,7 +419,7 @@ QPixmap QgsFontButton::createColorIcon( const QColor &color ) const
 
   //draw border
   p.setPen( QColor( 197, 197, 197 ) );
-  p.drawRect( 0, 0, 15, 15 );
+  p.drawRect( 0, 0, iconSize - 1, iconSize - 1 );
   p.end();
   return pixmap;
 }
@@ -538,8 +570,9 @@ void QgsFontButton::prepareMenu()
   sizeWidget->setFocusPolicy( Qt::StrongFocus );
   mMenu->addAction( sizeAction );
 
-  QMenu *recentFontMenu = new QMenu( tr( "Recent fonts" ), mMenu );
-  Q_FOREACH ( const QString &family, QgsFontUtils::recentFontFamilies() )
+  QMenu *recentFontMenu = new QMenu( tr( "Recent Fonts" ), mMenu );
+  const auto recentFontFamilies { QgsFontUtils::recentFontFamilies() };
+  for ( const QString &family : recentFontFamilies )
   {
     QAction *fontAction = new QAction( family, recentFontMenu );
     QFont f = fontAction->font();
@@ -581,28 +614,29 @@ void QgsFontButton::prepareMenu()
   }
   mMenu->addMenu( recentFontMenu );
 
-  QAction *configureAction = new QAction( tr( "Configure format..." ), this );
+  QAction *configureAction = new QAction( tr( "Configure Format…" ), this );
   mMenu->addAction( configureAction );
   connect( configureAction, &QAction::triggered, this, &QgsFontButton::showSettingsDialog );
 
-  QAction *copyFormatAction = new QAction( tr( "Copy format" ), this );
+  QAction *copyFormatAction = new QAction( tr( "Copy Format" ), this );
   mMenu->addAction( copyFormatAction );
   connect( copyFormatAction, &QAction::triggered, this, &QgsFontButton::copyFormat );
-  QAction *pasteFormatAction = new QAction( tr( "Paste format" ), this );
+  QAction *pasteFormatAction = new QAction( tr( "Paste Format" ), this );
   //enable or disable paste action based on current clipboard contents. We always show the paste
   //action, even if it's disabled, to give hint to the user that pasting colors is possible
   QgsTextFormat tempFormat;
   QFont tempFont;
+  const int iconSize = QgsGuiUtils::scaleIconSize( 16 );
   if ( mMode == ModeTextRenderer && formatFromMimeData( QApplication::clipboard()->mimeData(), tempFormat ) )
   {
     tempFormat.setSizeUnit( QgsUnitTypes::RenderPixels );
     tempFormat.setSize( 14 );
-    pasteFormatAction->setIcon( createDragIcon( QSize( 16, 16 ), &tempFormat ) );
+    pasteFormatAction->setIcon( createDragIcon( QSize( iconSize, iconSize ), &tempFormat ) );
   }
   else if ( mMode == ModeQFont && fontFromMimeData( QApplication::clipboard()->mimeData(), tempFont ) )
   {
     tempFont.setPointSize( 8 );
-    pasteFormatAction->setIcon( createDragIcon( QSize( 16, 16 ), nullptr, &tempFont ) );
+    pasteFormatAction->setIcon( createDragIcon( QSize( iconSize, iconSize ), nullptr, &tempFont ) );
   }
   else
   {
@@ -653,11 +687,11 @@ void QgsFontButton::prepareMenu()
 
     mMenu->addSeparator();
 
-    QAction *copyColorAction = new QAction( tr( "Copy color" ), this );
+    QAction *copyColorAction = new QAction( tr( "Copy Color" ), this );
     mMenu->addAction( copyColorAction );
     connect( copyColorAction, &QAction::triggered, this, &QgsFontButton::copyColor );
 
-    QAction *pasteColorAction = new QAction( tr( "Paste color" ), this );
+    QAction *pasteColorAction = new QAction( tr( "Paste Color" ), this );
     //enable or disable paste action based on current clipboard contents. We always show the paste
     //action, even if it's disabled, to give hint to the user that pasting colors is possible
     QColor clipColor;
@@ -685,6 +719,21 @@ QFont QgsFontButton::currentFont() const
   return mFont;
 }
 
+QgsVectorLayer *QgsFontButton::layer() const
+{
+  return mLayer;
+}
+
+void QgsFontButton::setLayer( QgsVectorLayer *layer )
+{
+  mLayer = layer;
+}
+
+void QgsFontButton::registerExpressionContextGenerator( QgsExpressionContextGenerator *generator )
+{
+  mExpressionContextGenerator = generator;
+}
+
 void QgsFontButton::setCurrentFont( const QFont &font )
 {
   mFont = font;
@@ -697,7 +746,7 @@ QgsFontButton::Mode QgsFontButton::mode() const
   return mMode;
 }
 
-void QgsFontButton::setMode( const Mode &mode )
+void QgsFontButton::setMode( Mode mode )
 {
   mMode = mode;
   updatePreview();
@@ -771,6 +820,8 @@ void QgsFontButton::updatePreview( const QColor &color, QgsTextFormat *format, Q
       //make sure height of icon looks good under different platforms
 #ifdef Q_OS_WIN
       mIconSize = QSize( buttonSize.width() - 10, height() - 6 );
+#elif defined(Q_OS_MAC)
+      mIconSize = QSize( buttonSize.width() - 10, height() - 2 );
 #else
       mIconSize = QSize( buttonSize.width() - 10, height() - 12 );
 #endif

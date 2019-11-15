@@ -24,17 +24,19 @@ QgsLayoutUndoStack::QgsLayoutUndoStack( QgsLayout *layout )
   : mLayout( layout )
   , mUndoStack( new QUndoStack( layout ) )
 {
-
+  connect( mUndoStack.get(), &QUndoStack::indexChanged, this, &QgsLayoutUndoStack::indexChanged );
 }
 
 void QgsLayoutUndoStack::beginMacro( const QString &commandText )
 {
-  mUndoStack->beginMacro( commandText );
+  if ( mBlockedCommands == 0 )
+    mUndoStack->beginMacro( commandText );
 }
 
 void QgsLayoutUndoStack::endMacro()
 {
-  mUndoStack->endMacro();
+  if ( mBlockedCommands == 0 )
+    mUndoStack->endMacro();
 }
 
 void QgsLayoutUndoStack::beginCommand( QgsLayoutUndoObjectInterface *object, const QString &commandText, int id )
@@ -44,31 +46,77 @@ void QgsLayoutUndoStack::beginCommand( QgsLayoutUndoObjectInterface *object, con
     return;
   }
 
-  mActiveCommand.reset( object->createCommand( commandText, id, nullptr ) );
-  mActiveCommand->saveBeforeState();
+  mActiveCommands.emplace_back( std::unique_ptr< QgsAbstractLayoutUndoCommand >( object->createCommand( commandText, id, nullptr ) ) );
+  mActiveCommands.back()->saveBeforeState();
 }
 
 void QgsLayoutUndoStack::endCommand()
 {
-  if ( !mActiveCommand )
+  if ( mActiveCommands.empty() )
     return;
 
-  mActiveCommand->saveAfterState();
-  if ( mActiveCommand->containsChange() ) //protect against empty commands
+  mActiveCommands.back()->saveAfterState();
+  if ( mBlockedCommands == 0 && mActiveCommands.back()->containsChange() ) //protect against empty commands
   {
-    mUndoStack->push( mActiveCommand.release() );
-
+    mUndoStack->push( mActiveCommands.back().release() );
     mLayout->project()->setDirty( true );
   }
+
+  mActiveCommands.pop_back();
 }
 
 void QgsLayoutUndoStack::cancelCommand()
 {
-  mActiveCommand.reset();
+  if ( mActiveCommands.empty() )
+    return;
+
+  mActiveCommands.pop_back();
 }
 
 QUndoStack *QgsLayoutUndoStack::stack()
 {
   return mUndoStack.get();
+}
 
+void QgsLayoutUndoStack::notifyUndoRedoOccurred( QgsLayoutItem *item )
+{
+  mUndoRedoOccurredItemUuids.insert( item->uuid() );
+}
+
+void QgsLayoutUndoStack::blockCommands( bool blocked )
+{
+  if ( blocked )
+  {
+    mBlockedCommands++;
+  }
+  else
+  {
+    if ( mBlockedCommands > 0 )
+      mBlockedCommands--;
+  }
+}
+
+bool QgsLayoutUndoStack::isBlocked() const
+{
+  return mBlockedCommands > 0;
+}
+
+void QgsLayoutUndoStack::push( QUndoCommand *cmd )
+{
+  if ( mBlockedCommands > 0 )
+    delete cmd;
+  else
+  {
+    mUndoStack->push( cmd );
+    mLayout->project()->setDirty( true );
+  }
+}
+
+void QgsLayoutUndoStack::indexChanged()
+{
+  if ( mUndoRedoOccurredItemUuids.empty() )
+    return;
+
+  emit undoRedoOccurredForItems( mUndoRedoOccurredItemUuids );
+  mUndoRedoOccurredItemUuids.clear();
 }

@@ -1,5 +1,5 @@
 /***************************************************************************
-                          qgsmetadatawidget.h  -  description
+                          QgsAbstractMetadataBasewidget.h  -  description
                              -------------------
     begin                : 17/05/2017
     copyright            : (C) 2017 by Etienne Trimaille
@@ -23,28 +23,30 @@
 #include <QInputDialog>
 #include <QStringListModel>
 
+#include "qgsbox3d.h"
 #include "qgsmetadatawidget.h"
 #include "qgslogger.h"
 #include "qgslayermetadatavalidator.h"
 #include "qgsapplication.h"
+#include "qgsmapcanvas.h"
+#include "qgsprojectmetadata.h"
+#include "qgsproject.h"
 
 QgsMetadataWidget::QgsMetadataWidget( QWidget *parent, QgsMapLayer *layer )
   : QWidget( parent ),
     mLayer( layer )
 {
   setupUi( this );
-  mMetadata = layer->metadata();
   tabWidget->setCurrentIndex( 0 );
 
-  // Disable the encoding and contacts
+  // Disable the encoding
   encodingFrame->setHidden( true );
-  tabWidget->removeTab( 5 );
 
   // Default categories, we want them translated, so we are not using a CSV.
   mDefaultCategories << tr( "Farming" ) << tr( "Climatology Meteorology Atmosphere" ) << tr( "Location" ) << tr( "Intelligence Military" ) << tr( "Transportation" ) << tr( "Structure" ) << tr( "Boundaries" );
   mDefaultCategories << tr( "Inland Waters" ) << tr( "Planning Cadastre" ) << tr( "Geoscientific Information" ) << tr( "Elevation" ) << tr( "Health" ) << tr( "Biota" ) << tr( "Oceans" ) << tr( "Environment" );
   mDefaultCategories << tr( "Utilities Communication" ) << tr( "Economy" ) << tr( "Society" ) << tr( "Imagery Base Maps Earth Cover" );
-  mDefaultCategoriesModel = new QStringListModel( mDefaultCategories );
+  mDefaultCategoriesModel = new QStringListModel( mDefaultCategories, this );
   mDefaultCategoriesModel->sort( 0 );  // Sorting using translations
   listDefaultCategories->setModel( mDefaultCategoriesModel );
 
@@ -63,7 +65,11 @@ QgsMetadataWidget::QgsMetadataWidget( QWidget *parent, QgsMapLayer *layer )
   constraintheaders << tr( "Type" ) << tr( "Constraint" );
   mConstraintsModel->setHorizontalHeaderLabels( constraintheaders );
   tabConstraints->setModel( mConstraintsModel );
-  tabConstraints->setItemDelegate( new ConstraintItemDelegate() );
+  tabConstraints->setItemDelegate( new ConstraintItemDelegate( this ) );
+
+  // Extent
+  dateTimeFrom->setAllowNull( true );
+  dateTimeTo->setAllowNull( true );
 
   // Setup the link view
   mLinksModel = new QStandardItemModel( tabLinks );
@@ -72,7 +78,7 @@ QgsMetadataWidget::QgsMetadataWidget( QWidget *parent, QgsMapLayer *layer )
   headers << tr( "Name" ) << tr( "Type" ) << tr( "URL" ) << tr( "Description" ) << tr( "Format" ) << tr( "MIME" ) << tr( "Size" );
   mLinksModel->setHorizontalHeaderLabels( headers );
   tabLinks->setModel( mLinksModel );
-  tabLinks->setItemDelegate( new LinkItemDelegate() );
+  tabLinks->setItemDelegate( new LinkItemDelegate( this ) );
 
   // History
   mHistoryModel = new QStringListModel( listHistory );
@@ -89,33 +95,125 @@ QgsMetadataWidget::QgsMetadataWidget( QWidget *parent, QgsMapLayer *layer )
   connect( btnRemoveLicence, &QPushButton::clicked, this, &QgsMetadataWidget::removeSelectedLicence );
   connect( btnAddConstraint, &QPushButton::clicked, this, &QgsMetadataWidget::addConstraint );
   connect( btnRemoveConstraint, &QPushButton::clicked, this, &QgsMetadataWidget::removeSelectedConstraint );
-  connect( btnAutoCrs, &QPushButton::clicked, this, &QgsMetadataWidget::fillCrsFromLayer );
-  connect( btnAddContact, &QPushButton::clicked, this, &QgsMetadataWidget::addContact );
-  connect( btnRemoveContact, &QPushButton::clicked, this, &QgsMetadataWidget::removeSelectedContact );
-  connect( tabContacts, &QTableWidget::itemSelectionChanged, this, &QgsMetadataWidget::updateContactDetails );
+  connect( btnSetCrsFromLayer, &QPushButton::clicked, this, &QgsMetadataWidget::fillCrsFromLayer );
+  connect( btnSetCrsFromProvider, &QPushButton::clicked, this, &QgsMetadataWidget::fillCrsFromProvider );
+  connect( btnAddAddress, &QPushButton::clicked, this, &QgsMetadataWidget::addAddress );
+  connect( btnRemoveAddress, &QPushButton::clicked, this, &QgsMetadataWidget::removeSelectedAddress );
   connect( btnAddLink, &QPushButton::clicked, this, &QgsMetadataWidget::addLink );
   connect( btnRemoveLink, &QPushButton::clicked, this, &QgsMetadataWidget::removeSelectedLink );
   connect( btnAddHistory, &QPushButton::clicked, this, &QgsMetadataWidget::addHistory );
   connect( btnRemoveHistory, &QPushButton::clicked, this, &QgsMetadataWidget::removeSelectedHistory );
   connect( btnNewCategory, &QPushButton::clicked, this, &QgsMetadataWidget::addNewCategory );
-  connect( btnAddDefaultCategory, &QPushButton::clicked, this, &QgsMetadataWidget::addDefaultCategory );
-  connect( btnRemoveCategory, &QPushButton::clicked, this, &QgsMetadataWidget::removeSelectedCategory );
+  connect( btnAddDefaultCategory, &QPushButton::clicked, this, &QgsMetadataWidget::addDefaultCategories );
+  connect( btnRemoveCategory, &QPushButton::clicked, this, &QgsMetadataWidget::removeSelectedCategories );
 
   fillComboBox();
-  setPropertiesFromLayer();
-  updateContactDetails();
+  if ( !mLayer )
+  {
+    btnAutoSource->setEnabled( false );
+    btnAutoEncoding->setEnabled( false );
+    btnSetCrsFromLayer->setEnabled( false );
+  }
+
+  if ( mLayer )
+  {
+    mMetadata.reset( mLayer->metadata().clone() );
+    setMode( LayerMetadata );
+    setUiFromMetadata();
+  }
+
+  connect( lineEditTitle, &QLineEdit::textChanged, this, &QgsMetadataWidget::titleChanged );
 }
 
-QgsMetadataWidget::~QgsMetadataWidget()
+void QgsMetadataWidget::setMode( QgsMetadataWidget::Mode mode )
 {
+  QString type;
+  QString typeUpper;
+  mMode = mode;
+  switch ( mMode )
+  {
+    case LayerMetadata:
+      type = tr( "dataset" );
+      typeUpper = tr( "Dataset" );
+      mEncodingFrame->show();
+      mAuthorFrame->hide();
+      btnAutoSource->setEnabled( mLayer );
+      break;
+
+    case ProjectMetadata:
+      type = tr( "project" );
+      typeUpper = tr( "Project" );
+      mEncodingFrame->hide();
+      mAuthorFrame->show();
+      tabWidget->removeTab( 4 );
+      tabWidget->removeTab( 3 );
+      btnAutoSource->setEnabled( true );
+      break;
+  }
+
+  mIdLabel->setText( tr( "This page describes the basic attribution of the %1. Please use the tooltips for more information." ).arg( type ) );
+  mLabelCategories->setText( tr( "%1 categories." ).arg( typeUpper ) );
+  mLabelContact->setText( tr( "Contacts related to the %1." ).arg( type ) );
+  mLabelLinks->setText( tr( "Links describe ancillary resources and information related to this %1." ).arg( type ) );
+  mLabelHistory->setText( tr( "History about the %1." ).arg( type ) );
+  labelKeywords->setText( tr( "<html><head/><body><p>Keywords are optional, and provide a way to provide additional descriptive information about "
+                              "the %1. Edits made in the categories tab will update the category entry below. For the concept, we suggest "
+                              "to use a standard based vocabulary such as <a href=\"https://www.eionet.europa.eu/gemet/en/inspire-themes/\">"
+                              "<span style=\" text-decoration: underline; color:#0000ff;\">GEMET.</span></a></p></body></html>" ).arg( type ) );
+  btnAutoSource->setText( tr( "Set from %1" ).arg( mMode == LayerMetadata ? tr( "layer" ) : tr( "project" ) ) );
 }
 
-void QgsMetadataWidget::fillSourceFromLayer() const
+void QgsMetadataWidget::setMetadata( const QgsAbstractMetadataBase *metadata )
 {
-  lineEditIdentifier->setText( mLayer->publicSource() );
+  if ( !metadata )
+    return;
+
+  if ( dynamic_cast< const QgsLayerMetadata * >( metadata ) && mMode != LayerMetadata )
+    setMode( LayerMetadata );
+  else if ( dynamic_cast< const QgsProjectMetadata * >( metadata ) && mMode != ProjectMetadata )
+    setMode( ProjectMetadata );
+
+  mMetadata.reset( metadata->clone() );
+  setUiFromMetadata();
 }
 
-void QgsMetadataWidget::addVocabulary() const
+QgsAbstractMetadataBase *QgsMetadataWidget::metadata()
+{
+  std::unique_ptr< QgsAbstractMetadataBase > md;
+  switch ( mMode )
+  {
+    case LayerMetadata:
+      md = qgis::make_unique< QgsLayerMetadata >();
+      break;
+
+    case ProjectMetadata:
+      md = qgis::make_unique< QgsProjectMetadata >();
+      break;
+
+  }
+  saveMetadata( md.get() );
+  return md.release();
+}
+
+void QgsMetadataWidget::fillSourceFromLayer()
+{
+  switch ( mMode )
+  {
+    case LayerMetadata:
+      if ( mLayer )
+      {
+        lineEditIdentifier->setText( mLayer->publicSource() );
+      }
+      break;
+
+    case ProjectMetadata:
+      lineEditIdentifier->setText( QgsProject::instance()->fileName() );
+      break;
+  }
+
+}
+
+void QgsMetadataWidget::addVocabulary()
 {
   int row = tabKeywords->rowCount();
   tabKeywords->setRowCount( row + 1 );
@@ -130,11 +228,11 @@ void QgsMetadataWidget::addVocabulary() const
   tabKeywords->setItem( row, 1, pCell );
 }
 
-void QgsMetadataWidget::removeSelectedVocabulary() const
+void QgsMetadataWidget::removeSelectedVocabulary()
 {
   QItemSelectionModel *selectionModel = tabKeywords->selectionModel();
   const QModelIndexList selectedRows = selectionModel->selectedRows();
-  for ( int i = 0 ; i < selectedRows.size() ; i++ )
+  for ( int i = 0; i < selectedRows.size() ; i++ )
   {
     tabKeywords->model()->removeRow( selectedRows[i].row() );
   }
@@ -152,11 +250,11 @@ void QgsMetadataWidget::addLicence()
   }
 }
 
-void QgsMetadataWidget::removeSelectedLicence() const
+void QgsMetadataWidget::removeSelectedLicence()
 {
   QItemSelectionModel *selectionModel = tabLicenses->selectionModel();
   const QModelIndexList selectedRows = selectionModel->selectedRows();
-  for ( int i = 0 ; i < selectedRows.size() ; i++ )
+  for ( int i = 0; i < selectedRows.size() ; i++ )
   {
     tabLicenses->model()->removeRow( selectedRows[i].row() );
   }
@@ -173,7 +271,7 @@ void QgsMetadataWidget::addRight()
   }
 }
 
-void QgsMetadataWidget::removeSelectedRight() const
+void QgsMetadataWidget::removeSelectedRight()
 {
   QItemSelectionModel *selection = listRights->selectionModel();
   if ( selection->hasSelection() )
@@ -187,72 +285,103 @@ void QgsMetadataWidget::removeSelectedRight() const
   }
 }
 
-void QgsMetadataWidget::addConstraint() const
+void QgsMetadataWidget::addConstraint()
 {
   int row = mConstraintsModel->rowCount();
   mConstraintsModel->setItem( row, 0, new QStandardItem( QString( tr( "undefined %1" ) ).arg( row + 1 ) ) );
   mConstraintsModel->setItem( row, 1, new QStandardItem( QString( tr( "undefined %1" ) ).arg( row + 1 ) ) );
 }
 
-void QgsMetadataWidget::removeSelectedConstraint() const
+void QgsMetadataWidget::removeSelectedConstraint()
 {
   const QModelIndexList selectedRows = tabConstraints->selectionModel()->selectedRows();
+  if ( selectedRows.empty() )
+    return;
   mConstraintsModel->removeRow( selectedRows[0].row() );
 }
 
-void QgsMetadataWidget::fillCrsFromLayer() const
+void QgsMetadataWidget::crsChanged()
 {
-  selectionCrs->setCrs( mLayer->crs() );
-}
-
-void QgsMetadataWidget::addContact() const
-{
-  int row = tabContacts->rowCount();
-  tabContacts->setRowCount( row + 1 );
-  QTableWidgetItem *pCell;
-
-  // Name
-  pCell = new QTableWidgetItem( QString( tr( "unnamed %1" ) ).arg( row + 1 ) );
-  tabContacts->setItem( row, 0, pCell );
-
-  // Organization
-  pCell = new QTableWidgetItem();
-  tabContacts->setItem( row, 1, pCell );
-
-  // Set last item selected
-  tabContacts->selectRow( row );
-}
-
-void QgsMetadataWidget::removeSelectedContact() const
-{
-  QItemSelectionModel *selectionModel = tabContacts->selectionModel();
-  const QModelIndexList selectedRows = selectionModel->selectedRows();
-  for ( int i = 0 ; i < selectedRows.size() ; i++ )
+  if ( ( mCrs.isValid() ) && ( mLayer ) )
   {
-    tabContacts->model()->removeRow( selectedRows[i].row() );
-  }
-}
+    lblCurrentCrs->setText( tr( "CRS: %1 - %2" ).arg( mCrs.authid(), mCrs.description() ) );
+    spatialExtentSelector->setEnabled( true );
+    spatialExtentSelector->setOutputCrs( mCrs );
 
-void QgsMetadataWidget::updateContactDetails() const
-{
-  QItemSelectionModel *selectionModel = tabContacts->selectionModel();
-  const QModelIndexList selectedRows = selectionModel->selectedRows();
-
-  if ( ! selectedRows.isEmpty() )
-  {
-    panelDetails->setDisabled( false );
-    lineEditContactName->setText( tabContacts->item( selectedRows[0].row(), 0 )->text() );
-    lineEditContactOrganization->setText( tabContacts->item( selectedRows[0].row(), 1 )->text() );
+    if ( mCrs == mLayer->crs() && mCrs == mLayer->dataProvider()->crs() )
+    {
+      lblCurrentCrsStatus->setText( tr( "Same as layer properties and provider." ) );
+    }
+    else if ( mCrs == mLayer->crs() && mCrs != mLayer->dataProvider()->crs() )
+    {
+      lblCurrentCrsStatus->setText( tr( "Same as layer properties but different than the provider." ) );
+    }
+    else if ( mCrs != mLayer->crs() && mCrs == mLayer->dataProvider()->crs() )
+    {
+      lblCurrentCrsStatus->setText( tr( "Same as the provider but different than the layer properties." ) );
+    }
+    else
+    {
+      lblCurrentCrsStatus->setText( tr( "Does not match either layer properties or the provider." ) );
+    }
   }
   else
   {
-    panelDetails->setDisabled( true );
-    lineEditContactName->clear();
-    lineEditContactOrganization->clear();
+    lblCurrentCrs->setText( tr( "CRS: Not set." ) );
+    lblCurrentCrsStatus->setText( QString() );
+    spatialExtentSelector->setEnabled( false );
   }
 }
 
-void QgsMetadataWidget::addLink() const
+void QgsMetadataWidget::addAddress()
+{
+  int row = tabAddresses->rowCount();
+  tabAddresses->setRowCount( row + 1 );
+  QTableWidgetItem *pCell = nullptr;
+
+  // Type
+  pCell = new QTableWidgetItem( QString( tr( "postal" ) ) );
+  tabAddresses->setItem( row, 0, pCell );
+
+  // Address
+  tabAddresses->setItem( row, 1, new QTableWidgetItem() );
+
+  // postal code
+  tabAddresses->setItem( row, 2, new QTableWidgetItem() );
+
+  // City
+  tabAddresses->setItem( row, 3, new QTableWidgetItem() );
+
+  // Admin area
+  tabAddresses->setItem( row, 4, new QTableWidgetItem() );
+
+  // Country
+  tabAddresses->setItem( row, 5, new QTableWidgetItem() );
+}
+
+void QgsMetadataWidget::removeSelectedAddress()
+{
+  QItemSelectionModel *selectionModel = tabAddresses->selectionModel();
+  const QModelIndexList selectedRows = selectionModel->selectedRows();
+  for ( int i = 0; i < selectedRows.size() ; i++ )
+  {
+    tabAddresses->model()->removeRow( selectedRows[i].row() );
+  }
+}
+
+void QgsMetadataWidget::fillCrsFromLayer()
+{
+  mCrs = mLayer->crs();
+  crsChanged();
+}
+
+void QgsMetadataWidget::fillCrsFromProvider()
+{
+  mCrs = mLayer->dataProvider()->crs();
+  crsChanged();
+}
+
+void QgsMetadataWidget::addLink()
 {
   int row = mLinksModel->rowCount();
   mLinksModel->setItem( row, 0, new QStandardItem( QString( tr( "undefined %1" ) ).arg( row + 1 ) ) );
@@ -264,9 +393,12 @@ void QgsMetadataWidget::addLink() const
   mLinksModel->setItem( row, 6, new QStandardItem() );
 }
 
-void QgsMetadataWidget::removeSelectedLink() const
+void QgsMetadataWidget::removeSelectedLink()
 {
   const QModelIndexList selectedRows = tabLinks->selectionModel()->selectedRows();
+  if ( selectedRows.empty() )
+    return;
+
   mLinksModel->removeRow( selectedRows[0].row() );
 }
 
@@ -281,7 +413,7 @@ void QgsMetadataWidget::addHistory()
   }
 }
 
-void QgsMetadataWidget::removeSelectedHistory() const
+void QgsMetadataWidget::removeSelectedHistory()
 {
   QItemSelectionModel *selection = listHistory->selectionModel();
   if ( selection->hasSelection() )
@@ -295,7 +427,7 @@ void QgsMetadataWidget::removeSelectedHistory() const
   }
 }
 
-void QgsMetadataWidget::fillComboBox() const
+void QgsMetadataWidget::fillComboBox()
 {
   // Set default values in type combobox
   // It is advised to use the ISO 19115 MD_ScopeCode values. E.g. 'dataset' or 'series'.
@@ -327,52 +459,52 @@ void QgsMetadataWidget::fillComboBox() const
   }
 }
 
-void QgsMetadataWidget::setPropertiesFromLayer() const
+void QgsMetadataWidget::setUiFromMetadata()
 {
   // Parent ID
-  lineEditParentId->setText( mMetadata.parentIdentifier() );
+  lineEditParentId->setText( mMetadata->parentIdentifier() );
 
   // Identifier
-  if ( ! mMetadata.identifier().isEmpty() )
+  if ( ! mMetadata->identifier().isEmpty() )
   {
-    lineEditIdentifier->setText( mMetadata.identifier() );
+    lineEditIdentifier->setText( mMetadata->identifier() );
   }
 
   // Title
-  if ( ! mMetadata.title().isEmpty() )
+  if ( ! mMetadata->title().isEmpty() )
   {
-    lineEditTitle->setText( mMetadata.title() );
+    whileBlocking( lineEditTitle )->setText( mMetadata->title() );
   }
 
   // Type
-  if ( ! mMetadata.type().isEmpty() )
+  if ( ! mMetadata->type().isEmpty() )
   {
-    if ( comboType->findText( mMetadata.type() ) == -1 )
+    if ( comboType->findText( mMetadata->type() ) == -1 )
     {
-      comboType->addItem( mMetadata.type() );
+      comboType->addItem( mMetadata->type() );
     }
-    comboType->setCurrentIndex( comboType->findText( mMetadata.type() ) );
+    comboType->setCurrentIndex( comboType->findText( mMetadata->type() ) );
   }
 
   // Language
-  if ( ! mMetadata.language().isEmpty() )
+  if ( ! mMetadata->language().isEmpty() )
   {
-    if ( comboLanguage->findText( mMetadata.language() ) == -1 )
+    if ( comboLanguage->findText( mMetadata->language() ) == -1 )
     {
-      comboLanguage->addItem( mMetadata.language() );
+      comboLanguage->addItem( mMetadata->language() );
     }
-    comboLanguage->setCurrentIndex( comboLanguage->findText( mMetadata.language() ) );
+    comboLanguage->setCurrentIndex( comboLanguage->findText( mMetadata->language() ) );
   }
 
   // Abstract
-  textEditAbstract->setPlainText( mMetadata.abstract() );
+  textEditAbstract->setPlainText( mMetadata->abstract() );
 
   // Categories
-  mCategoriesModel->setStringList( mMetadata.categories() );
+  mCategoriesModel->setStringList( mMetadata->categories() );
 
   // Keywords
   tabKeywords->setRowCount( 0 );
-  QMapIterator<QString, QStringList> i( mMetadata.keywords() );
+  QMapIterator<QString, QStringList> i( mMetadata->keywords() );
   while ( i.hasNext() )
   {
     i.next();
@@ -382,46 +514,114 @@ void QgsMetadataWidget::setPropertiesFromLayer() const
     tabKeywords->item( currentRow, 1 )->setText( i.value().join( QStringLiteral( "," ) ) );
   }
 
-  // Fees
-  lineEditFees->setText( mMetadata.fees() );
-
-  // Licenses
-  tabLicenses->setRowCount( 0 );
-  const QStringList &licenses = mMetadata.licenses();
-  for ( const QString &licence : licenses )
+  if ( QgsLayerMetadata *layerMetadata = dynamic_cast< QgsLayerMetadata * >( mMetadata.get() ) )
   {
-    int currentRow = tabLicenses->rowCount();
-    tabLicenses->setRowCount( currentRow + 1 );
-    QTableWidgetItem *pCell = tabLicenses->item( currentRow, 0 );
-    if ( !pCell )
+    // Encoding
+    comboEncoding->setCurrentText( layerMetadata->encoding() );
+
+    // Fees
+    lineEditFees->setText( layerMetadata->fees() );
+
+    // Licenses
+    tabLicenses->setRowCount( 0 );
+    const QStringList &licenses = layerMetadata->licenses();
+    for ( const QString &licence : licenses )
     {
-      pCell = new QTableWidgetItem;
-      tabLicenses->setItem( currentRow, 0, pCell );
+      int currentRow = tabLicenses->rowCount();
+      tabLicenses->setRowCount( currentRow + 1 );
+      QTableWidgetItem *pCell = tabLicenses->item( currentRow, 0 );
+      if ( !pCell )
+      {
+        pCell = new QTableWidgetItem;
+        tabLicenses->setItem( currentRow, 0, pCell );
+      }
+      pCell->setText( licence );
     }
-    pCell->setText( licence );
+
+    // Rights
+    mRightsModel->setStringList( layerMetadata->rights() );
+
+    // Constraints
+    const QList<QgsLayerMetadata::Constraint> &constraints = layerMetadata->constraints();
+    for ( const QgsLayerMetadata::Constraint &constraint : constraints )
+    {
+      int row = mConstraintsModel->rowCount();
+      mConstraintsModel->setItem( row, 0, new QStandardItem( constraint.type ) );
+      mConstraintsModel->setItem( row, 1, new QStandardItem( constraint.constraint ) );
+    }
+
+    // CRS
+    mCrs = layerMetadata->crs();
+    crsChanged();
+
+    // Spatial extent
+    const QList<QgsLayerMetadata::SpatialExtent> &spatialExtents = layerMetadata->extent().spatialExtents();
+    if ( ! spatialExtents.isEmpty() )
+    {
+      // Even if it's a list, it's supposed to store the same extent in different CRS.
+      spatialExtentSelector->setOutputCrs( spatialExtents.at( 0 ).extentCrs );
+      spatialExtentSelector->setOriginalExtent( spatialExtents.at( 0 ).bounds.toRectangle(), spatialExtents.at( 0 ).extentCrs );
+      spatialExtentSelector->setOutputExtentFromOriginal();
+      spinBoxZMaximum->setValue( spatialExtents.at( 0 ).bounds.zMaximum() );
+      spinBoxZMinimum->setValue( spatialExtents.at( 0 ).bounds.zMinimum() );
+    }
+
+    // Temporal extent
+    const QList<QgsDateTimeRange> &temporalExtents = layerMetadata->extent().temporalExtents();
+    if ( ! temporalExtents.isEmpty() )
+    {
+      // Even if it's a list, it seems we use only one for now (cf discussion with Tom)
+      dateTimeFrom->setDateTime( temporalExtents.at( 0 ).begin() );
+      dateTimeTo->setDateTime( temporalExtents.at( 0 ).end() );
+    }
+    else
+    {
+      dateTimeFrom->clear();
+      dateTimeTo->clear();
+    }
+  }
+  else if ( QgsProjectMetadata *projectMetadata = dynamic_cast< QgsProjectMetadata * >( mMetadata.get() ) )
+  {
+    mLineEditAuthor->setText( projectMetadata->author() );
+    mCreationDateTimeEdit->setDateTime( projectMetadata->creationDateTime() );
   }
 
-  // Rights
-  mRightsModel->setStringList( mMetadata.rights() );
-
-  // Constraints
-  const QList<QgsLayerMetadata::Constraint> &constraints = mMetadata.constraints();
-  for ( const QgsLayerMetadata::Constraint &constraint : constraints )
+  // Contacts
+  const QList<QgsAbstractMetadataBase::Contact> &contacts = mMetadata->contacts();
+  if ( ! contacts.isEmpty() )
   {
-    int row = mConstraintsModel->rowCount();
-    mConstraintsModel->setItem( row, 0, new QStandardItem( constraint.type ) );
-    mConstraintsModel->setItem( row, 1, new QStandardItem( constraint.constraint ) );
-  }
-
-  // CRS
-  if ( mMetadata.crs().isValid() )
-  {
-    selectionCrs->setCrs( mMetadata.crs() );
+    // Only one contact supported in the UI for now
+    const QgsAbstractMetadataBase::Contact &contact = contacts.at( 0 );
+    lineEditContactName->setText( contact.name );
+    lineEditContactEmail->setText( contact.email );
+    lineEditContactFax->setText( contact.fax );
+    lineEditContactOrganization->setText( contact.organization );
+    lineEditContactPosition->setText( contact.position );
+    lineEditContactVoice->setText( contact.voice );
+    if ( comboContactRole->findText( contact.role ) == -1 )
+    {
+      comboContactRole->addItem( contact.role );
+    }
+    comboContactRole->setCurrentIndex( comboContactRole->findText( contact.role ) );
+    tabAddresses->setRowCount( 0 );
+    const QList<QgsAbstractMetadataBase::Address> &addresses = contact.addresses;
+    for ( const QgsAbstractMetadataBase::Address &address : addresses )
+    {
+      int currentRow = tabAddresses->rowCount();
+      tabAddresses->setRowCount( currentRow + 1 );
+      tabAddresses->setItem( currentRow, 0,  new QTableWidgetItem( address.type ) );
+      tabAddresses->setItem( currentRow, 1,  new QTableWidgetItem( address.address ) );
+      tabAddresses->setItem( currentRow, 2,  new QTableWidgetItem( address.postalCode ) );
+      tabAddresses->setItem( currentRow, 3,  new QTableWidgetItem( address.city ) );
+      tabAddresses->setItem( currentRow, 4,  new QTableWidgetItem( address.administrativeArea ) );
+      tabAddresses->setItem( currentRow, 5,  new QTableWidgetItem( address.country ) );
+    }
   }
 
   // Links
-  const QList<QgsLayerMetadata::Link> &links = mMetadata.links();
-  for ( const QgsLayerMetadata::Link &link : links )
+  const QList<QgsAbstractMetadataBase::Link> &links = mMetadata->links();
+  mLinksModel->setRowCount( 0 );
+  for ( const QgsAbstractMetadataBase::Link &link : links )
   {
     int row = mLinksModel->rowCount();
     mLinksModel->setItem( row, 0, new QStandardItem( link.name ) );
@@ -434,60 +634,129 @@ void QgsMetadataWidget::setPropertiesFromLayer() const
   }
 
   // History
-  mHistoryModel->setStringList( mMetadata.history() );
+  mHistoryModel->setStringList( mMetadata->history() );
 }
 
-void QgsMetadataWidget::saveMetadata( QgsLayerMetadata &layerMetadata ) const
+void QgsMetadataWidget::saveMetadata( QgsAbstractMetadataBase *metadata )
 {
-  layerMetadata.setParentIdentifier( lineEditParentId->text() );
-  layerMetadata.setIdentifier( lineEditIdentifier->text() );
-  layerMetadata.setTitle( lineEditTitle->text() );
-  layerMetadata.setType( comboType->currentText() );
-  layerMetadata.setLanguage( comboLanguage->currentText() );
-  layerMetadata.setAbstract( textEditAbstract->toPlainText() );
+  if ( !metadata )
+    return;
+
+  metadata->setParentIdentifier( lineEditParentId->text() );
+  metadata->setIdentifier( lineEditIdentifier->text() );
+  metadata->setTitle( lineEditTitle->text() );
+  metadata->setType( comboType->currentText() );
+  metadata->setLanguage( comboLanguage->currentText() );
+  metadata->setAbstract( textEditAbstract->toPlainText() );
 
   // Keywords, it will save categories too.
   syncFromCategoriesTabToKeywordsTab();
   QMap<QString, QStringList> keywords;
-  for ( int i = 0 ; i < tabKeywords->rowCount() ; i++ )
+  for ( int i = 0; i < tabKeywords->rowCount() ; i++ )
   {
     keywords.insert( tabKeywords->item( i, 0 )->text(), tabKeywords->item( i, 1 )->text().split( ',' ) );
   }
-  layerMetadata.setKeywords( keywords );
+  metadata->setKeywords( keywords );
 
-  // Fees
-  layerMetadata.setFees( lineEditFees->text() );
-
-  // Licenses
-  QStringList licenses;
-  for ( int i = 0 ; i < tabLicenses->rowCount() ; i++ )
+  switch ( mMode )
   {
-    licenses.append( tabLicenses->item( i, 0 )->text() );
+    case LayerMetadata:
+    {
+      QgsLayerMetadata *layerMetadata = static_cast< QgsLayerMetadata * >( metadata );
+      // Fees
+      layerMetadata->setFees( lineEditFees->text() );
+
+      // Licenses
+      QStringList licenses;
+      for ( int i = 0; i < tabLicenses->rowCount() ; i++ )
+      {
+        licenses.append( tabLicenses->item( i, 0 )->text() );
+      }
+      layerMetadata->setLicenses( licenses );
+
+      // Rights
+      layerMetadata->setRights( mRightsModel->stringList() );
+
+      // Encoding
+      layerMetadata->setEncoding( comboEncoding->currentText() );
+
+      // Constraints
+      QList<QgsLayerMetadata::Constraint> constraints;
+      for ( int row = 0; row < mConstraintsModel->rowCount() ; row++ )
+      {
+        QgsLayerMetadata::Constraint constraint;
+        constraint.type = mConstraintsModel->item( row, 0 )->text();
+        constraint.constraint = mConstraintsModel->item( row, 1 )->text();
+        constraints.append( constraint );
+      }
+      layerMetadata->setConstraints( constraints );
+
+      // CRS
+      if ( mCrs.isValid() )
+      {
+        layerMetadata->setCrs( mCrs );
+      }
+
+      // Extent
+      QgsLayerMetadata::SpatialExtent spatialExtent;
+      spatialExtent.bounds = QgsBox3d( spatialExtentSelector->outputExtent() );
+      spatialExtent.bounds.setZMinimum( spinBoxZMinimum->value() );
+      spatialExtent.bounds.setZMaximum( spinBoxZMaximum->value() );
+      spatialExtent.extentCrs = spatialExtentSelector->outputCrs();
+      QList<QgsLayerMetadata::SpatialExtent> spatialExtents;
+      spatialExtents.append( spatialExtent );
+      QList<QgsDateTimeRange> temporalExtents;
+      temporalExtents.append( QgsDateTimeRange( dateTimeFrom->dateTime(), dateTimeTo->dateTime() ) );
+      QgsLayerMetadata::Extent extent;
+      extent.setSpatialExtents( spatialExtents );
+      extent.setTemporalExtents( temporalExtents );
+      layerMetadata->setExtent( extent );
+      break;
+    }
+
+    case ProjectMetadata:
+    {
+      QgsProjectMetadata *projectMetadata = static_cast< QgsProjectMetadata * >( metadata );
+      projectMetadata->setAuthor( mLineEditAuthor->text() );
+      projectMetadata->setCreationDateTime( mCreationDateTimeEdit->dateTime() );
+      break;
+    }
   }
-  layerMetadata.setLicenses( licenses );
 
-  // Rights
-  layerMetadata.setRights( mRightsModel->stringList() );
-
-  // Constraints
-  QList<QgsLayerMetadata::Constraint> constraints;
-  for ( int row = 0 ; row < mConstraintsModel->rowCount() ; row++ )
+  // Contacts, only one contact supported in the UI for now.
+  // We don't want to lost data if more than one contact, so we update only the first one.
+  QList<QgsAbstractMetadataBase::Contact> contacts = mMetadata->contacts();
+  if ( contacts.size() > 0 )
+    contacts.removeFirst();
+  QgsAbstractMetadataBase::Contact contact;
+  contact.email = lineEditContactEmail->text();
+  contact.position = lineEditContactPosition->text();
+  contact.fax = lineEditContactFax->text();
+  contact.voice = lineEditContactVoice->text();
+  contact.name = lineEditContactName->text();
+  contact.organization = lineEditContactOrganization->text();
+  contact.role = comboContactRole->currentText();
+  QList<QgsAbstractMetadataBase::Address> addresses;
+  for ( int i = 0; i < tabAddresses->rowCount() ; i++ )
   {
-    struct QgsLayerMetadata::Constraint constraint = QgsLayerMetadata::Constraint();
-    constraint.type = mConstraintsModel->item( row, 0 )->text();
-    constraint.constraint = mConstraintsModel->item( row, 1 )->text();
-    constraints.append( constraint );
+    QgsAbstractMetadataBase::Address address;
+    address.type = tabAddresses->item( i, 0 )->text();
+    address.address = tabAddresses->item( i, 1 )->text();
+    address.postalCode = tabAddresses->item( i, 2 )->text();
+    address.city = tabAddresses->item( i, 3 )->text();
+    address.administrativeArea = tabAddresses->item( i, 4 )->text();
+    address.country = tabAddresses->item( i, 5 )->text();
+    addresses.append( address );
   }
-  layerMetadata.setConstraints( constraints );
-
-  // CRS
-  layerMetadata.setCrs( selectionCrs->crs() );
+  contact.addresses = addresses;
+  contacts.insert( 0, contact );
+  metadata->setContacts( contacts );
 
   // Links
-  QList<QgsLayerMetadata::Link> links;
-  for ( int row = 0 ; row < mLinksModel->rowCount() ; row++ )
+  QList<QgsAbstractMetadataBase::Link> links;
+  for ( int row = 0; row < mLinksModel->rowCount() ; row++ )
   {
-    struct QgsLayerMetadata::Link link = QgsLayerMetadata::Link();
+    QgsAbstractMetadataBase::Link link;
     link.name = mLinksModel->item( row, 0 )->text();
     link.type = mLinksModel->item( row, 1 )->text();
     link.url = mLinksModel->item( row, 2 )->text();
@@ -497,25 +766,35 @@ void QgsMetadataWidget::saveMetadata( QgsLayerMetadata &layerMetadata ) const
     link.size = mLinksModel->item( row, 6 )->text();
     links.append( link );
   }
-  layerMetadata.setLinks( links );
+  metadata->setLinks( links );
 
   // History
-  layerMetadata.setHistory( mHistoryModel->stringList() );
+  metadata->setHistory( mHistoryModel->stringList() );
 }
 
-bool QgsMetadataWidget::checkMetadata() const
+bool QgsMetadataWidget::checkMetadata()
 {
-  QgsLayerMetadata metadata = QgsLayerMetadata();
-  saveMetadata( metadata );
-  QgsNativeMetadataValidator validator;
-  QList<QgsMetadataValidator::ValidationResult> validationResults;
-  bool results = validator.validate( metadata, validationResults );
+  std::unique_ptr< QgsAbstractMetadataBase > md( metadata() );
+
+  std::unique_ptr< QgsNativeMetadataBaseValidator > validator;
+  switch ( mMode )
+  {
+    case LayerMetadata:
+      validator = qgis::make_unique< QgsNativeMetadataValidator>();
+      break;
+
+    case ProjectMetadata:
+      validator = qgis::make_unique< QgsNativeProjectMetadataValidator>();
+      break;
+  }
+
+  QList<QgsAbstractMetadataBaseValidator::ValidationResult> validationResults;
+  bool results = validator->validate( md.get(), validationResults );
 
   QString errors;
-  if ( results == false )
+  if ( !results )
   {
-    errors = QStringLiteral();
-    for ( const QgsMetadataValidator::ValidationResult &result : qgsAsConst( validationResults ) )
+    for ( const QgsAbstractMetadataBaseValidator::ValidationResult &result : qgis::as_const( validationResults ) )
     {
       errors += QLatin1String( "<b>" ) % result.section;
       if ( ! result.identifier.isNull() )
@@ -548,7 +827,7 @@ QMap<QString, QString> QgsMetadataWidget::parseLanguages()
   QFile file( path );
   if ( !file.open( QIODevice::ReadOnly ) )
   {
-    QgsDebugMsg( QString( "Error while opening the CSV file: %1, %2 " ).arg( path, file.errorString() ) );
+    QgsDebugMsg( QStringLiteral( "Error while opening the CSV file: %1, %2 " ).arg( path, file.errorString() ) );
     return countries;
   }
 
@@ -566,7 +845,7 @@ QMap<QString, QString> QgsMetadataWidget::parseLanguages()
   QFile secondFile( path );
   if ( !secondFile.open( QIODevice::ReadOnly ) )
   {
-    QgsDebugMsg( QString( "Error while opening the CSV file: %1, %2 " ).arg( path, file.errorString() ) );
+    QgsDebugMsg( QStringLiteral( "Error while opening the CSV file: %1, %2 " ).arg( path, file.errorString() ) );
     return countries;
   }
 
@@ -591,7 +870,7 @@ QStringList QgsMetadataWidget::parseLicenses()
   QFile file( path );
   if ( !file.open( QIODevice::ReadOnly ) )
   {
-    QgsDebugMsg( QString( "Error while opening the CSV file: %1, %2 " ).arg( path, file.errorString() ) );
+    QgsDebugMsg( QStringLiteral( "Error while opening the CSV file: %1, %2 " ).arg( path, file.errorString() ) );
     return wordList;
   }
 
@@ -615,7 +894,7 @@ QStringList QgsMetadataWidget::parseLinkTypes()
   QFile file( path );
   if ( !file.open( QIODevice::ReadOnly ) )
   {
-    QgsDebugMsg( QString( "Error while opening the CSV file: %1, %2 " ).arg( path, file.errorString() ) );
+    QgsDebugMsg( QStringLiteral( "Error while opening the CSV file: %1, %2 " ).arg( path, file.errorString() ) );
     return wordList;
   }
 
@@ -639,7 +918,7 @@ QStringList QgsMetadataWidget::parseMimeTypes()
   QFile file( path );
   if ( !file.open( QIODevice::ReadOnly ) )
   {
-    QgsDebugMsg( QString( "Error while opening the CSV file: %1, %2 " ).arg( path, file.errorString() ) );
+    QgsDebugMsg( QStringLiteral( "Error while opening the CSV file: %1, %2 " ).arg( path, file.errorString() ) );
     return wordList;
   }
 
@@ -660,7 +939,7 @@ QMap<QString, QString> QgsMetadataWidget::parseTypes()
   QFile file( path );
   if ( !file.open( QIODevice::ReadOnly ) )
   {
-    QgsDebugMsg( QString( "Error while opening the CSV file: %1, %2 " ).arg( path, file.errorString() ) );
+    QgsDebugMsg( QStringLiteral( "Error while opening the CSV file: %1, %2 " ).arg( path, file.errorString() ) );
     return types;
   }
 
@@ -675,15 +954,46 @@ QMap<QString, QString> QgsMetadataWidget::parseTypes()
   return types;
 }
 
-void QgsMetadataWidget::acceptMetadata()
+void QgsMetadataWidget::setMapCanvas( QgsMapCanvas *canvas )
 {
-  saveMetadata( mMetadata );
-
-  // Save layer metadata properties
-  mLayer->setMetadata( mMetadata );
+  if ( canvas )
+    spatialExtentSelector->setCurrentExtent( canvas->extent(), canvas->mapSettings().destinationCrs() );
 }
 
-void QgsMetadataWidget::syncFromCategoriesTabToKeywordsTab() const
+QString QgsMetadataWidget::title() const
+{
+  return lineEditTitle->text();
+}
+
+void QgsMetadataWidget::setTitle( const QString &title )
+{
+  if ( title != lineEditTitle->text() )
+  {
+    whileBlocking( lineEditTitle )->setText( title );
+    emit titleChanged( title );
+  }
+}
+
+void QgsMetadataWidget::acceptMetadata()
+{
+  saveMetadata( mMetadata.get() );
+  switch ( mMode )
+  {
+    case LayerMetadata:
+      if ( mLayer )
+      {
+        // Save layer metadata properties
+        mLayer->setMetadata( *static_cast< QgsLayerMetadata * >( mMetadata.get() ) );
+      }
+      break;
+
+    case ProjectMetadata:
+      QgsProject::instance()->setMetadata( *static_cast< QgsProjectMetadata * >( mMetadata.get() ) );
+      break;
+  }
+}
+
+void QgsMetadataWidget::syncFromCategoriesTabToKeywordsTab()
 {
   if ( mCategoriesModel->rowCount() > 0 )
   {
@@ -704,7 +1014,7 @@ void QgsMetadataWidget::syncFromCategoriesTabToKeywordsTab() const
   }
 }
 
-void QgsMetadataWidget::updatePanel() const
+void QgsMetadataWidget::updatePanel()
 {
   int index = tabWidget->currentIndex();
   QString currentTabText = tabWidget->widget( index )->objectName();
@@ -716,7 +1026,7 @@ void QgsMetadataWidget::updatePanel() const
     if ( !categories.isEmpty() )
     {
       int row = categories.at( 0 )->row();
-      mCategoriesModel->setStringList( tabKeywords->item( row, 1 )->text().split( QStringLiteral( "," ) ) );
+      mCategoriesModel->setStringList( tabKeywords->item( row, 1 )->text().split( ',' ) );
     }
     else
     {
@@ -753,46 +1063,51 @@ void QgsMetadataWidget::addNewCategory()
   }
 }
 
-void QgsMetadataWidget::addDefaultCategory() const
+void QgsMetadataWidget::addDefaultCategories()
 {
-  QItemSelectionModel *selection = listDefaultCategories->selectionModel();
-  if ( selection->hasSelection() )
+  const QModelIndexList selectedIndexes = listDefaultCategories->selectionModel()->selectedIndexes();
+  QStringList defaultCategoriesList = mDefaultCategoriesModel->stringList();
+  QStringList selectedCategories = mCategoriesModel->stringList();
+
+  for ( const QModelIndex &selection : selectedIndexes )
   {
-    QModelIndex indexElementSelectionne = selection->currentIndex();
+    QVariant item = mDefaultCategoriesModel->data( selection, Qt::DisplayRole );
+    defaultCategoriesList.removeOne( item.toString() );
 
-    QVariant item = mDefaultCategoriesModel->data( indexElementSelectionne, Qt::DisplayRole );
-    QStringList list = mDefaultCategoriesModel->stringList();
-    list.removeOne( item.toString() );
-    mDefaultCategoriesModel->setStringList( list );
-
-    list = mCategoriesModel->stringList();
-    list.append( item.toString() );
-    mCategoriesModel->setStringList( list );
-    mCategoriesModel->sort( 0 );
+    selectedCategories.append( item.toString() );
   }
+
+  mDefaultCategoriesModel->setStringList( defaultCategoriesList );
+  mCategoriesModel->setStringList( selectedCategories );
+  mCategoriesModel->sort( 0 );
 }
 
-
-void QgsMetadataWidget::removeSelectedCategory() const
+void QgsMetadataWidget::removeSelectedCategories()
 {
-  QItemSelectionModel *selection = listCategories->selectionModel();
-  if ( selection->hasSelection() )
-  {
-    QModelIndex indexElementSelectionne = listCategories->selectionModel()->currentIndex();
+  const QModelIndexList selectedIndexes = listCategories->selectionModel()->selectedIndexes();
+  QStringList categories = mCategoriesModel->stringList();
+  QStringList defaultList = mDefaultCategoriesModel->stringList();
 
-    QVariant item = mCategoriesModel->data( indexElementSelectionne, Qt::DisplayRole );
-    QStringList list = mCategoriesModel->stringList();
-    list.removeOne( item.toString() );
-    mCategoriesModel->setStringList( list );
+  for ( const QModelIndex &selection : selectedIndexes )
+  {
+    QVariant item = mCategoriesModel->data( selection, Qt::DisplayRole );
+    categories.removeOne( item.toString() );
 
     if ( mDefaultCategories.contains( item.toString() ) )
     {
-      list = mDefaultCategoriesModel->stringList();
-      list.append( item.toString() );
-      mDefaultCategoriesModel->setStringList( list );
-      mDefaultCategoriesModel->sort( 0 );
+      defaultList.append( item.toString() );
     }
   }
+  mCategoriesModel->setStringList( categories );
+
+  mDefaultCategoriesModel->setStringList( defaultList );
+  mDefaultCategoriesModel->sort( 0 );
+}
+
+LinkItemDelegate::LinkItemDelegate( QObject *parent )
+  : QStyledItemDelegate( parent )
+{
+
 }
 
 QWidget *LinkItemDelegate::createEditor( QWidget *parent, const QStyleOptionViewItem &option, const QModelIndex &index ) const
@@ -819,6 +1134,12 @@ QWidget *LinkItemDelegate::createEditor( QWidget *parent, const QStyleOptionView
   }
 
   return QStyledItemDelegate::createEditor( parent, option, index );
+}
+
+ConstraintItemDelegate::ConstraintItemDelegate( QObject *parent )
+  : QStyledItemDelegate( parent )
+{
+
 }
 
 QWidget *ConstraintItemDelegate::createEditor( QWidget *parent, const QStyleOptionViewItem &option, const QModelIndex &index ) const

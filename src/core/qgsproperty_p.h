@@ -38,11 +38,7 @@ class QgsPropertyPrivate : public QSharedData
 {
   public:
 
-    QgsPropertyPrivate()
-      : type( 0 )
-      , active( true )
-      , transformer( nullptr )
-    {}
+    QgsPropertyPrivate() = default;
 
     QgsPropertyPrivate( const QgsPropertyPrivate &other )
       : QSharedData( other )
@@ -54,6 +50,7 @@ class QgsPropertyPrivate : public QSharedData
       , cachedFieldIdx( other.cachedFieldIdx )
       , expressionString( other.expressionString )
       , expressionPrepared( other.expressionPrepared )
+      , expressionIsInvalid( other.expressionIsInvalid )
       , expression( other.expression )
       , expressionReferencedCols( other.expressionReferencedCols )
     {}
@@ -68,7 +65,7 @@ class QgsPropertyPrivate : public QSharedData
     //! Stores whether the property is currently active
     bool active = true;
 
-    //! Optional transfomer
+    //! Optional transformer
     QgsPropertyTransformer *transformer = nullptr;
 
     // StaticData
@@ -81,6 +78,7 @@ class QgsPropertyPrivate : public QSharedData
     // ExpressionData
     QString expressionString;
     mutable bool expressionPrepared = false;
+    mutable bool expressionIsInvalid = false;
     mutable QgsExpression expression;
     //! Cached set of referenced columns
     mutable QSet< QString > expressionReferencedCols;

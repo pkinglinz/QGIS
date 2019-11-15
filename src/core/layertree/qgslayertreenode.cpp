@@ -30,14 +30,15 @@ QgsLayerTreeNode::QgsLayerTreeNode( QgsLayerTreeNode::NodeType t, bool checked )
 }
 
 QgsLayerTreeNode::QgsLayerTreeNode( const QgsLayerTreeNode &other )
-  : QObject()
+  : QObject( nullptr )
   , mNodeType( other.mNodeType )
   , mChecked( other.mChecked )
   , mExpanded( other.mExpanded )
   , mProperties( other.mProperties )
 {
   QList<QgsLayerTreeNode *> clonedChildren;
-  Q_FOREACH ( QgsLayerTreeNode *child, other.mChildren )
+
+  for ( QgsLayerTreeNode *child : qgis::as_const( other.mChildren ) )
     clonedChildren << child->clone();
   insertChildrenPrivate( -1, clonedChildren );
 }
@@ -47,20 +48,27 @@ QgsLayerTreeNode::~QgsLayerTreeNode()
   qDeleteAll( mChildren );
 }
 
-QgsLayerTreeNode *QgsLayerTreeNode::readXml( QDomElement &element )
+QgsLayerTreeNode *QgsLayerTreeNode::readXml( QDomElement &element, const QgsReadWriteContext &context )
 {
   QgsLayerTreeNode *node = nullptr;
   if ( element.tagName() == QLatin1String( "layer-tree-group" ) )
-    node = QgsLayerTreeGroup::readXml( element );
+    node = QgsLayerTreeGroup::readXml( element, context );
   else if ( element.tagName() == QLatin1String( "layer-tree-layer" ) )
-    node = QgsLayerTreeLayer::readXml( element );
+    node = QgsLayerTreeLayer::readXml( element, context );
 
   return node;
 }
 
 QgsLayerTreeNode *QgsLayerTreeNode::readXml( QDomElement &element, const QgsProject *project )
 {
-  QgsLayerTreeNode *node = readXml( element );
+  QgsReadWriteContext context;
+  QgsPathResolver resolver;
+  if ( project )
+    resolver = project->pathResolver();
+  context.setPathResolver( resolver );
+  context.setProjectTranslator( const_cast<QgsProject *>( project ) );
+
+  QgsLayerTreeNode *node = readXml( element, context );
   if ( node )
     node->resolveReferences( project );
   return node;
@@ -102,7 +110,8 @@ bool QgsLayerTreeNode::isItemVisibilityCheckedRecursive() const
 {
   if ( !mChecked )
     return false;
-  Q_FOREACH ( QgsLayerTreeNode *child, mChildren )
+  const auto constMChildren = mChildren;
+  for ( QgsLayerTreeNode *child : constMChildren )
   {
     if ( !child->isItemVisibilityCheckedRecursive() )
       return false;
@@ -115,7 +124,8 @@ bool QgsLayerTreeNode::isItemVisibilityUncheckedRecursive() const
 {
   if ( mChecked )
     return false;
-  Q_FOREACH ( QgsLayerTreeNode *child, mChildren )
+  const auto constMChildren = mChildren;
+  for ( QgsLayerTreeNode *child : constMChildren )
   {
     if ( !child->isItemVisibilityUncheckedRecursive() )
       return false;
@@ -133,7 +143,8 @@ void fetchCheckedLayers( const QgsLayerTreeNode *node, QList<QgsMapLayer *> &lay
       layers << nodeLayer->layer();
   }
 
-  Q_FOREACH ( QgsLayerTreeNode *child, node->children() )
+  const auto constChildren = node->children();
+  for ( QgsLayerTreeNode *child : constChildren )
     fetchCheckedLayers( child, layers );
 }
 
@@ -192,7 +203,8 @@ void QgsLayerTreeNode::insertChildrenPrivate( int index, QList<QgsLayerTreeNode 
   if ( nodes.isEmpty() )
     return;
 
-  Q_FOREACH ( QgsLayerTreeNode *node, nodes )
+  const auto constNodes = nodes;
+  for ( QgsLayerTreeNode *node : constNodes )
   {
     Q_ASSERT( !node->mParent );
     node->mParent = this;

@@ -21,13 +21,7 @@ __author__ = 'Victor Olaya'
 __date__ = 'February 2013'
 __copyright__ = '(C) 2013, Victor Olaya'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
-import csv
-
-from qgis.core import (QgsWkbTypes,
+from qgis.core import (NULL,
                        QgsFeatureRequest)
 
 
@@ -59,7 +53,7 @@ def values(source, *attributes):
     Returns a dict of lists, with the passed field identifiers as keys.
     It considers the existing selection.
 
-    It assummes fields are numeric or contain values that can be parsed
+    It assumes fields are numeric or contain values that can be parsed
     to a number.
     """
     ret = {}
@@ -78,7 +72,7 @@ def values(source, *attributes):
 
             # convert attribute value to number
             try:
-                v = float(feature.attributes()[i])
+                v = float(feature[i])
             except:
                 v = None
 
@@ -88,6 +82,16 @@ def values(source, *attributes):
             else:
                 ret[k] = [v]
     return ret
+
+
+def convert_nulls(values, replacement=None):
+    """
+    Converts NULL items in a list of values to a replacement value (usually None)
+    :param values: list of values
+    :param replacement: value to use in place of NULL
+    :return: converted list
+    """
+    return [i if i != NULL else replacement for i in values]
 
 
 def checkMinDistance(point, index, distance, points):
@@ -107,38 +111,3 @@ def checkMinDistance(point, index, distance, points):
             return False
 
     return True
-
-
-NOGEOMETRY_EXTENSIONS = [
-    u'csv',
-    u'dbf',
-    u'ods',
-    u'xlsx',
-]
-
-
-class TableWriter(object):
-
-    def __init__(self, fileName, encoding, fields):
-        self.fileName = fileName
-        if not self.fileName.lower().endswith('csv'):
-            self.fileName += '.csv'
-
-        self.encoding = encoding
-        if self.encoding is None or encoding == 'System':
-            self.encoding = 'utf-8'
-
-        with open(self.fileName, 'w', newline='', encoding=self.encoding) as f:
-            self.writer = csv.writer(f)
-            if len(fields) != 0:
-                self.writer.writerow(fields)
-
-    def addRecord(self, values):
-        with open(self.fileName, 'a', newline='', encoding=self.encoding) as f:
-            self.writer = csv.writer(f)
-            self.writer.writerow(values)
-
-    def addRecords(self, records):
-        with open(self.fileName, 'a', newline='', encoding=self.encoding) as f:
-            self.writer = csv.writer(f)
-            self.writer.writerows(records)

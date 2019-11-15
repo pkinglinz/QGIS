@@ -28,6 +28,8 @@
 
 
 #if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || defined(__DragonFly__)
+#define HAVE_UTEMPTER
+#define HAVE_UTMPX
 #define HAVE_LOGIN
 #define HAVE_LIBUTIL_H
 #endif
@@ -492,7 +494,7 @@ void KPty::login(const char * user, const char * remotehost)
     Q_D(KPty);
 
     addToUtmp(d->ttyName, remotehost, d->masterFd);
-    Q_UNUSED(user);
+    Q_UNUSED(user)
 #else
 # ifdef HAVE_UTMPX
     struct utmpx l_struct;

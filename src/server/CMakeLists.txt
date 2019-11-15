@@ -10,10 +10,6 @@ IF (CMAKE_BUILD_TYPE MATCHES Debug OR CMAKE_BUILD_TYPE MATCHES RelWithDebInfo)
   ADD_DEFINITIONS(-DQGSMSDEBUG=1)
 ENDIF (CMAKE_BUILD_TYPE MATCHES Debug OR CMAKE_BUILD_TYPE MATCHES RelWithDebInfo)
 
-IF (ENABLE_TESTS)
-  ADD_DEFINITIONS(-DENABLE_MS_TESTS=1)
-ENDIF (ENABLE_TESTS)
-
 ADD_SUBDIRECTORY(services)
 
 ########################################################
@@ -24,56 +20,54 @@ SET(QGIS_SERVER_SRCS
   qgsbufferserverresponse.cpp
   qgscapabilitiescache.cpp
   qgsconfigcache.cpp
-  qgsconfigparserutils.cpp
   qgsfcgiserverrequest.cpp
   qgsfcgiserverresponse.cpp
   qgsfilterresponsedecorator.cpp
   qgsfilterrestorer.cpp
-  qgshostedrdsbuilder.cpp
-  qgshostedvdsbuilder.cpp
-  qgsinterpolationlayerbuilder.cpp
-  qgsmslayerbuilder.cpp
-  qgsmslayercache.cpp
-  qgsremotedatasourcebuilder.cpp
-  qgsremoteowsbuilder.cpp
   qgsrequesthandler.cpp
-  qgssentdatasourcebuilder.cpp
   qgsserver.cpp
+  qgsserverapi.cpp
+  qgsserverogcapi.cpp
+  qgsserverogcapihandler.cpp
+  qgsserverapiutils.cpp
+  qgsserverapicontext.cpp
+  qgsserverparameters.cpp
   qgsserverexception.cpp
   qgsserverinterface.cpp
   qgsserverinterfaceimpl.cpp
   qgsserverlogger.cpp
   qgsserverprojectutils.cpp
+  qgsserverfeatureid.cpp
   qgsserverrequest.cpp
   qgsserverresponse.cpp
   qgsserversettings.cpp
   qgsservice.cpp
-  qgsservicemodule.cpp
   qgsservicenativeloader.cpp
   qgsserviceregistry.cpp
+  qgsfeaturefilterprovidergroup.cpp
+  qgsfeaturefilter.cpp
+  qgsstorebadlayerinfo.cpp
+  qgsserverquerystringparameter.cpp
 )
 
 SET (QGIS_SERVER_HDRS
-  qgsmapserviceexception.h
-)
-
-
-SET (QGIS_SERVER_MOC_HDRS
   qgscapabilitiescache.h
   qgsconfigcache.h
-  # qgshttptransaction.h
-  # qgsftptransaction.cpp
-  qgsmslayercache.h
+  qgsmapserviceexception.h
+  qgsserverapi.h
+  qgsserverapicontext.h
   qgsserverlogger.h
+  qgsserverogcapi.h
+  qgsserverogcapihandler.h
+  qgsserverparameters.h
+  qgsserverquerystringparameter.h
   qgsserversettings.h
+  qgsservicemodule.h
 )
 
 
 #############################################################
 # qgis_server library
-
-
-SET(QGIS_SERVER_MOC_HDRS ${QGIS_SERVER_MOC_HDRS})
 
 IF (WITH_SERVER_PLUGINS)
   SET(QGIS_SERVER_SRCS ${QGIS_SERVER_SRCS}
@@ -81,22 +75,14 @@ IF (WITH_SERVER_PLUGINS)
     qgsserverfilter.cpp
     qgsaccesscontrolfilter.cpp
     qgsaccesscontrol.cpp
+    qgsservercachefilter.cpp
+    qgsservercachemanager.cpp
   )
 ENDIF (WITH_SERVER_PLUGINS)
-
-QT5_WRAP_CPP(QGIS_SERVER_MOC_SRCS ${QGIS_SERVER_MOC_HDRS})
-
-IF(MSVC)
-  SET_SOURCE_FILES_PROPERTIES(${QGIS_SERVER_MOC_SRCS} PROPERTIES COMPILE_FLAGS "/wd4512 /wd4996" )
-ELSE(MSVC)
-  SET_SOURCE_FILES_PROPERTIES(${QGIS_SERVER_MOC_SRCS} PROPERTIES COMPILE_FLAGS "-Wno-deprecated-declarations" )
-ENDIF(MSVC)
 
 INCLUDE_DIRECTORIES(SYSTEM
   ${GDAL_INCLUDE_DIR}
   ${FCGI_INCLUDE_DIR}
-  ${GEOS_INCLUDE_DIR}
-  ${PROJ_INCLUDE_DIR}
   ${POSTGRES_INCLUDE_DIR}
 )
 INCLUDE_DIRECTORIES(
@@ -109,6 +95,7 @@ INCLUDE_DIRECTORIES(SYSTEM
   ${QTKEYCHAIN_INCLUDE_DIR}
 )
 INCLUDE_DIRECTORIES(
+  ${CMAKE_SOURCE_DIR}/external
   ${CMAKE_SOURCE_DIR}/src/core
   ${CMAKE_SOURCE_DIR}/src/core/auth
   ${CMAKE_SOURCE_DIR}/src/core/dxf
@@ -117,11 +104,14 @@ INCLUDE_DIRECTORIES(
   ${CMAKE_SOURCE_DIR}/src/core/metadata
   ${CMAKE_SOURCE_DIR}/src/core/raster
   ${CMAKE_SOURCE_DIR}/src/core/symbology
-  ${CMAKE_SOURCE_DIR}/src/core/composer
+  ${CMAKE_SOURCE_DIR}/src/core/effects
+  ${CMAKE_SOURCE_DIR}/src/core/layout
   ${CMAKE_SOURCE_DIR}/src/core/layertree
   ${CMAKE_SOURCE_DIR}/src/analysis/interpolation
   ${CMAKE_SOURCE_DIR}/src/plugins/diagram_overlay
   ${CMAKE_SOURCE_DIR}/src/python
+  ${CMAKE_SOURCE_DIR}/external
+  ${CMAKE_SOURCE_DIR}/external/nlohmann
 
   ${CMAKE_BINARY_DIR}/src/core
   ${CMAKE_BINARY_DIR}/src/python
@@ -129,7 +119,7 @@ INCLUDE_DIRECTORIES(
   ${CMAKE_BINARY_DIR}/src/server
 )
 
-ADD_LIBRARY(qgis_server SHARED ${QGIS_SERVER_SRCS} ${QGIS_SERVER_MOC_SRCS} ${QGIS_SERVER_HDRS} ${QGIS_SERVER_MOC_HDRS})
+ADD_LIBRARY(qgis_server SHARED ${QGIS_SERVER_SRCS} ${QGIS_SERVER_HDRS})
 
 GENERATE_EXPORT_HEADER(
   qgis_server
@@ -203,6 +193,8 @@ INSTALL(TARGETS
 INSTALL(FILES
   admin.sld
   wms_metadata.xml
-  schemaExtension.xsd
   DESTINATION ${QGIS_CGIBIN_DIR}
+)
+ADD_CUSTOM_TARGET(qgis_server_full
+  DEPENDS qgis_mapserv.fcgi wms wfs wcs wfs3 wmts qgis_server
 )

@@ -77,6 +77,11 @@ QgsGeoNodeSourceSelect::~QgsGeoNodeSourceSelect()
   emit abortRequests();
 }
 
+void QgsGeoNodeSourceSelect::reset()
+{
+  treeView->clearSelection();
+}
+
 void QgsGeoNodeSourceSelect::addConnectionsEntryList()
 {
   QgsGeoNodeNewConnection nc( this );
@@ -91,7 +96,7 @@ void QgsGeoNodeSourceSelect::addConnectionsEntryList()
 void QgsGeoNodeSourceSelect::modifyConnectionsEntryList()
 {
   QgsGeoNodeNewConnection nc( this, cmbConnections->currentText() );
-  nc.setWindowTitle( tr( "Modify GeoNode connection" ) );
+  nc.setWindowTitle( tr( "Modify GeoNode Connection" ) );
 
   if ( nc.exec() )
   {
@@ -189,7 +194,7 @@ void QgsGeoNodeSourceSelect::connectToGeonodeConnection()
         if ( !wmsURL.isEmpty() )
         {
           QStandardItem *titleItem = new QStandardItem( layer.title );
-          QStandardItem *nameItem;
+          QStandardItem *nameItem = nullptr;
           if ( !layer.name.isEmpty() )
           {
             nameItem = new QStandardItem( layer.name );
@@ -216,7 +221,7 @@ void QgsGeoNodeSourceSelect::connectToGeonodeConnection()
         if ( !wfsURL.isEmpty() )
         {
           QStandardItem *titleItem = new QStandardItem( layer.title );
-          QStandardItem *nameItem;
+          QStandardItem *nameItem = nullptr;
           if ( !layer.name.isEmpty() )
           {
             nameItem = new QStandardItem( layer.name );
@@ -243,7 +248,7 @@ void QgsGeoNodeSourceSelect::connectToGeonodeConnection()
         if ( !xyzURL.isEmpty() )
         {
           QStandardItem *titleItem = new QStandardItem( layer.title );
-          QStandardItem *nameItem;
+          QStandardItem *nameItem = nullptr;
           if ( !layer.name.isEmpty() )
           {
             nameItem = new QStandardItem( layer.name );
@@ -272,7 +277,7 @@ void QgsGeoNodeSourceSelect::connectToGeonodeConnection()
 
     else
     {
-      QMessageBox::critical( this, tr( "Connect to GeoNode" ), tr( "Cannot get any feature services" ) );
+      QMessageBox::critical( this, tr( "Connect to GeoNode" ), tr( "Cannot get any feature services." ) );
     }
 
     treeView->resizeColumnToContents( MODEL_IDX_TITLE );
@@ -300,7 +305,7 @@ void QgsGeoNodeSourceSelect::saveGeonodeConnection()
 
 void QgsGeoNodeSourceSelect::loadGeonodeConnection()
 {
-  QString fileName = QFileDialog::getOpenFileName( this, tr( "Load connections" ), QDir::homePath(),
+  QString fileName = QFileDialog::getOpenFileName( this, tr( "Load Connections" ), QDir::homePath(),
                      tr( "XML files (*.xml *.XML)" ) );
   if ( fileName.isEmpty() )
   {
@@ -469,14 +474,4 @@ void QgsGeoNodeSourceSelect::updateButtonStateForAvailableConnections()
 QgsGeoNodeConnection QgsGeoNodeSourceSelect::currentConnection() const
 {
   return QgsGeoNodeConnection( cmbConnections->currentText() );
-}
-
-QGISEXTERN QList<QgsSourceSelectProvider *> *sourceSelectProviders()
-{
-  QList<QgsSourceSelectProvider *> *providers = new QList<QgsSourceSelectProvider *>();
-
-  *providers
-      << new QgsGeoNodeSourceSelectProvider;
-
-  return providers;
 }

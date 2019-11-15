@@ -9,8 +9,6 @@ the Free Software Foundation; either version 2 of the License, or
 __author__ = 'Nyall Dawson'
 __date__ = '10/05/2016'
 __copyright__ = 'Copyright 2015, The QGIS Project'
-# This will get replaced with a git SHA1 when you do a git archive
-__revision__ = '$Format:%H$'
 
 import qgis  # NOQA
 
@@ -118,6 +116,9 @@ class TestQgsInterval(unittest.TestCase):
         i = QgsInterval.fromString('2 Years')
         self.assertTrue(i.isValid())
         self.assertEqual(i.years(), 2)
+        i = QgsInterval.fromString('20000 Years')
+        self.assertTrue(i.isValid())
+        self.assertEqual(i.years(), 20000)
         i = QgsInterval.fromString('30 month')
         self.assertTrue(i.isValid())
         self.assertEqual(i.months(), 30)
@@ -133,6 +134,9 @@ class TestQgsInterval(unittest.TestCase):
         i = QgsInterval.fromString('1 Day')
         self.assertTrue(i.isValid())
         self.assertEqual(i.seconds(), 24 * 60 * 60)
+        i = QgsInterval.fromString('101.5 Days')
+        self.assertTrue(i.isValid())
+        self.assertEqual(i.seconds(), 101.5 * 24 * 60 * 60)
         i = QgsInterval.fromString('2  dAys')
         self.assertTrue(i.isValid())
         self.assertEqual(i.seconds(), 48 * 60 * 60)

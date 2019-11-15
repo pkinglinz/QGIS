@@ -36,6 +36,8 @@ QgsAbout::QgsAbout( QWidget * parent )
 #endif
 {
   setupUi( this );
+  connect( btnQgisUser, &QPushButton::clicked, this, &QgsAbout::btnQgisUser_clicked );
+  connect( btnQgisHome, &QPushButton::clicked, this, &QgsAbout::btnQgisHome_clicked );
   initOptionsBase( true, QStringLiteral( "%1 - %2 Bit" ).arg( windowTitle() ).arg( QSysInfo::WordSize ) );
   init();
 }
@@ -141,8 +143,8 @@ void QgsAbout::init()
     QString donorsHTML = ""
                          + tr( "<p>For a list of individuals and institutions who have contributed "
                                "money to fund QGIS development and other project costs see "
-                               "<a href=\"http://qgis.org/en/site/about/sponsorship.html#list-of-donors\">"
-                               "http://qgis.org/en/site/about/sponsorship.html#list-of-donors</a></p>" );
+                               "<a href=\"https://qgis.org/en/site/about/sustaining_members.html#list-of-donors\">"
+                               "https://qgis.org/en/site/about/sustaining_members.html#list-of-donors</a></p>" );
 #if 0
     QString website;
     QTextStream donorsStream( &donorsFile );
@@ -175,7 +177,7 @@ void QgsAbout::init()
     txtDonors->clear();
     txtDonors->document()->setDefaultStyleSheet( QgsApplication::reportStyleSheet() );
     txtDonors->setHtml( donorsHTML );
-    QgsDebugMsg( QString( "donorsHTML:%1" ).arg( donorsHTML.toLatin1().constData() ) );
+    QgsDebugMsg( QStringLiteral( "donorsHTML:%1" ).arg( donorsHTML.toLatin1().constData() ) );
   }
 
   // read the TRANSLATORS file and populate the text widget
@@ -186,7 +188,7 @@ void QgsAbout::init()
 #endif
   if ( translatorFile.open( QIODevice::ReadOnly ) )
   {
-    QString translatorHTML = QLatin1String( "" );
+    QString translatorHTML;
     QTextStream translatorStream( &translatorFile );
     // Always use UTF-8
     translatorStream.setCodec( "UTF-8" );
@@ -197,7 +199,7 @@ void QgsAbout::init()
       translatorHTML += translatorStream.readLine();
     }
     txtTranslators->setHtml( translatorHTML );
-    QgsDebugMsg( QString( "translatorHTML:%1" ).arg( translatorHTML.toLatin1().constData() ) );
+    QgsDebugMsg( QStringLiteral( "translatorHTML:%1" ).arg( translatorHTML.toLatin1().constData() ) );
   }
   setWhatsNew();
   setLicence();
@@ -228,7 +230,7 @@ void QgsAbout::setWhatsNew()
 {
   txtWhatsNew->clear();
   txtWhatsNew->document()->setDefaultStyleSheet( QgsApplication::reportStyleSheet() );
-  txtWhatsNew->setSource( "file:///" + QgsApplication::pkgDataPath() + "/doc/news.html" );
+  txtWhatsNew->setSource( "file:///" + QgsApplication::pkgDataPath() + "/doc/NEWS.html" );
 }
 
 void QgsAbout::setPluginInfo()
@@ -266,14 +268,14 @@ void QgsAbout::setPluginInfo()
   txtProviders->setText( myString );
 }
 
-void QgsAbout::on_btnQgisUser_clicked()
+void QgsAbout::btnQgisUser_clicked()
 {
-  openUrl( QStringLiteral( "http://lists.osgeo.org/mailman/listinfo/qgis-user" ) );
+  openUrl( QStringLiteral( "https://lists.osgeo.org/mailman/listinfo/qgis-user" ) );
 }
 
-void QgsAbout::on_btnQgisHome_clicked()
+void QgsAbout::btnQgisHome_clicked()
 {
-  openUrl( QStringLiteral( "http://qgis.org" ) );
+  openUrl( QStringLiteral( "https://qgis.org" ) );
 }
 
 void QgsAbout::openUrl( const QUrl &url )

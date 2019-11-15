@@ -15,17 +15,18 @@
  *                                                                         *
  ***************************************************************************/
 
-#ifndef QGSSURFACEV2_H
-#define QGSSURFACEV2_H
+#ifndef QGSSURFACE_H
+#define QGSSURFACE_H
 
 #include "qgis_core.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsabstractgeometry.h"
 #include "qgsrectangle.h"
 
-class QgsPolygonV2;
+class QgsPolygon;
 
-/** \ingroup core
+/**
+ * \ingroup core
  * \class QgsSurface
  */
 class CORE_EXPORT QgsSurface: public QgsAbstractGeometry
@@ -33,14 +34,12 @@ class CORE_EXPORT QgsSurface: public QgsAbstractGeometry
   public:
 
     /**
-     * Get a polygon representation of this surface.
+     * Gets a polygon representation of this surface.
      * Ownership is transferred to the caller.
      */
-    virtual QgsPolygonV2 *surfaceToPolygon() const = 0 SIP_FACTORY;
+    virtual QgsPolygon *surfaceToPolygon() const = 0 SIP_FACTORY;
 
-    /** Returns the minimal bounding box for the geometry
-     */
-    virtual QgsRectangle boundingBox() const override
+    QgsRectangle boundingBox() const override
     {
       if ( mBoundingBox.isNull() )
       {
@@ -48,6 +47,9 @@ class CORE_EXPORT QgsSurface: public QgsAbstractGeometry
       }
       return mBoundingBox;
     }
+
+    bool isValid( QString &error SIP_OUT, int flags = 0 ) const override;
+
 
 #ifndef SIP_RUN
 
@@ -73,10 +75,11 @@ class CORE_EXPORT QgsSurface: public QgsAbstractGeometry
 #endif
   protected:
 
-    virtual void clearCache() const override { mBoundingBox = QgsRectangle(); mCoordinateSequence.clear(); QgsAbstractGeometry::clearCache(); }
+    void clearCache() const override;
 
-    mutable QgsCoordinateSequence mCoordinateSequence;
     mutable QgsRectangle mBoundingBox;
+    mutable bool mHasCachedValidity = false;
+    mutable QString mValidityFailureReason;
 };
 
-#endif // QGSSURFACEV2_H
+#endif // QGSSURFACE_H

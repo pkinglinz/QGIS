@@ -26,6 +26,8 @@ email                : a.furieri@lqt.it
 #include "qgsvectorlayer.h"
 #include "qgssettings.h"
 #include "qgsproviderregistry.h"
+#include "qgsproject.h"
+#include "qgsgui.h"
 
 #include <QInputDialog>
 #include <QMessageBox>
@@ -43,11 +45,23 @@ QgsSpatiaLiteSourceSelect::QgsSpatiaLiteSourceSelect( QWidget *parent, Qt::Windo
   QgsAbstractDataSourceWidget( parent, fl, theWidgetMode )
 {
   setupUi( this );
+  QgsGui::instance()->enableAutoGeometryRestore( this );
+
+  connect( btnConnect, &QPushButton::clicked, this, &QgsSpatiaLiteSourceSelect::btnConnect_clicked );
+  connect( btnNew, &QPushButton::clicked, this, &QgsSpatiaLiteSourceSelect::btnNew_clicked );
+  connect( btnDelete, &QPushButton::clicked, this, &QgsSpatiaLiteSourceSelect::btnDelete_clicked );
+  connect( mSearchGroupBox, &QGroupBox::toggled, this, &QgsSpatiaLiteSourceSelect::mSearchGroupBox_toggled );
+  connect( mSearchTableEdit, &QLineEdit::textChanged, this, &QgsSpatiaLiteSourceSelect::mSearchTableEdit_textChanged );
+  connect( mSearchColumnComboBox, &QComboBox::currentTextChanged, this, &QgsSpatiaLiteSourceSelect::mSearchColumnComboBox_currentIndexChanged );
+  connect( mSearchModeComboBox, &QComboBox::currentTextChanged, this, &QgsSpatiaLiteSourceSelect::mSearchModeComboBox_currentIndexChanged );
+  connect( cbxAllowGeometrylessTables, &QCheckBox::stateChanged, this, &QgsSpatiaLiteSourceSelect::cbxAllowGeometrylessTables_stateChanged );
+  connect( cmbConnections, static_cast<void ( QComboBox::* )( int )>( &QComboBox::activated ), this, &QgsSpatiaLiteSourceSelect::cmbConnections_activated );
+  connect( mTablesTreeView, &QTreeView::clicked, this, &QgsSpatiaLiteSourceSelect::mTablesTreeView_clicked );
+  connect( mTablesTreeView, &QTreeView::doubleClicked, this, &QgsSpatiaLiteSourceSelect::mTablesTreeView_doubleClicked );
   setupButtons( buttonBox );
   connect( buttonBox, &QDialogButtonBox::helpRequested, this, &QgsSpatiaLiteSourceSelect::showHelp );
 
   QgsSettings settings;
-  restoreGeometry( settings.value( QStringLiteral( "Windows/SpatiaLiteSourceSelect/geometry" ) ).toByteArray() );
   mHoldDialogOpen->setChecked( settings.value( QStringLiteral( "Windows/SpatiaLiteSourceSelect/HoldDialogOpen" ), false ).toBool() );
 
   setWindowTitle( tr( "Add SpatiaLite Layer(s)" ) );
@@ -113,13 +127,12 @@ QgsSpatiaLiteSourceSelect::QgsSpatiaLiteSourceSelect( QWidget *parent, Qt::Windo
 QgsSpatiaLiteSourceSelect::~QgsSpatiaLiteSourceSelect()
 {
   QgsSettings settings;
-  settings.setValue( QStringLiteral( "Windows/SpatiaLiteSourceSelect/geometry" ), saveGeometry() );
   settings.setValue( QStringLiteral( "Windows/SpatiaLiteSourceSelect/HoldDialogOpen" ), mHoldDialogOpen->isChecked() );
 }
 
 
 // Remember which database is selected
-void QgsSpatiaLiteSourceSelect::on_cmbConnections_activated( int )
+void QgsSpatiaLiteSourceSelect::cmbConnections_activated( int )
 {
   dbChanged();
 }
@@ -137,11 +150,11 @@ void QgsSpatiaLiteSourceSelect::updateStatistics()
     subKey.truncate( idx );
 
   QString msg = tr( "Are you sure you want to update the internal statistics for DB: %1?\n\n"
-                    "This could take a long time (depending on the DB size),\n"
+                    "This could take a long time (depending on the DB size), "
                     "but implies better performance thereafter." ).arg( subKey );
   QMessageBox::StandardButton result =
-    QMessageBox::information( this, tr( "Confirm Update Statistics" ), msg, QMessageBox::Ok | QMessageBox::Cancel );
-  if ( result != QMessageBox::Ok )
+    QMessageBox::question( this, tr( "Confirm Update Statistics" ), msg, QMessageBox::Yes | QMessageBox::No );
+  if ( result != QMessageBox::Yes )
     return;
 
   // trying to connect to SpatiaLite DB
@@ -158,30 +171,30 @@ void QgsSpatiaLiteSourceSelect::updateStatistics()
   }
 }
 
-void QgsSpatiaLiteSourceSelect::on_cbxAllowGeometrylessTables_stateChanged( int )
+void QgsSpatiaLiteSourceSelect::cbxAllowGeometrylessTables_stateChanged( int )
 {
-  on_btnConnect_clicked();
+  btnConnect_clicked();
 }
 
-void QgsSpatiaLiteSourceSelect::on_mTablesTreeView_clicked( const QModelIndex &index )
+void QgsSpatiaLiteSourceSelect::mTablesTreeView_clicked( const QModelIndex &index )
 {
   mBuildQueryButton->setEnabled( index.parent().isValid() );
 }
 
-void QgsSpatiaLiteSourceSelect::on_mTablesTreeView_doubleClicked( const QModelIndex &index )
+void QgsSpatiaLiteSourceSelect::mTablesTreeView_doubleClicked( const QModelIndex &index )
 {
   setSql( index );
 }
 
-void QgsSpatiaLiteSourceSelect::on_mSearchGroupBox_toggled( bool checked )
+void QgsSpatiaLiteSourceSelect::mSearchGroupBox_toggled( bool checked )
 {
   if ( mSearchTableEdit->text().isEmpty() )
     return;
 
-  on_mSearchTableEdit_textChanged( checked ? mSearchTableEdit->text() : QLatin1String( "" ) );
+  mSearchTableEdit_textChanged( checked ? mSearchTableEdit->text() : QString() );
 }
 
-void QgsSpatiaLiteSourceSelect::on_mSearchTableEdit_textChanged( const QString &text )
+void QgsSpatiaLiteSourceSelect::mSearchTableEdit_textChanged( const QString &text )
 {
   if ( mSearchModeComboBox->currentText() == tr( "Wildcard" ) )
   {
@@ -193,7 +206,7 @@ void QgsSpatiaLiteSourceSelect::on_mSearchTableEdit_textChanged( const QString &
   }
 }
 
-void QgsSpatiaLiteSourceSelect::on_mSearchColumnComboBox_currentIndexChanged( const QString &text )
+void QgsSpatiaLiteSourceSelect::mSearchColumnComboBox_currentIndexChanged( const QString &text )
 {
   if ( text == tr( "All" ) )
   {
@@ -217,10 +230,10 @@ void QgsSpatiaLiteSourceSelect::on_mSearchColumnComboBox_currentIndexChanged( co
   }
 }
 
-void QgsSpatiaLiteSourceSelect::on_mSearchModeComboBox_currentIndexChanged( const QString &text )
+void QgsSpatiaLiteSourceSelect::mSearchModeComboBox_currentIndexChanged( const QString &text )
 {
-  Q_UNUSED( text );
-  on_mSearchTableEdit_textChanged( mSearchTableEdit->text() );
+  Q_UNUSED( text )
+  mSearchTableEdit_textChanged( mSearchTableEdit->text() );
 }
 
 void QgsSpatiaLiteSourceSelect::setLayerType( const QString &table, const QString &column, const QString &type )
@@ -247,7 +260,7 @@ void QgsSpatiaLiteSourceSelect::populateConnectionList()
   cmbConnections->setDisabled( cmbConnections->count() == 0 );
 }
 
-void QgsSpatiaLiteSourceSelect::on_btnNew_clicked()
+void QgsSpatiaLiteSourceSelect::btnNew_clicked()
 {
   if ( ! newConnection( this ) )
     return;
@@ -285,9 +298,9 @@ bool QgsSpatiaLiteSourceSelect::newConnection( QWidget *parent )
   while ( ! settings.value( baseKey + savedName + "/sqlitepath", "" ).toString().isEmpty() )
   {
     bool ok;
-    savedName = QInputDialog::getText( nullptr, tr( "Cannot add connection '%1'" ).arg( myName ),
+    savedName = QInputDialog::getText( nullptr, tr( "Add Connection" ),
                                        tr( "A connection with the same name already exists,\nplease provide a new name:" ), QLineEdit::Normal,
-                                       QLatin1String( "" ), &ok );
+                                       QString(), &ok );
     if ( !ok || savedName.isEmpty() )
     {
       return false;
@@ -340,12 +353,12 @@ QString QgsSpatiaLiteSourceSelect::layerURI( const QModelIndex &index )
   }
 
   QgsDataSourceUri uri( connectionInfo() );
-  uri.setDataSource( QLatin1String( "" ), tableName, geomColumnName, sql, QLatin1String( "" ) );
+  uri.setDataSource( QString(), tableName, geomColumnName, sql, QString() );
   return uri.uri();
 }
 
 // Slot for deleting an existing connection
-void QgsSpatiaLiteSourceSelect::on_btnDelete_clicked()
+void QgsSpatiaLiteSourceSelect::btnDelete_clicked()
 {
   QString subKey = cmbConnections->currentText();
   int idx = subKey.indexOf( '@' );
@@ -354,8 +367,8 @@ void QgsSpatiaLiteSourceSelect::on_btnDelete_clicked()
 
   QString msg = tr( "Are you sure you want to remove the %1 connection and all associated settings?" ).arg( subKey );
   QMessageBox::StandardButton result =
-    QMessageBox::information( this, tr( "Confirm Delete" ), msg, QMessageBox::Ok | QMessageBox::Cancel );
-  if ( result != QMessageBox::Ok )
+    QMessageBox::question( this, tr( "Confirm Delete" ), msg, QMessageBox::Yes | QMessageBox::No );
+  if ( result != QMessageBox::Yes )
     return;
 
   QgsSpatiaLiteConnection::deleteConnection( subKey );
@@ -413,7 +426,7 @@ void QgsSpatiaLiteSourceSelect::addButtonClicked()
   }
 }
 
-void QgsSpatiaLiteSourceSelect::on_btnConnect_clicked()
+void QgsSpatiaLiteSourceSelect::btnConnect_clicked()
 {
   cbxAllowGeometrylessTables->setEnabled( false );
 
@@ -452,11 +465,11 @@ void QgsSpatiaLiteSourceSelect::on_btnConnect_clicked()
         break;
       case QgsSpatiaLiteConnection::FailedToCheckMetadata:
         QMessageBox::critical( this, tr( "SpatiaLite metadata check failed" ),
-                               tr( "Failure getting table metadata ... is this really a SpatialLite database? %1\n\n%2" ).arg( mSqlitePath, errCause ) );
+                               tr( "Failure getting table metadata. Is %1 really a SpatiaLite database?\n\n%2" ).arg( mSqlitePath, errCause ) );
         break;
       default:
         QMessageBox::critical( this, tr( "SpatiaLite Error" ),
-                               tr( "Unexpected error when working with: %1\n\n%2" ).arg( mSqlitePath, errCause ) );
+                               tr( "Unexpected error when working with %1\n\n%2" ).arg( mSqlitePath, errCause ) );
     }
     mSqlitePath = QString();
     return;
@@ -471,9 +484,10 @@ void QgsSpatiaLiteSourceSelect::on_btnConnect_clicked()
   mTableModel.setSqliteDb( subKey );
 
   QList<QgsSpatiaLiteConnection::TableEntry> tables = conn.tables();
-  Q_FOREACH ( const QgsSpatiaLiteConnection::TableEntry &table, tables )
+  const auto constTables = tables;
+  for ( const QgsSpatiaLiteConnection::TableEntry &table : constTables )
   {
-    mTableModel.addTableEntry( table.type, table.tableName, table.column, QLatin1String( "" ) );
+    mTableModel.addTableEntry( table.type, table.tableName, table.column, QString() );
   }
 
   if ( cmbConnections->count() > 0 )
@@ -510,7 +524,8 @@ void QgsSpatiaLiteSourceSelect::setSql( const QModelIndex &index )
   QModelIndex idx = mProxyModel.mapToSource( index );
   QString tableName = mTableModel.itemFromIndex( idx.sibling( idx.row(), 0 ) )->text();
 
-  QgsVectorLayer *vlayer = new QgsVectorLayer( layerURI( idx ), tableName, QStringLiteral( "spatialite" ) );
+  const QgsVectorLayer::LayerOptions options { QgsProject::instance()->transformContext() };
+  QgsVectorLayer *vlayer = new QgsVectorLayer( layerURI( idx ), tableName, QStringLiteral( "spatialite" ), options );
 
   if ( !vlayer->isValid() )
   {
@@ -531,7 +546,7 @@ void QgsSpatiaLiteSourceSelect::setSql( const QModelIndex &index )
 
 QString QgsSpatiaLiteSourceSelect::fullDescription( const QString &table, const QString &column, const QString &type )
 {
-  QString full_desc = QLatin1String( "" );
+  QString full_desc;
   full_desc += table + "\" (" + column + ") " + type;
   return full_desc;
 }
@@ -569,13 +584,12 @@ void QgsSpatiaLiteSourceSelect::setConnectionListPosition()
 
 void QgsSpatiaLiteSourceSelect::setSearchExpression( const QString &regexp )
 {
-  Q_UNUSED( regexp );
+  Q_UNUSED( regexp )
 }
 
-void QgsSpatiaLiteSourceSelect::treeWidgetSelectionChanged( const QItemSelection &selected, const QItemSelection &deselected )
+void QgsSpatiaLiteSourceSelect::treeWidgetSelectionChanged( const QItemSelection &, const QItemSelection & )
 {
-  Q_UNUSED( deselected )
-  emit enableButtons( !selected.isEmpty() );
+  emit enableButtons( !mTablesTreeView->selectionModel()->selection().isEmpty() );
 }
 
 void QgsSpatiaLiteSourceSelect::showHelp()

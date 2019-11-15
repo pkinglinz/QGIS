@@ -58,28 +58,34 @@ class CORE_EXPORT QgsLayoutItemPage : public QgsLayoutItem
 
   public:
 
-    //! Page orientiation
+    //! Page orientation
     enum Orientation
     {
       Portrait, //!< Portrait orientation
       Landscape //!< Landscape orientation
     };
 
+    //! Page item undo commands, used for collapsing undo commands
+    enum UndoCommand
+    {
+      UndoPageSymbol = 3000, //!< Layout page symbol change
+    };
+
     /**
      * Constructor for QgsLayoutItemPage, with the specified parent \a layout.
      */
-    explicit QgsLayoutItemPage( QgsLayout *layout SIP_TRANSFERTHIS );
+    explicit QgsLayoutItemPage( QgsLayout *layout );
+    ~QgsLayoutItemPage() override;
 
     /**
      * Returns a new page item for the specified \a layout.
      *
      * The caller takes responsibility for deleting the returned object.
      */
-    static QgsLayoutItemPage *create( QgsLayout *layout, const QVariantMap &settings ) SIP_FACTORY;
+    static QgsLayoutItemPage *create( QgsLayout *layout ) SIP_FACTORY;
 
-
-    int type() const override { return QgsLayoutItemRegistry::LayoutPage; }
-    QString stringType() const override { return QStringLiteral( "ItemPaper" ); }
+    int type() const override;
+    QString displayName() const override;
 
     /**
      * Sets the \a size of the page.
@@ -91,8 +97,8 @@ class CORE_EXPORT QgsLayoutItemPage : public QgsLayoutItem
      * Sets the page size to a known page \a size, e.g. "A4" and \a orientation.
      * The known page sizes are managed by QgsPageSizeRegistry. Valid page sizes
      * can be retrieved via QgsPageSizeRegistry::entries().
-     * The function returns true if \a size was a valid page size and the page
-     * size was changed. If false is returned then \a size could not be matched
+     * The function returns TRUE if \a size was a valid page size and the page
+     * size was changed. If FALSE is returned then \a size could not be matched
      * to a known page size.
      * \see pageSize()
      */
@@ -105,21 +111,43 @@ class CORE_EXPORT QgsLayoutItemPage : public QgsLayoutItem
     QgsLayoutSize pageSize() const;
 
     /**
-     * Returns the page orientiation.
+     * Returns the page orientation.
      * \note There is no direct setter for page orientation - use setPageSize() instead.
      */
     Orientation orientation() const;
 
     /**
+     * Sets the \a symbol to use for drawing the page background.
+     *
+     * Ownership of \a symbol is transferred to the page.
+     *
+     * \see pageStyleSymbol()
+     *
+     * \since QGIS 3.10
+     */
+    void setPageStyleSymbol( QgsFillSymbol *symbol SIP_TRANSFER );
+
+    /**
+     * Returns the symbol to use for drawing the page background.
+     *
+     * \see setPageStyleSymbol()
+     *
+     * \since QGIS 3.10
+     */
+    const QgsFillSymbol *pageStyleSymbol() const { return mPageStyleSymbol.get(); }
+
+    /**
      * Decodes a \a string representing a page orientation. If specified, \a ok
-     * will be set to true if string could be successfully interpreted as a
+     * will be set to TRUE if string could be successfully interpreted as a
      * page orientation.
     */
     static QgsLayoutItemPage::Orientation decodePageOrientation( const QString &string, bool *ok SIP_OUT = nullptr );
 
-    void attemptResize( const QgsLayoutSize &size ) override;
-
+    QRectF boundingRect() const override;
+    void attemptResize( const QgsLayoutSize &size, bool includesFrame = false ) override;
     QgsAbstractLayoutUndoCommand *createCommand( const QString &text, int id, QUndoCommand *parent = nullptr ) override SIP_FACTORY;
+    ExportLayerBehavior exportLayerBehavior() const override;
+    bool accept( QgsStyleEntityVisitorInterface *visitor ) const override;
 
   public slots:
 
@@ -127,13 +155,23 @@ class CORE_EXPORT QgsLayoutItemPage : public QgsLayoutItem
 
   protected:
 
-    void draw( QgsRenderContext &context, const QStyleOptionGraphicsItem *itemStyle = nullptr ) override;
+    void draw( QgsLayoutItemRenderContext &context ) override;
+    void drawFrame( QgsRenderContext &context ) override;
+    void drawBackground( QgsRenderContext &context ) override;
+    bool writePropertiesToElement( QDomElement &parentElement, QDomDocument &document, const QgsReadWriteContext &context ) const override;
+    bool readPropertiesFromElement( const QDomElement &itemElement, const QDomDocument &document, const QgsReadWriteContext &context ) override;
 
   private:
 
     double mMaximumShadowWidth = -1;
 
     std::unique_ptr< QgsLayoutItemPageGrid > mGrid;
+    mutable QRectF mBoundingRect;
+
+    //! Symbol for drawing page
+    std::unique_ptr< QgsFillSymbol > mPageStyleSymbol;
+
+    void createDefaultPageStyleSymbol();
 
     friend class TestQgsLayoutPage;
 };

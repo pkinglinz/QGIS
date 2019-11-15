@@ -9,8 +9,6 @@ the Free Software Foundation; either version 2 of the License, or
 __author__ = 'Chris Crook'
 __date__ = '20/04/2013'
 __copyright__ = 'Copyright 2013, The QGIS Project'
-# This will get replaced with a git SHA1 when you do a git archive
-__revision__ = '$Format:%H$'
 
 # This module provides unit test for the delimited text provider.  It uses data files in
 # the testdata/delimitedtext directory.
@@ -43,7 +41,8 @@ from qgis.core import (
     QgsFeatureRequest,
     QgsRectangle,
     QgsApplication,
-    QgsFeature)
+    QgsFeature,
+    QgsWkbTypes)
 
 from qgis.testing import start_app, unittest
 from utilities import unitTestDataPath, compareWkt
@@ -237,7 +236,7 @@ class TestQgsDelimitedTextProviderOther(unittest.TestCase):
             fielddata = dict((name, str(f[name])) for name in fields)
             g = f.geometry()
             if not g.isNull():
-                fielddata[geomkey] = str(g.exportToWkt())
+                fielddata[geomkey] = str(g.asWkt())
             else:
                 fielddata[geomkey] = "None"
 
@@ -337,7 +336,7 @@ class TestQgsDelimitedTextProviderOther(unittest.TestCase):
             print((prefix + '    ' + repr(msg) + ','))
         print((prefix + '    ]'))
         print('    return wanted')
-        print()
+        print('', flush=True)
 
     def recordDifference(self, record1, record2):
         # Compare a record defined as a dictionary
@@ -804,6 +803,90 @@ class TestQgsDelimitedTextProviderOther(unittest.TestCase):
         params = {'yField': 'y', 'xField': 'x', 'type': 'csv', 'delimiter': '\\t'}
         requests = None
         self.runTest(filename, requests, **params)
+
+    def test_041_no_detect_type(self):
+        # CSV file parsing
+        # Skip lines
+        filename = 'testtypes.csv'
+        params = {'yField': 'lat', 'xField': 'lon', 'type': 'csv', 'detectTypes': 'no'}
+        requests = None
+        self.runTest(filename, requests, **params)
+
+    def test_042_no_detect_types_csvt(self):
+        # CSVT field types
+        filename = 'testcsvt.csv'
+        params = {'geomType': 'none', 'type': 'csv', 'detectTypes': 'no'}
+        requests = None
+        self.runTest(filename, requests, **params)
+
+    def test_043_decodeuri(self):
+        # URI decoding
+        filename = '/home/to/path/test.csv'
+        uri = 'file://{}?geomType=none'.format(filename)
+        registry = QgsProviderRegistry.instance()
+        components = registry.decodeUri('delimitedtext', uri)
+        self.assertEqual(components['path'], filename)
+
+    def test_044_ZM(self):
+        # Create test layer
+        srcpath = os.path.join(TEST_DATA_DIR, 'provider')
+        basetestfile = os.path.join(srcpath, 'delimited_xyzm.csv')
+
+        url = MyUrl.fromLocalFile(basetestfile)
+        url.addQueryItem("crs", "epsg:4326")
+        url.addQueryItem("type", "csv")
+        url.addQueryItem("xField", "X")
+        url.addQueryItem("yField", "Y")
+        url.addQueryItem("zField", "Z")
+        url.addQueryItem("mField", "M")
+        url.addQueryItem("spatialIndex", "no")
+        url.addQueryItem("subsetIndex", "no")
+        url.addQueryItem("watchFile", "no")
+
+        vl = QgsVectorLayer(url.toString(), 'test', 'delimitedtext')
+        assert vl.isValid(), "{} is invalid".format(basetestfile)
+        assert vl.wkbType() == QgsWkbTypes.PointZM, "wrong wkb type, should be PointZM"
+        assert vl.getFeature(2).geometry().asWkt() == "PointZM (-71.12300000000000466 78.23000000000000398 1 2)", "wrong PointZM geometry"
+
+    def test_045_Z(self):
+        # Create test layer
+        srcpath = os.path.join(TEST_DATA_DIR, 'provider')
+        basetestfile = os.path.join(srcpath, 'delimited_xyzm.csv')
+
+        url = MyUrl.fromLocalFile(basetestfile)
+        url.addQueryItem("crs", "epsg:4326")
+        url.addQueryItem("type", "csv")
+        url.addQueryItem("xField", "X")
+        url.addQueryItem("yField", "Y")
+        url.addQueryItem("zField", "Z")
+        url.addQueryItem("spatialIndex", "no")
+        url.addQueryItem("subsetIndex", "no")
+        url.addQueryItem("watchFile", "no")
+
+        vl = QgsVectorLayer(url.toString(), 'test', 'delimitedtext')
+        assert vl.isValid(), "{} is invalid".format(basetestfile)
+        assert vl.wkbType() == QgsWkbTypes.PointZ, "wrong wkb type, should be PointZ"
+        assert vl.getFeature(2).geometry().asWkt() == "PointZ (-71.12300000000000466 78.23000000000000398 1)", "wrong PointZ geometry"
+
+    def test_046_M(self):
+        # Create test layer
+        srcpath = os.path.join(TEST_DATA_DIR, 'provider')
+        basetestfile = os.path.join(srcpath, 'delimited_xyzm.csv')
+
+        url = MyUrl.fromLocalFile(basetestfile)
+        url.addQueryItem("crs", "epsg:4326")
+        url.addQueryItem("type", "csv")
+        url.addQueryItem("xField", "X")
+        url.addQueryItem("yField", "Y")
+        url.addQueryItem("mField", "M")
+        url.addQueryItem("spatialIndex", "no")
+        url.addQueryItem("subsetIndex", "no")
+        url.addQueryItem("watchFile", "no")
+
+        vl = QgsVectorLayer(url.toString(), 'test', 'delimitedtext')
+        assert vl.isValid(), "{} is invalid".format(basetestfile)
+        assert vl.wkbType() == QgsWkbTypes.PointM, "wrong wkb type, should be PointM"
+        assert vl.getFeature(2).geometry().asWkt() == "PointM (-71.12300000000000466 78.23000000000000398 2)", "wrong PointM geometry"
 
 
 if __name__ == '__main__':

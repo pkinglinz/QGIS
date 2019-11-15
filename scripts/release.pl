@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 # creates a new release
 
 # Copyright (C) 2014 Jürgen E. Fischer <jef@norbit.de>
@@ -12,6 +12,7 @@ use strict;
 use warnings;
 use Getopt::Long;
 use Pod::Usage;
+use POSIX;
 
 my $dryrun;
 
@@ -149,22 +150,21 @@ my $relbranch = "release-${newmajor}_${newminor}";
 my $ltrtag = $doltr ? "ltr-${newmajor}_${newminor}" : "";
 my $reltag = "final-${newmajor}_${newminor}_${newpatch}";
 
-unless( $dopoint ) {
-	unless( $skipts ) {
-		print "Pulling transifex translations...\n";
-		run( "scripts/pull_ts.sh", "pull_ts.sh failed" );
-		run( "git add i18n/*.ts", "adding translations failed" );
-		run( "git commit -n -a -m \"translation update for $release from transifex\"", "could not commit translation updates" );
-	} else {
-		print "TRANSIFEX UPDATE SKIPPED!\n";
-	}
+unless( $skipts ) {
+	print "Pulling transifex translations...\n";
+	run( "scripts/pull_ts.sh", "pull_ts.sh failed" );
+	run( "git add i18n/*.ts", "adding translations failed" );
+	run( "git commit -n -a -m \"translation update for $version from transifex\"", "could not commit translation updates" );
+} else {
+	print "TRANSIFEX UPDATE SKIPPED!\n";
 }
 
 print "Updating changelog...\n";
 run( "scripts/create_changelog.sh", "create_changelog.sh failed" );
+run( "perl -i -pe 's#<releases>#<releases>\n    <release version=\"$newmajor.$newminor.$newpatch\" date=\"" . strftime("%Y-%m-%d", localtime) . "\" />#' linux/org.qgis.qgis.appdata.xml.in", "appdata update failed" );
 
 unless( $dopoint ) {
-	run( "scripts/update-news.pl $newmajor $newminor '$newreleasename'", "could not update news" ) if $major>2 || ($major==2 && $minor>14);
+	run( "scripts/update-news.pl $newmajor.$newminor '$newreleasename'", "could not update news" ) if $major>2 || ($major==2 && $minor>14);
 
 	run( "git commit -n -a -m \"changelog and news update for $release\"", "could not commit changelog and news update" );
 
@@ -180,15 +180,13 @@ run( "dch --newversion $version 'Release of $version'", "dch failed" );
 run( "cp debian/changelog /tmp", "backup changelog failed" );
 
 unless( $dopoint ) {
+	run( "perl -i -pe 's/qgis-dev-deps/qgis-ltr-deps/;' doc/msvc.t2t", "could not update osgeo4w deps package" ) if $doltr;
+	run( "perl -i -pe 's/qgis-dev-deps/qgis-rel-deps/;' doc/msvc.t2t", "could not update osgeo4w deps package" ) unless $doltr;
+	run( "txt2tags --encoding=utf-8 -odoc/INSTALL.html -t html doc/INSTALL.t2t", "could not update INSTALL.html" );
+	run( "txt2tags --encoding=utf-8 -oINSTALL -t txt doc/INSTALL.t2t", "could not update INSTALL" );
+
 	run( "cp -v images/splash/splash-$newmajor.$newminor.png images/splash/splash.png", "splash png switch failed" );
 	run( "convert -resize 164x314 ms-windows/Installer-Files/WelcomeFinishPage-$newmajor.$newminor.png BMP3:ms-windows/Installer-Files/WelcomeFinishPage.bmp", "installer bitmap switch failed" );
-
-	if( -f "images/splash/splash-release.xcf.bz2" ) {
-		run( "cp -v images/splash/splash-$newmajor.$newminor.xcf.bz2 images/splash/splash.xcf.bz2", "splash xcf switch failed" );
-	} else {
-		print "WARNING: NO images/splash/splash-release.xcf.bz2\n";
-	}
-
 	run( "git commit -n -a -m 'Release of $release ($newreleasename)'", "release commit failed" );
 	run( "git tag $reltag -m 'Version $release'", "release tag failed" );
 } else {
@@ -200,7 +198,7 @@ run( "git tag $ltrtag -m 'Long term release $release'", "ltr tag failed" ) if $d
 
 print "Producing archive...\n";
 run( "git archive --format tar --prefix=qgis-$version/ $reltag | bzip2 -c >qgis-$version.tar.bz2", "git archive failed" );
-run( "md5sum qgis-$version.tar.bz2 >qgis-$version.tar.bz2.md5", "md5sum failed" );
+run( "sha256sum qgis-$version.tar.bz2 >qgis-$version.tar.bz2.sha256", "sha256sum failed" );
 
 my @topush;
 unless( $dopoint ) {

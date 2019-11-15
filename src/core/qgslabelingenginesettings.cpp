@@ -16,14 +16,10 @@
 #include "qgslabelingenginesettings.h"
 
 #include "qgsproject.h"
-
+#include "qgssymbollayerutils.h"
 
 QgsLabelingEngineSettings::QgsLabelingEngineSettings()
-  : mFlags( RenderOutlineLabels | UsePartialCandidates )
-  , mSearchMethod( Chain )
-  , mCandPoint( 16 )
-  , mCandLine( 50 )
-  , mCandPolygon( 30 )
+  : mFlags( UsePartialCandidates )
 {
 }
 
@@ -40,12 +36,23 @@ void QgsLabelingEngineSettings::readSettingsFromProject( QgsProject *prj )
   mCandLine = prj->readNumEntry( QStringLiteral( "PAL" ), QStringLiteral( "/CandidatesLine" ), 50, &saved );
   mCandPolygon = prj->readNumEntry( QStringLiteral( "PAL" ), QStringLiteral( "/CandidatesPolygon" ), 30, &saved );
 
-  mFlags = 0;
+  mFlags = nullptr;
   if ( prj->readBoolEntry( QStringLiteral( "PAL" ), QStringLiteral( "/ShowingCandidates" ), false, &saved ) ) mFlags |= DrawCandidates;
   if ( prj->readBoolEntry( QStringLiteral( "PAL" ), QStringLiteral( "/DrawRectOnly" ), false, &saved ) ) mFlags |= DrawLabelRectOnly;
   if ( prj->readBoolEntry( QStringLiteral( "PAL" ), QStringLiteral( "/ShowingAllLabels" ), false, &saved ) ) mFlags |= UseAllLabels;
   if ( prj->readBoolEntry( QStringLiteral( "PAL" ), QStringLiteral( "/ShowingPartialsLabels" ), true, &saved ) ) mFlags |= UsePartialCandidates;
-  if ( prj->readBoolEntry( QStringLiteral( "PAL" ), QStringLiteral( "/DrawOutlineLabels" ), true, &saved ) ) mFlags |= RenderOutlineLabels;
+  if ( prj->readBoolEntry( QStringLiteral( "PAL" ), QStringLiteral( "/DrawUnplaced" ), false, &saved ) ) mFlags |= DrawUnplacedLabels;
+
+  mDefaultTextRenderFormat = QgsRenderContext::TextFormatAlwaysOutlines;
+  // if users have disabled the older PAL "DrawOutlineLabels" setting, respect that
+  if ( !prj->readBoolEntry( QStringLiteral( "PAL" ), QStringLiteral( "/DrawOutlineLabels" ), true ) )
+    mDefaultTextRenderFormat = QgsRenderContext::TextFormatAlwaysText;
+  // otherwise, prefer the new setting
+  const int projectTextFormat = prj->readNumEntry( QStringLiteral( "PAL" ), QStringLiteral( "/TextFormat" ), -1 );
+  if ( projectTextFormat >= 0 )
+    mDefaultTextRenderFormat = static_cast< QgsRenderContext::TextRenderFormat >( projectTextFormat );
+
+  mUnplacedLabelColor = QgsSymbolLayerUtils::decodeColor( prj->readEntry( QStringLiteral( "PAL" ), QStringLiteral( "/UnplacedColor" ), QStringLiteral( "#ff0000" ) ) );
 }
 
 void QgsLabelingEngineSettings::writeSettingsToProject( QgsProject *project )
@@ -57,7 +64,23 @@ void QgsLabelingEngineSettings::writeSettingsToProject( QgsProject *project )
 
   project->writeEntry( QStringLiteral( "PAL" ), QStringLiteral( "/ShowingCandidates" ), mFlags.testFlag( DrawCandidates ) );
   project->writeEntry( QStringLiteral( "PAL" ), QStringLiteral( "/DrawRectOnly" ), mFlags.testFlag( DrawLabelRectOnly ) );
+  project->writeEntry( QStringLiteral( "PAL" ), QStringLiteral( "/DrawUnplaced" ), mFlags.testFlag( DrawUnplacedLabels ) );
   project->writeEntry( QStringLiteral( "PAL" ), QStringLiteral( "/ShowingAllLabels" ), mFlags.testFlag( UseAllLabels ) );
   project->writeEntry( QStringLiteral( "PAL" ), QStringLiteral( "/ShowingPartialsLabels" ), mFlags.testFlag( UsePartialCandidates ) );
-  project->writeEntry( QStringLiteral( "PAL" ), QStringLiteral( "/DrawOutlineLabels" ), mFlags.testFlag( RenderOutlineLabels ) );
+
+  project->writeEntry( QStringLiteral( "PAL" ), QStringLiteral( "/TextFormat" ), static_cast< int >( mDefaultTextRenderFormat ) );
+
+  project->writeEntry( QStringLiteral( "PAL" ), QStringLiteral( "/UnplacedColor" ), QgsSymbolLayerUtils::encodeColor( mUnplacedLabelColor ) );
 }
+
+QColor QgsLabelingEngineSettings::unplacedLabelColor() const
+{
+  return mUnplacedLabelColor;
+}
+
+void QgsLabelingEngineSettings::setUnplacedLabelColor( const QColor &unplacedLabelColor )
+{
+  mUnplacedLabelColor = unplacedLabelColor;
+}
+
+

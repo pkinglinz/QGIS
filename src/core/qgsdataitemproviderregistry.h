@@ -17,13 +17,14 @@
 #define QGSDATAITEMPROVIDERREGISTRY_H
 
 #include <QList>
-#include "qgis.h"
+#include "qgis_sip.h"
 
 #include "qgis_core.h"
 
 class QgsDataItemProvider;
 
-/** \ingroup core
+/**
+ * \ingroup core
  * This class keeps a list of data item providers that may add items to the browser tree.
  * When created, it automatically adds providers from provider plugins (e.g. PostGIS, WMS, ...)
  *
@@ -45,13 +46,21 @@ class CORE_EXPORT QgsDataItemProviderRegistry
     //! QgsDataItemProviderRegistry cannot be copied.
     QgsDataItemProviderRegistry &operator=( const QgsDataItemProviderRegistry &rh ) = delete;
 
-    //! Get list of available providers
-    QList<QgsDataItemProvider *> providers() const { return mProviders; }
+    /**
+     * Returns the list of available providers.
+     */
+    QList<QgsDataItemProvider *> providers() const;
 
-    //! Add a provider implementation. Takes ownership of the object.
+    /**
+     * Adds a \a provider implementation to the registry. Ownership of the provider
+     * is transferred to the registry.
+     */
     void addProvider( QgsDataItemProvider *provider SIP_TRANSFER );
 
-    //! Remove provider implementation from the list (provider object is deleted)
+    /**
+     * Removes a \a provider implementation from the registry.
+     * The provider object is automatically deleted.
+     */
     void removeProvider( QgsDataItemProvider *provider );
 
   private:
@@ -59,7 +68,7 @@ class CORE_EXPORT QgsDataItemProviderRegistry
     QgsDataItemProviderRegistry( const QgsDataItemProviderRegistry &rh );
 #endif
 
-    //! available providers. this class owns the pointers
+    //! Available providers, owned by this class
     QList<QgsDataItemProvider *> mProviders;
 
 };

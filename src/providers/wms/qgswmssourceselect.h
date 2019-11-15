@@ -51,51 +51,52 @@ class QgsWMSSourceSelect : public QgsAbstractDataSourceWidget, private Ui::QgsWM
     //! Constructor
     QgsWMSSourceSelect( QWidget *parent = nullptr, Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags, QgsProviderRegistry::WidgetMode widgetMode = QgsProviderRegistry::WidgetMode::None );
 
-    ~QgsWMSSourceSelect();
-
-  public slots:
-
     //! Triggered when the provider's connections need to be refreshed
     void refresh() override;
-
-    //! Opens the create connection dialog to build a new connection
-    void on_btnNew_clicked();
-    //! Opens a dialog to edit an existing connection
-    void on_btnEdit_clicked();
-    //! Deletes the selected connection
-    void on_btnDelete_clicked();
-    //! Saves connections to the file
-    void on_btnSave_clicked();
-    //! Loads connections from the file
-    void on_btnLoad_clicked();
-
-    /** Connects to the database using the stored connection parameters.
-     * Once connected, available layers are displayed.
-     */
-    void on_btnConnect_clicked();
 
     //! Determines the layers the user selected
     void addButtonClicked() override;
 
+    void reset() override;
+
+  private slots:
+
+    //! Opens the create connection dialog to build a new connection
+    void btnNew_clicked();
+    //! Opens a dialog to edit an existing connection
+    void btnEdit_clicked();
+    //! Deletes the selected connection
+    void btnDelete_clicked();
+    //! Saves connections to the file
+    void btnSave_clicked();
+    //! Loads connections from the file
+    void btnLoad_clicked();
+
+    /**
+     * Connects to the database using the stored connection parameters.
+     * Once connected, available layers are displayed.
+     */
+    void btnConnect_clicked();
+
     void searchFinished();
 
     //! Opens the Spatial Reference System dialog.
-    void on_btnChangeSpatialRefSys_clicked();
+    void btnChangeSpatialRefSys_clicked();
 
     //! Signaled when a layer selection is changed.
-    void on_lstLayers_itemSelectionChanged();
+    void lstLayers_itemSelectionChanged();
 
-    //! Set status message to theMessage
+    //! Sets status message to theMessage
     void showStatusMessage( QString const &message );
 
     //! show whatever error is exposed by the QgsWmsProvider.
     void showError( QgsWmsProvider *wms );
 
     //! Stores the selected datasource whenerver it is changed
-    void on_cmbConnections_activated( int );
+    void cmbConnections_activated( int );
 
     //! Add some default wms servers to the list
-    void on_btnAddDefault_clicked();
+    void btnAddDefault_clicked();
 
   private:
     //! Populate the connection list combo box
@@ -104,7 +105,7 @@ class QgsWMSSourceSelect : public QgsAbstractDataSourceWidget, private Ui::QgsWM
     //! Connection name
     QString connName();
 
-    //! Set the server connection combo box to that stored in the config file.
+    //! Sets the server connection combo box to that stored in the config file.
     void setConnectionListPosition();
 
     //! Add a few example servers to the list.
@@ -136,7 +137,7 @@ class QgsWMSSourceSelect : public QgsAbstractDataSourceWidget, private Ui::QgsWM
     /**
      * \brief Populate the layer list - private for now.
      *
-     * \retval false if the layers could not be retrieved or parsed -
+     * \returns FALSE if the layers could not be retrieved or parsed -
      *         see mWmsProvider->errorString() for more info
      */
     bool populateLayerList( const QgsWmsCapabilities &capabilities );
@@ -185,12 +186,12 @@ class QgsWMSSourceSelect : public QgsAbstractDataSourceWidget, private Ui::QgsWM
     QList<QgsWmtsTileLayer> mTileLayers;
 
   private slots:
-    void on_btnSearch_clicked();
-    void on_btnAddWMS_clicked();
-    void on_tableWidgetWMSList_itemSelectionChanged();
-    void on_lstTilesets_itemClicked( QTableWidgetItem *item );
-    void on_mLayerUpButton_clicked();
-    void on_mLayerDownButton_clicked();
+    void btnSearch_clicked();
+    void btnAddWMS_clicked();
+    void tableWidgetWMSList_itemSelectionChanged();
+    void lstTilesets_itemClicked( QTableWidgetItem *item );
+    void mLayerUpButton_clicked();
+    void mLayerDownButton_clicked();
     void updateButtons();
     void showHelp();
 };

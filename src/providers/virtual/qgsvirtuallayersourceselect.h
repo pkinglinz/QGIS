@@ -44,19 +44,19 @@ class QgsVirtualLayerSourceSelect : public QgsAbstractDataSourceWidget, private 
     void addButtonClicked() override;
 
   private slots:
-    void onTestQuery();
-    void onBrowseCRS();
-    void onLayerComboChanged( int );
-    void onAddLayer();
-    void onRemoveLayer();
-    void onImportLayer();
-    void onTableRowChanged( const QModelIndex &current, const QModelIndex &previous );
+    void testQuery();
+    void browseCRS();
+    void layerComboChanged( int );
+    void addLayer();
+    void removeLayer();
+    void importLayer();
+    void tableRowChanged( const QModelIndex &current, const QModelIndex &previous );
     void updateLayersList();
 
 
   private:
     QgsVirtualLayerDefinition getVirtualLayerDef();
-    long mSrid;
+    long mSrid = 0;
     QStringList mProviderList;
     QgsEmbeddedLayerSelectDialog *mEmbeddedSelectionDialog = nullptr;
     void addEmbeddedLayer( const QString &name, const QString &provider, const QString &encoding, const QString &source );

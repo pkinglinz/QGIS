@@ -21,19 +21,15 @@
 #include "qgsrasterlayer.h"
 #include "qgsrasterdataprovider.h"
 
-/** \ingroup UnitTests
+/**
+ * \ingroup UnitTests
  * This is a unit test for the QgsRasterBlock class.
  */
 class TestQgsRasterBlock : public QObject
 {
     Q_OBJECT
   public:
-    TestQgsRasterBlock()
-      : mpRasterLayer( nullptr )
-    {}
-    ~TestQgsRasterBlock()
-    {
-    }
+    TestQgsRasterBlock() = default;
 
   private slots:
     void initTestCase();// will be called before the first testfunction is executed.
@@ -85,6 +81,8 @@ void TestQgsRasterBlock::testBasic()
 
   QgsRasterBlock *block = provider->block( 1, fullExtent, width, height );
 
+  bool isNoData = false;
+
   QCOMPARE( block->width(), 10 );
   QCOMPARE( block->height(), 10 );
 
@@ -100,16 +98,41 @@ void TestQgsRasterBlock::testBasic()
   QCOMPARE( block->value( 0, 0 ), 2. );
   QCOMPARE( block->value( 0, 1 ), 5. );
   QCOMPARE( block->value( 1, 0 ), 27. );
+  QCOMPARE( block->valueAndNoData( 0, 0, isNoData ), 2. );
+  QVERIFY( !isNoData );
+  QCOMPARE( block->valueAndNoData( 0, 1, isNoData ), 5. );
+  QVERIFY( !isNoData );
+  QCOMPARE( block->valueAndNoData( 1, 0, isNoData ), 27. );
+  QVERIFY( !isNoData );
+  QVERIFY( std::isnan( block->valueAndNoData( mpRasterLayer->width() + 1, 0, isNoData ) ) );
+  QVERIFY( isNoData );
+
   // value() with index
   QCOMPARE( block->value( 0 ), 2. );
   QCOMPARE( block->value( 1 ), 5. );
   QCOMPARE( block->value( 10 ), 27. );
+  QCOMPARE( block->valueAndNoData( 0, isNoData ), 2. );
+  QVERIFY( !isNoData );
+  QCOMPARE( block->valueAndNoData( 1, isNoData ), 5. );
+  QVERIFY( !isNoData );
+  QCOMPARE( block->valueAndNoData( 10, isNoData ), 27. );
+  QVERIFY( !isNoData );
+  QVERIFY( std::isnan( block->valueAndNoData( mpRasterLayer->width() * mpRasterLayer->height(), isNoData ) ) );
+  QVERIFY( isNoData );
 
   // isNoData()
   QCOMPARE( block->isNoData( 0, 1 ), false );
   QCOMPARE( block->isNoData( 0, 2 ), true );
   QCOMPARE( block->isNoData( 1 ), false );
   QCOMPARE( block->isNoData( 2 ), true );
+  QCOMPARE( block->valueAndNoData( 0, 1, isNoData ), 5. );
+  QVERIFY( !isNoData );
+  block->valueAndNoData( 0, 2, isNoData );
+  QVERIFY( isNoData );
+  QCOMPARE( block->valueAndNoData( 1, isNoData ), 5. );
+  QVERIFY( !isNoData );
+  block->valueAndNoData( 2, isNoData );
+  QVERIFY( isNoData );
 
   // data()
   QByteArray data = block->data();

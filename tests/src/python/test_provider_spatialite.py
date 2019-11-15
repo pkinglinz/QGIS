@@ -9,17 +9,17 @@ the Free Software Foundation; either version 2 of the License, or
 __author__ = 'Vincent Mora'
 __date__ = '09/07/2013'
 __copyright__ = 'Copyright 2013, The QGIS Project'
-# This will get replaced with a git SHA1 when you do a git archive
-__revision__ = '$Format:%H$'
 
 import qgis  # NOQA
 
 import os
+import re
 import sys
 import shutil
 import tempfile
 
-from qgis.core import (QgsVectorLayer,
+from qgis.core import (QgsProviderRegistry,
+                       QgsVectorLayer,
                        QgsVectorDataProvider,
                        QgsPointXY,
                        QgsFeature,
@@ -27,17 +27,21 @@ from qgis.core import (QgsVectorLayer,
                        QgsProject,
                        QgsFieldConstraints,
                        QgsVectorLayerUtils,
-                       QgsSettings)
+                       QgsSettings,
+                       QgsDefaultValue,
+                       QgsFeatureRequest,
+                       QgsRectangle,
+                       QgsWkbTypes)
 
 from qgis.testing import start_app, unittest
 from utilities import unitTestDataPath
 from providertestbase import ProviderTestCase
-from qgis.PyQt.QtCore import QVariant
+from qgis.PyQt.QtCore import QObject, QVariant
 
 from qgis.utils import spatialite_connect
 
-# Pass no_exit=True: for some reason this crashes on exit on Travis MacOSX
-start_app(sys.platform != 'darwin')
+# Pass no_exit=True: for some reason this crashes sometimes on exit on Travis
+start_app(True)
 TEST_DATA_DIR = unitTestDataPath()
 
 
@@ -61,6 +65,7 @@ class TestQgsSpatialiteProvider(unittest.TestCase, ProviderTestCase):
     @classmethod
     def setUpClass(cls):
         """Run before all tests"""
+        print(' ### Setup Spatialite Provider Test Class')
         # setup provider for base tests
         cls.vl = QgsVectorLayer('dbname=\'{}/provider/spatialite.db\' table="somedata" (geom) sql='.format(TEST_DATA_DIR), 'test', 'spatialite')
         assert(cls.vl.isValid())
@@ -86,7 +91,34 @@ class TestQgsSpatialiteProvider(unittest.TestCase, ProviderTestCase):
         sql = "SELECT AddGeometryColumn('test_pg', 'geometry', 4326, 'POLYGON', 'XY')"
         cur.execute(sql)
         sql = "INSERT INTO test_pg (id, name, geometry) "
-        sql += "VALUES (1, 'toto', GeomFromText('POLYGON((0 0,1 0,1 1,0 1,0 0))', 4326))"
+        sql += "VALUES (1, 'toto 1', GeomFromText('POLYGON((0 0,1 0,1 1,0 1,0 0))', 4326))"
+        cur.execute(sql)
+
+        # table with Z dimension geometry
+        sql = "CREATE TABLE test_z (id INTEGER NOT NULL PRIMARY KEY, name TEXT NOT NULL)"
+        cur.execute(sql)
+        sql = "SELECT AddGeometryColumn('test_z', 'geometry', 4326, 'POINT', 'XYZ')"
+        cur.execute(sql)
+        sql = "INSERT INTO test_z (id, name, geometry) "
+        sql += "VALUES (1, 'toto 2', GeomFromText('POINT Z (0 0 1)', 4326))"
+        cur.execute(sql)
+
+        # table with M value geometry
+        sql = "CREATE TABLE test_m (id INTEGER NOT NULL PRIMARY KEY, name TEXT NOT NULL)"
+        cur.execute(sql)
+        sql = "SELECT AddGeometryColumn('test_m', 'geometry', 4326, 'POINT', 'XYM')"
+        cur.execute(sql)
+        sql = "INSERT INTO test_m (id, name, geometry) "
+        sql += "VALUES (1, 'toto 3', GeomFromText('POINT M (0 0 1)', 4326))"
+        cur.execute(sql)
+
+        # table with Z dimension and M value geometry
+        sql = "CREATE TABLE test_zm (id INTEGER NOT NULL PRIMARY KEY, name TEXT NOT NULL)"
+        cur.execute(sql)
+        sql = "SELECT AddGeometryColumn('test_zm', 'geometry', 4326, 'POINT', 'XYZM')"
+        cur.execute(sql)
+        sql = "INSERT INTO test_zm (id, name, geometry) "
+        sql += "VALUES (1, 'toto 1', GeomFromText('POINT ZM (0 0 1 1)', 4326))"
         cur.execute(sql)
 
         # table with multiple column primary key
@@ -95,7 +127,7 @@ class TestQgsSpatialiteProvider(unittest.TestCase, ProviderTestCase):
         sql = "SELECT AddGeometryColumn('test_pg_mk', 'geometry', 4326, 'POLYGON', 'XY')"
         cur.execute(sql)
         sql = "INSERT INTO test_pg_mk (id, name, geometry) "
-        sql += "VALUES (1, 'toto', GeomFromText('POLYGON((0 0,1 0,1 1,0 1,0 0))', 4326))"
+        sql += "VALUES (1, 'toto 1', GeomFromText('POLYGON((0 0,1 0,1 1,0 1,0 0))', 4326))"
         cur.execute(sql)
 
         # simple table with primary key
@@ -104,10 +136,10 @@ class TestQgsSpatialiteProvider(unittest.TestCase, ProviderTestCase):
         sql = "SELECT AddGeometryColumn('test_q', 'geometry', 4326, 'POLYGON', 'XY')"
         cur.execute(sql)
         sql = "INSERT INTO test_q (id, name, geometry) "
-        sql += "VALUES (11, 'toto', GeomFromText('POLYGON((0 0,1 0,1 1,0 1,0 0))', 4326))"
+        sql += "VALUES (11, 'toto 11', GeomFromText('POLYGON((0 0,1 0,1 1,0 1,0 0))', 4326))"
         cur.execute(sql)
         sql = "INSERT INTO test_q (id, name, geometry) "
-        sql += "VALUES (21, 'toto', GeomFromText('POLYGON((0 0,1 0,1 1,0 1,0 0))', 4326))"
+        sql += "VALUES (21, 'toto 12', GeomFromText('POLYGON((0 0,1 0,1 1,0 1,0 0))', 4326))"
         cur.execute(sql)
 
         # simple table with a geometry column named 'Geometry'
@@ -116,10 +148,10 @@ class TestQgsSpatialiteProvider(unittest.TestCase, ProviderTestCase):
         sql = "SELECT AddGeometryColumn('test_n', 'Geometry', 4326, 'POLYGON', 'XY')"
         cur.execute(sql)
         sql = "INSERT INTO test_n (id, name, geometry) "
-        sql += "VALUES (1, 'toto', GeomFromText('POLYGON((0 0,1 0,1 1,0 1,0 0))', 4326))"
+        sql += "VALUES (1, 'toto 1', GeomFromText('POLYGON((0 0,1 0,1 1,0 1,0 0))', 4326))"
         cur.execute(sql)
         sql = "INSERT INTO test_n (id, name, geometry) "
-        sql += "VALUES (2, 'toto', GeomFromText('POLYGON((0 0,1 0,1 1,0 1,0 0))', 4326))"
+        sql += "VALUES (2, 'toto 1', GeomFromText('POLYGON((0 0,1 0,1 1,0 1,0 0))', 4326))"
         cur.execute(sql)
 
         # table with different array types, stored as JSON
@@ -129,6 +161,12 @@ class TestQgsSpatialiteProvider(unittest.TestCase, ProviderTestCase):
         cur.execute(sql)
         sql = "INSERT INTO test_arrays (id, strings, ints, reals, geometry) "
         sql += "VALUES (1, '[\"toto\",\"tutu\"]', '[1,-2,724562]', '[1.0, -232567.22]', GeomFromText('POLYGON((0 0,1 0,1 1,0 1,0 0))', 4326))"
+        cur.execute(sql)
+
+        # table with different array types, stored as JSON
+        sql = "CREATE TABLE test_arrays_write (Id INTEGER NOT NULL PRIMARY KEY, array JSONARRAY NOT NULL, strings JSONSTRINGLIST NOT NULL, ints JSONINTEGERLIST NOT NULL, reals JSONREALLIST NOT NULL)"
+        cur.execute(sql)
+        sql = "SELECT AddGeometryColumn('test_arrays_write', 'Geometry', 4326, 'POLYGON', 'XY')"
         cur.execute(sql)
 
         # 2 tables with relations
@@ -143,12 +181,49 @@ class TestQgsSpatialiteProvider(unittest.TestCase, ProviderTestCase):
         sql = "SELECT AddGeometryColumn('test_relation_b', 'Geometry', 4326, 'POLYGON', 'XY')"
         cur.execute(sql)
 
+        # table to test auto increment
+        sql = "CREATE TABLE test_autoincrement(id INTEGER PRIMARY KEY AUTOINCREMENT, num INTEGER);"
+        cur.execute(sql)
+        sql = "INSERT INTO test_autoincrement (num) VALUES (123);"
+        cur.execute(sql)
+
         # tables with constraints
         sql = "CREATE TABLE test_constraints(id INTEGER PRIMARY KEY, num INTEGER NOT NULL, desc TEXT UNIQUE, desc2 TEXT, num2 INTEGER NOT NULL UNIQUE)"
         cur.execute(sql)
 
         # simple table with defaults
         sql = "CREATE TABLE test_defaults (id INTEGER NOT NULL PRIMARY KEY, name TEXT DEFAULT 'qgis ''is good', number INTEGER DEFAULT 5, number2 REAL DEFAULT 5.7, no_default REAL)"
+        cur.execute(sql)
+
+        # simple table with catgorized points
+        sql = "CREATE TABLE test_filter (id INTEGER NOT NULL PRIMARY KEY, name TEXT NOT NULL)"
+        cur.execute(sql)
+        sql = "SELECT AddGeometryColumn('test_filter', 'geometry', 4326, 'POINT', 'XY')"
+        cur.execute(sql)
+        sql = "INSERT INTO test_filter (id, name, geometry) "
+        sql += "VALUES (1, 'ext', GeomFromText('POINT(0 0)', 4326))"
+        cur.execute(sql)
+        sql = "INSERT INTO test_filter (id, name, geometry) "
+        sql += "VALUES (2, 'ext', GeomFromText('POINT(0 3)', 4326))"
+        cur.execute(sql)
+        sql = "INSERT INTO test_filter (id, name, geometry) "
+        sql += "VALUES (3, 'ext', GeomFromText('POINT(3 3)', 4326))"
+        cur.execute(sql)
+        sql = "INSERT INTO test_filter (id, name, geometry) "
+        sql += "VALUES (4, 'ext', GeomFromText('POINT(3 0)', 4326))"
+        cur.execute(sql)
+
+        sql = "INSERT INTO test_filter (id, name, geometry) "
+        sql += "VALUES (5, 'int', GeomFromText('POINT(1 1)', 4326))"
+        cur.execute(sql)
+        sql = "INSERT INTO test_filter (id, name, geometry) "
+        sql += "VALUES (6, 'int', GeomFromText('POINT(1 2)', 4326))"
+        cur.execute(sql)
+        sql = "INSERT INTO test_filter (id, name, geometry) "
+        sql += "VALUES (7, 'int', GeomFromText('POINT(2 2)', 4326))"
+        cur.execute(sql)
+        sql = "INSERT INTO test_filter (id, name, geometry) "
+        sql += "VALUES (8, 'int', GeomFromText('POINT(2 1)', 4326))"
         cur.execute(sql)
 
         cur.execute("COMMIT")
@@ -159,6 +234,8 @@ class TestQgsSpatialiteProvider(unittest.TestCase, ProviderTestCase):
     @classmethod
     def tearDownClass(cls):
         """Run after all tests"""
+        print(' ### Tear Down Spatialite Provider Test Class')
+
         # for the time being, keep the file to check with qgis
         # if os.path.exists(cls.dbname) :
         #    os.remove(cls.dbname)
@@ -190,6 +267,7 @@ class TestQgsSpatialiteProvider(unittest.TestCase, ProviderTestCase):
 
     def enableCompiler(self):
         QgsSettings().setValue('/qgis/compileExpressions', True)
+        return True
 
     def disableCompiler(self):
         QgsSettings().setValue('/qgis/compileExpressions', False)
@@ -244,13 +322,15 @@ class TestQgsSpatialiteProvider(unittest.TestCase, ProviderTestCase):
                     'overlaps(translate($geometry,-1,-1),geom_from_wkt( \'Polygon ((-75.1 76.1, -75.1 81.6, -68.8 81.6, -68.8 76.1, -75.1 76.1))\'))',
                     'overlaps(buffer($geometry,1),geom_from_wkt( \'Polygon ((-75.1 76.1, -75.1 81.6, -68.8 81.6, -68.8 76.1, -75.1 76.1))\'))',
                     'intersects(centroid($geometry),geom_from_wkt( \'Polygon ((-74.4 78.2, -74.4 79.1, -66.8 79.1, -66.8 78.2, -74.4 78.2))\'))',
-                    'intersects(point_on_surface($geometry),geom_from_wkt( \'Polygon ((-74.4 78.2, -74.4 79.1, -66.8 79.1, -66.8 78.2, -74.4 78.2))\'))'
+                    'intersects(point_on_surface($geometry),geom_from_wkt( \'Polygon ((-74.4 78.2, -74.4 79.1, -66.8 79.1, -66.8 78.2, -74.4 78.2))\'))',
                     ])
 
     def partiallyCompiledFilters(self):
         return set(['"name" NOT LIKE \'Ap%\'',
                     'name LIKE \'Apple\'',
-                    'name LIKE \'aPple\''
+                    'name LIKE \'aPple\'',
+                    'name LIKE \'Ap_le\'',
+                    'name LIKE \'Ap\\_le\''
                     ])
 
     def test_SplitFeature(self):
@@ -285,7 +365,7 @@ class TestQgsSpatialiteProvider(unittest.TestCase, ProviderTestCase):
         sum_id1 = sum(f.id() for f in l.getFeatures())
         # the attribute 'id' works
         sum_id2 = sum(f.attributes()[0] for f in l.getFeatures())
-        self.assertEqual(sum_id1, 3)   # 1+2
+        self.assertEqual(sum_id1, 32)  # 11 + 21
         self.assertEqual(sum_id2, 32)  # 11 + 21
 
         # and now with an id declared
@@ -304,6 +384,31 @@ class TestQgsSpatialiteProvider(unittest.TestCase, ProviderTestCase):
         self.assertEqual(sum_id1, 32)
         self.assertEqual(sum_id2, 32)
 
+    def test_zm(self):
+        """Test Z dimension and M value"""
+        l = QgsVectorLayer("dbname=%s table='test_z' (geometry) key='id'" % self.dbname, "test_z", "spatialite")
+        self.assertTrue(l.isValid())
+        self.assertTrue(QgsWkbTypes.hasZ(l.wkbType()))
+        feature = l.getFeature(1)
+        geom = feature.geometry().constGet()
+        self.assertEqual(geom.z(), 1.0)
+
+        l = QgsVectorLayer("dbname=%s table='test_m' (geometry) key='id'" % self.dbname, "test_m", "spatialite")
+        self.assertTrue(l.isValid())
+        self.assertTrue(QgsWkbTypes.hasM(l.wkbType()))
+        feature = l.getFeature(1)
+        geom = feature.geometry().constGet()
+        self.assertEqual(geom.m(), 1.0)
+
+        l = QgsVectorLayer("dbname=%s table='test_zm' (geometry) key='id'" % self.dbname, "test_zm", "spatialite")
+        self.assertTrue(l.isValid())
+        self.assertTrue(QgsWkbTypes.hasZ(l.wkbType()))
+        self.assertTrue(QgsWkbTypes.hasM(l.wkbType()))
+        feature = l.getFeature(1)
+        geom = feature.geometry().constGet()
+        self.assertEqual(geom.z(), 1.0)
+        self.assertEqual(geom.m(), 1.0)
+
     def test_case(self):
         """Test case sensitivity issues"""
         l = QgsVectorLayer("dbname=%s table='test_n' (geometry) key='id'" % self.dbname, "test_n1", "spatialite")
@@ -318,7 +423,8 @@ class TestQgsSpatialiteProvider(unittest.TestCase, ProviderTestCase):
         shutil.copy(self.dbname, corrupt_dbname)
         layer = QgsVectorLayer("dbname=%s table=test_pg (geometry)" % corrupt_dbname, "test_pg", "spatialite")
         # Corrupt the database
-        open(corrupt_dbname, 'wb').write(b'')
+        with open(corrupt_dbname, 'wb') as f:
+            f.write(b'')
         layer.getFeatures()
         layer = None
         os.unlink(corrupt_dbname)
@@ -433,6 +539,45 @@ class TestQgsSpatialiteProvider(unittest.TestCase, ProviderTestCase):
         self.assertEqual(read_back['ints'], new_f['ints'])
         self.assertEqual(read_back['reals'], new_f['reals'])
 
+    def test_arrays_write(self):
+        """Test writing of layers with arrays"""
+        l = QgsVectorLayer("dbname=%s table=test_arrays_write (geometry)" % self.dbname, "test_arrays", "spatialite")
+        self.assertTrue(l.isValid())
+
+        new_f = QgsFeature(l.fields())
+        new_f['id'] = 2
+        new_f['array'] = ['simple', '"doubleQuote"', "'quote'", 'back\\slash']
+        new_f['strings'] = ['simple', '"doubleQuote"', "'quote'", 'back\\slash']
+        new_f['ints'] = [1, 2, 3, 4]
+        new_f['reals'] = [1e67, 1e-56]
+        r, fs = l.dataProvider().addFeatures([new_f])
+        self.assertTrue(r)
+
+        read_back = l.getFeature(new_f['id'])
+        self.assertEqual(read_back['id'], new_f['id'])
+        self.assertEqual(read_back['array'], new_f['array'])
+        self.assertEqual(read_back['strings'], new_f['strings'])
+        self.assertEqual(read_back['ints'], new_f['ints'])
+        self.assertEqual(read_back['reals'], new_f['reals'])
+
+        new_f = QgsFeature(l.fields())
+        new_f['id'] = 3
+        new_f['array'] = [1, 1.2345, '"doubleQuote"', "'quote'", 'back\\slash']
+        new_f['strings'] = ['simple', '"doubleQuote"', "'quote'", 'back\\slash']
+        new_f['ints'] = [1, 2, 3, 4]
+        new_f['reals'] = [1e67, 1e-56]
+        r, fs = l.dataProvider().addFeatures([new_f])
+        self.assertTrue(r)
+
+        read_back = l.getFeature(new_f['id'])
+        self.assertEqual(read_back['id'], new_f['id'])
+        self.assertEqual(read_back['array'], new_f['array'])
+        self.assertEqual(read_back['strings'], new_f['strings'])
+        self.assertEqual(read_back['ints'], new_f['ints'])
+        self.assertEqual(read_back['reals'], new_f['reals'])
+
+        read_back = l.getFeature(new_f['id'])
+
     def test_discover_relation(self):
         artist = QgsVectorLayer("dbname=%s table=test_relation_a (geometry)" % self.dbname, "test_relation_a", "spatialite")
         self.assertTrue(artist.isValid())
@@ -510,6 +655,14 @@ class TestQgsSpatialiteProvider(unittest.TestCase, ProviderTestCase):
         self.assertTrue(fields.at(4).constraints().constraints() & QgsFieldConstraints.ConstraintUnique)
         self.assertEqual(fields.at(4).constraints().constraintOrigin(QgsFieldConstraints.ConstraintUnique), QgsFieldConstraints.ConstraintOriginProvider)
 
+    def testSkipConstraintCheck(self):
+        vl = QgsVectorLayer("dbname=%s table=test_autoincrement" % self.dbname, "test_autoincrement",
+                            "spatialite")
+        self.assertTrue(vl.isValid())
+
+        self.assertTrue(vl.dataProvider().skipConstraintCheck(0, QgsFieldConstraints.ConstraintUnique, str("Autogenerate")))
+        self.assertFalse(vl.dataProvider().skipConstraintCheck(0, QgsFieldConstraints.ConstraintUnique, 123))
+
     # This test would fail. It would require turning on WAL
     def XXXXXtestLocking(self):
 
@@ -548,14 +701,14 @@ class TestQgsSpatialiteProvider(unittest.TestCase, ProviderTestCase):
         f = QgsVectorLayerUtils.createFeature(vl)
         self.assertEqual(f.attributes(), [None, "qgis 'is good", 5, 5.7, None])
 
-        # check that provider default literals take precedence over passed attribute values
+        # check that provider default literals do not take precedence over passed attribute values
         f = QgsVectorLayerUtils.createFeature(vl, attributes={1: 'qgis is great', 0: 3})
-        self.assertEqual(f.attributes(), [3, "qgis 'is good", 5, 5.7, None])
+        self.assertEqual(f.attributes(), [3, "qgis is great", 5, 5.7, None])
 
         # test that vector layer default value expression overrides provider default literal
-        vl.setDefaultValueExpression(3, "4*3")
+        vl.setDefaultValueDefinition(3, QgsDefaultValue("4*3"))
         f = QgsVectorLayerUtils.createFeature(vl, attributes={1: 'qgis is great', 0: 3})
-        self.assertEqual(f.attributes(), [3, "qgis 'is good", 5, 12, None])
+        self.assertEqual(f.attributes(), [3, "qgis is great", 5, 12, None])
 
     def testCreateAttributeIndex(self):
         vl = QgsVectorLayer("dbname=%s table='test_defaults' key='id'" % self.dbname, "test_defaults", "spatialite")
@@ -590,6 +743,328 @@ class TestQgsSpatialiteProvider(unittest.TestCase, ProviderTestCase):
 
         self.assertEqual(set(indexed_columns), set(['name', 'number']))
         con.close()
+
+    def testSubsetStringRegexp(self):
+        """Check that the provider supports the REGEXP syntax"""
+
+        testPath = "dbname=%s table='test_filter' (geometry) key='id'" % self.dbname
+        vl = QgsVectorLayer(testPath, 'test', 'spatialite')
+        self.assertTrue(vl.isValid())
+        vl.setSubsetString('"name" REGEXP \'[txe]\'')
+        self.assertEqual(vl.featureCount(), 4)
+        del(vl)
+
+    def testSubsetStringExtent_bug17863(self):
+        """Check that the extent is correct when applied in the ctor and when
+        modified after a subset string is set """
+
+        def _lessdigits(s):
+            return re.sub(r'(\d+\.\d{3})\d+', r'\1', s)
+
+        testPath = "dbname=%s table='test_filter' (geometry) key='id'" % self.dbname
+
+        subSetString = '"name" = \'int\''
+        subSet = ' sql=%s' % subSetString
+
+        # unfiltered
+        vl = QgsVectorLayer(testPath, 'test', 'spatialite')
+        self.assertTrue(vl.isValid())
+        self.assertEqual(vl.featureCount(), 8)
+        unfiltered_extent = _lessdigits(vl.extent().toString())
+        self.assertNotEqual('Empty', unfiltered_extent)
+        del(vl)
+
+        # filter after construction ...
+        subSet_vl2 = QgsVectorLayer(testPath, 'test', 'spatialite')
+        self.assertEqual(_lessdigits(subSet_vl2.extent().toString()), unfiltered_extent)
+        self.assertEqual(subSet_vl2.featureCount(), 8)
+        # ... apply filter now!
+        subSet_vl2.setSubsetString(subSetString)
+        self.assertEqual(subSet_vl2.featureCount(), 4)
+        self.assertEqual(subSet_vl2.subsetString(), subSetString)
+        self.assertNotEqual(_lessdigits(subSet_vl2.extent().toString()), unfiltered_extent)
+        filtered_extent = _lessdigits(subSet_vl2.extent().toString())
+        del(subSet_vl2)
+
+        # filtered in constructor
+        subSet_vl = QgsVectorLayer(testPath + subSet, 'subset_test', 'spatialite')
+        self.assertEqual(subSet_vl.subsetString(), subSetString)
+        self.assertTrue(subSet_vl.isValid())
+
+        # This was failing in bug 17863
+        self.assertEqual(subSet_vl.featureCount(), 4)
+        self.assertEqual(_lessdigits(subSet_vl.extent().toString()), filtered_extent)
+        self.assertNotEqual(_lessdigits(subSet_vl.extent().toString()), unfiltered_extent)
+
+        self.assertTrue(subSet_vl.setSubsetString(''))
+        self.assertEqual(subSet_vl.featureCount(), 8)
+        self.assertEqual(_lessdigits(subSet_vl.extent().toString()), unfiltered_extent)
+
+    def testDecodeUri(self):
+        """Check that the provider URI decoding returns expected values"""
+
+        filename = '/home/to/path/test.db'
+        uri = 'dbname=\'{}\' table="test" (geometry) sql='.format(filename)
+        registry = QgsProviderRegistry.instance()
+        components = registry.decodeUri('spatialite', uri)
+        self.assertEqual(components['path'], filename)
+
+    def testPKNotInt(self):
+        """ Check when primary key is not an integer """
+        # create test db
+        dbname = os.path.join(tempfile.mkdtemp(), "test_pknotint.sqlite")
+        con = spatialite_connect(dbname, isolation_level=None)
+        cur = con.cursor()
+
+        # try the two different types of index creation
+        for index_creation_method in ['CreateSpatialIndex', 'CreateMbrCache']:
+
+            table_name = "pk_is_string_{}".format(index_creation_method)
+
+            cur.execute("BEGIN")
+            sql = "SELECT InitSpatialMetadata()"
+            cur.execute(sql)
+
+            # create table with spatial index and pk is string
+            sql = "CREATE TABLE {}(id VARCHAR PRIMARY KEY NOT NULL, name TEXT NOT NULL);"
+            cur.execute(sql.format(table_name))
+
+            sql = "SELECT AddGeometryColumn('{}', 'geometry',  4326, 'POINT', 'XY')"
+            cur.execute(sql.format(table_name))
+
+            sql = "SELECT {}('{}', 'geometry')"
+            cur.execute(sql.format(index_creation_method, table_name))
+
+            sql = "insert into {} ('id', 'name', 'geometry') values( 'test_id', 'test_name', st_geomfromtext('POINT(1 2)', 4326))"
+            cur.execute(sql.format(table_name))
+
+            cur.execute("COMMIT")
+
+            testPath = "dbname={} table='{}' (geometry)".format(dbname, table_name)
+            vl = QgsVectorLayer(testPath, 'test', 'spatialite')
+            self.assertTrue(vl.isValid())
+            self.assertEqual(vl.featureCount(), 1)
+
+            # make spatial request to force the index use
+            request = QgsFeatureRequest(QgsRectangle(0, 0, 2, 3))
+            feature = next(vl.getFeatures(request), None)
+            self.assertTrue(feature)
+
+            self.assertEqual(feature.id(), 1)
+            point = feature.geometry().asPoint()
+            self.assertTrue(point)
+            self.assertEqual(point.x(), 1)
+            self.assertEqual(point.y(), 2)
+
+        con.close()
+
+        basepath, filename = os.path.split(dbname)
+        shutil.rmtree(basepath)
+
+    def testLoadStyle(self):
+        """Check that we can store and load a style"""
+
+        # create test db
+        dbname = os.path.join(tempfile.gettempdir(), "test_loadstyle.sqlite")
+        if os.path.exists(dbname):
+            os.remove(dbname)
+        con = spatialite_connect(dbname, isolation_level=None)
+        cur = con.cursor()
+        cur.execute("BEGIN")
+        sql = "SELECT InitSpatialMetadata()"
+        cur.execute(sql)
+
+        # simple table with primary key
+        sql = "CREATE TABLE test_pg (id INTEGER NOT NULL PRIMARY KEY, name TEXT NOT NULL)"
+        cur.execute(sql)
+
+        sql = "SELECT AddGeometryColumn('test_pg', 'geometry', 4326, 'POLYGON', 'XY')"
+        cur.execute(sql)
+
+        sql = "INSERT INTO test_pg (id, name, geometry) "
+        sql += "VALUES (1, 'toto', GeomFromText('POLYGON((0 0,1 0,1 1,0 1,0 0))', 4326))"
+        cur.execute(sql)
+
+        cur.execute("COMMIT")
+        con.close()
+
+        testPath = "dbname=%s table='test_pg' (geometry) key='id'" % dbname
+        vl = QgsVectorLayer(testPath, 'test', 'spatialite')
+        self.assertTrue(vl.isValid())
+        self.assertEqual(vl.featureCount(), 1)
+        err, ok = vl.loadDefaultStyle()
+        self.assertFalse(ok)
+        vl.saveStyleToDatabase('my_style', 'My description', True, '')
+        err, ok = vl.loadDefaultStyle()
+        self.assertTrue(ok)
+
+    def _aliased_sql_helper(self, dbname):
+        queries = (
+            '(SELECT * FROM (SELECT * from \\"some view\\"))',
+            '(SELECT * FROM \\"some view\\")',
+            '(select sd.* from somedata as sd left join somedata as sd2 on ( sd2.name = sd.name ))',
+            '(select sd.* from \\"somedata\\" as sd left join \\"somedata\\" as sd2 on ( sd2.name = sd.name ))',
+            "(SELECT * FROM somedata as my_alias1\n)",
+            "(SELECT * FROM somedata as my_alias2)",
+            "(SELECT * FROM somedata AS my_alias3)",
+            '(SELECT * FROM \\"somedata\\" as my_alias4\n)',
+            '(SELECT * FROM (SELECT * FROM \\"somedata\\"))',
+            '(SELECT my_alias5.* FROM (SELECT * FROM \\"somedata\\") AS my_alias5)',
+            '(SELECT my_alias6.* FROM (SELECT * FROM \\"somedata\\" as my_alias\n) AS my_alias6)',
+            '(SELECT my_alias7.* FROM (SELECT * FROM \\"somedata\\" as my_alias\n) AS my_alias7\n)',
+            '(SELECT my_alias8.* FROM (SELECT * FROM \\"some data\\") AS my_alias8)',
+            '(SELECT my_alias9.* FROM (SELECT * FROM \\"some data\\" as my_alias\n) AS my_alias9)',
+            '(SELECT my_alias10.* FROM (SELECT * FROM \\"some data\\" as my_alias\n) AS my_alias10\n)',
+            '(select sd.* from \\"some data\\" as sd left join \\"some data\\" as sd2 on ( sd2.name = sd.name ))',
+            '(SELECT * FROM \\"some data\\" as my_alias11\n)',
+            '(SELECT * FROM \\"some data\\" as my_alias12)',
+            '(SELECT * FROM \\"some data\\" AS my_alias13)',
+            '(SELECT * from \\"some data\\" AS my_alias14\n)',
+            '(SELECT * FROM (SELECT * from \\"some data\\"))',
+        )
+        for sql in queries:
+            vl = QgsVectorLayer('dbname=\'{}\' table="{}" (geom) sql='.format(dbname, sql), 'test', 'spatialite')
+            self.assertTrue(vl.isValid(), 'dbname: {} - sql: {}'.format(dbname, sql))
+            self.assertTrue(vl.featureCount() > 1)
+            self.assertTrue(vl.isSpatial())
+
+    def testPkLessQuery(self):
+        """Test if features in queries with/without pk can be retrieved by id"""
+        # create test db
+        dbname = os.path.join(tempfile.gettempdir(), "test_pkless.sqlite")
+        if os.path.exists(dbname):
+            os.remove(dbname)
+        con = spatialite_connect(dbname, isolation_level=None)
+        cur = con.cursor()
+        cur.execute("BEGIN")
+        sql = "SELECT InitSpatialMetadata()"
+        cur.execute(sql)
+
+        # simple table with primary key
+        sql = "CREATE TABLE \"test pk\" (id INTEGER NOT NULL PRIMARY KEY, name TEXT NOT NULL)"
+        cur.execute(sql)
+
+        sql = "SELECT AddGeometryColumn('test pk', 'geometry', 4326, 'POINT', 'XY')"
+        cur.execute(sql)
+
+        for i in range(11, 21):
+            sql = "INSERT INTO \"test pk\" (id, name, geometry) "
+            sql += "VALUES ({id}, 'name {id}', GeomFromText('POINT({id} {id})', 4326))".format(id=i)
+            cur.execute(sql)
+
+        def _make_table(table_name):
+            # simple table without primary key
+            sql = "CREATE TABLE \"%s\" (name TEXT NOT NULL)" % table_name
+            cur.execute(sql)
+
+            sql = "SELECT AddGeometryColumn('%s', 'geom', 4326, 'POINT', 'XY')" % table_name
+            cur.execute(sql)
+
+            for i in range(11, 21):
+                sql = "INSERT INTO \"%s\" (name, geom) " % table_name
+                sql += "VALUES ('name {id}', GeomFromText('POINT({id} {id})', 4326))".format(id=i)
+                cur.execute(sql)
+
+        _make_table("somedata")
+        _make_table("some data")
+
+        sql = "CREATE VIEW \"some view\" AS SELECT * FROM \"somedata\""
+        cur.execute(sql)
+
+        cur.execute("COMMIT")
+        con.close()
+
+        def _check_features(vl, offset):
+            self.assertEqual(vl.featureCount(), 10)
+            i = 11
+            for f in vl.getFeatures():
+                self.assertTrue(f.isValid())
+                self.assertTrue(vl.getFeature(i - offset).isValid())
+                self.assertEqual(vl.getFeature(i - offset)['name'], 'name {id}'.format(id=i))
+                self.assertEqual(f.id(), i - offset)
+                self.assertEqual(f['name'], 'name {id}'.format(id=i))
+                self.assertEqual(f.geometry().asWkt(), 'Point ({id} {id})'.format(id=i))
+                i += 1
+
+        vl_pk = QgsVectorLayer('dbname=\'%s\' table="(select * from \\"test pk\\")" (geometry) sql=' % dbname, 'pk', 'spatialite')
+        self.assertTrue(vl_pk.isValid())
+        _check_features(vl_pk, 0)
+
+        vl_no_pk = QgsVectorLayer('dbname=\'%s\' table="(select * from somedata)" (geom) sql=' % dbname, 'pk', 'spatialite')
+        self.assertTrue(vl_no_pk.isValid())
+        _check_features(vl_no_pk, 10)
+
+        vl_no_pk = QgsVectorLayer('dbname=\'%s\' table="(select * from \\"some data\\")" (geom) sql=' % dbname, 'pk', 'spatialite')
+        self.assertTrue(vl_no_pk.isValid())
+        _check_features(vl_no_pk, 10)
+
+        # Test regression when sending queries with aliased tables from DB manager
+        self._aliased_sql_helper(dbname)
+
+    def testAliasedQueries(self):
+        """Test regression when sending queries with aliased tables from DB manager"""
+
+        dbname = TEST_DATA_DIR + '/provider/spatialite.db'
+        self._aliased_sql_helper(dbname)
+
+    def testTextPks(self):
+        """Test regression when retrieving features from tables with text PKs, see #21176"""
+
+        # create test db
+        dbname = os.path.join(tempfile.gettempdir(), "test_text_pks.sqlite")
+        if os.path.exists(dbname):
+            os.remove(dbname)
+        con = spatialite_connect(dbname, isolation_level=None)
+        cur = con.cursor()
+        cur.execute("BEGIN")
+        sql = "SELECT InitSpatialMetadata()"
+        cur.execute(sql)
+
+        # simple table with primary key
+        sql = "CREATE TABLE test_pg (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL)"
+        cur.execute(sql)
+
+        sql = "SELECT AddGeometryColumn('test_pg', 'geometry', 4326, 'POLYGON', 'XY')"
+        cur.execute(sql)
+
+        sql = "INSERT INTO test_pg (id, name, geometry) "
+        sql += "VALUES ('one', 'toto', GeomFromText('POLYGON((0 0,1 0,1 1,0 1,0 0))', 4326))"
+        cur.execute(sql)
+
+        sql = "INSERT INTO test_pg (id, name, geometry) "
+        sql += "VALUES ('two', 'bogo', GeomFromText('POLYGON((0 0,2 0,2 2,0 2,0 0))', 4326))"
+        cur.execute(sql)
+
+        cur.execute("COMMIT")
+        con.close()
+
+        def _test_db(testPath):
+            vl = QgsVectorLayer(testPath, 'test', 'spatialite')
+            self.assertTrue(vl.isValid())
+
+            f = next(vl.getFeatures())
+            self.assertTrue(f.isValid())
+            fid = f.id()
+            self.assertTrue(fid > 0)
+            self.assertTrue(vl.getFeature(fid).isValid())
+            f2 = next(vl.getFeatures(QgsFeatureRequest().setFilterFid(fid)))
+            self.assertTrue(f2.isValid())
+            self.assertEqual(f2.id(), f.id())
+            self.assertEqual(f2.geometry().asWkt(), f.geometry().asWkt())
+
+            for f in vl.getFeatures():
+                self.assertTrue(f.isValid())
+                self.assertTrue(vl.getFeature(f.id()).isValid())
+                self.assertEqual(vl.getFeature(f.id()).id(), f.id())
+
+        testPath = "dbname=%s table='test_pg' (geometry) key='id'" % dbname
+        _test_db(testPath)
+        testPath = "dbname=%s table='test_pg' (geometry)" % dbname
+        _test_db(testPath)
+        testPath = "dbname=%s table='test_pg' key='id'" % dbname
+        _test_db(testPath)
+        testPath = "dbname=%s table='test_pg'" % dbname
+        _test_db(testPath)
 
 
 if __name__ == '__main__':

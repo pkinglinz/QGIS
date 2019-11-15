@@ -16,15 +16,19 @@
 
 #include <QAction>
 #include <QComboBox>
-#include <QDoubleSpinBox>
 #include <QFont>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QLabel>
 #include <QMenu>
 #include <QToolBar>
 #include <QToolButton>
+#include <QWidgetAction>
 
+#include "qgisapp.h"
 #include "qgsapplication.h"
+#include "qgsdoublespinbox.h"
+#include "qgsfloatingwidget.h"
 #include "qgslayertreegroup.h"
 #include "qgslayertree.h"
 #include "qgslayertreeview.h"
@@ -43,11 +47,6 @@ QgsSnappingWidget::QgsSnappingWidget( QgsProject *project, QgsMapCanvas *canvas,
   , mProject( project )
   , mConfig( project )
   , mCanvas( canvas )
-  , mModeAction( nullptr )
-  , mTypeAction( nullptr )
-  , mToleranceAction( nullptr )
-  , mUnitAction( nullptr )
-
 {
   // detect the type of display
   QToolBar *tb = qobject_cast<QToolBar *>( parent );
@@ -62,11 +61,53 @@ QgsSnappingWidget::QgsSnappingWidget( QgsProject *project, QgsMapCanvas *canvas,
     setObjectName( QStringLiteral( "SnappingOptionDialog" ) );
   }
 
+  // Advanced config layer tree view
+  mAdvancedConfigWidget = new QWidget( this );
+  QVBoxLayout *advancedLayout = new QVBoxLayout();
+  if ( mDisplayMode == Widget )
+    advancedLayout->setContentsMargins( 0, 0, 0, 0 );
+  // tree view
+  mLayerTreeView = new QTreeView();
+  QgsSnappingLayerTreeModel *model = new QgsSnappingLayerTreeModel( mProject, mCanvas, this );
+  model->setLayerTreeModel( new QgsLayerTreeModel( mProject->layerTreeRoot(), model ) );
+  // connections
+  connect( model, &QgsSnappingLayerTreeModel::rowsInserted, this, &QgsSnappingWidget::onSnappingTreeLayersChanged );
+  connect( model, &QgsSnappingLayerTreeModel::modelReset, this, &QgsSnappingWidget::onSnappingTreeLayersChanged );
+  connect( model, &QgsSnappingLayerTreeModel::rowsRemoved, this, &QgsSnappingWidget::onSnappingTreeLayersChanged );
+  connect( mProject, &QgsProject::readProject, this, [ = ] {model->resetLayerTreeModel();} );
+  connect( mProject, &QObject::destroyed, this, [ = ] {mLayerTreeView->setModel( nullptr );} );
+  // model->setFlags( 0 );
+  mLayerTreeView->setModel( model );
+  mLayerTreeView->resizeColumnToContents( 0 );
+  mLayerTreeView->header()->show();
+  mLayerTreeView->setSelectionMode( QAbstractItemView::NoSelection );
+  // item delegates
+  mLayerTreeView->setEditTriggers( QAbstractItemView::AllEditTriggers );
+  mLayerTreeView->setItemDelegate( new QgsSnappingLayerDelegate( mCanvas, this ) );
+  mLayerTreeView->setSizePolicy( QSizePolicy::MinimumExpanding, QSizePolicy::MinimumExpanding );
+  mLayerTreeView->setMinimumWidth( 500 );
+  mLayerTreeView->resizeColumnToContents( 0 );
+  // filter line edit
+  QHBoxLayout *filterLayout = new QHBoxLayout();
+  filterLayout->setContentsMargins( 0, 0, 0, 0 );
+  filterLayout->addStretch();
+  QgsFilterLineEdit *filterLineEdit = new QgsFilterLineEdit();
+  filterLineEdit->setShowClearButton( true );
+  filterLineEdit->setShowSearchIcon( true );
+  filterLineEdit->setPlaceholderText( tr( "Filter layers…" ) );
+  connect( filterLineEdit, &QgsFilterLineEdit::textChanged, model, &QgsSnappingLayerTreeModel::setFilterText );
+  filterLayout->addStretch();
+  filterLayout->addWidget( filterLineEdit );
+  advancedLayout->addWidget( mLayerTreeView );
+  advancedLayout->addLayout( filterLayout );
+  mAdvancedConfigWidget->setLayout( advancedLayout );
+
   // enable button
-  mEnabledAction = new QAction( this );
+  mEnabledAction = new QAction( tr( "Toggle Snapping" ), this );
   mEnabledAction->setCheckable( true );
   mEnabledAction->setIcon( QIcon( QgsApplication::getThemeIcon( "/mIconSnapping.svg" ) ) );
-  mEnabledAction->setToolTip( tr( "Enable Snapping" ) );
+  mEnabledAction->setToolTip( tr( "Enable Snapping (S)" ) );
+  mEnabledAction->setShortcut( tr( "S", "Keyboard shortcut: toggle snapping" ) );
   mEnabledAction->setObjectName( QStringLiteral( "EnableSnappingAction" ) );
   connect( mEnabledAction, &QAction::toggled, this, &QgsSnappingWidget::enableSnapping );
 
@@ -74,13 +115,20 @@ QgsSnappingWidget::QgsSnappingWidget( QgsProject *project, QgsMapCanvas *canvas,
   mModeButton = new QToolButton();
   mModeButton->setToolTip( tr( "Snapping Mode" ) );
   mModeButton->setPopupMode( QToolButton::InstantPopup );
-  QMenu *modeMenu = new QMenu( tr( "Set snapping mode" ), this );
-  mAllLayersAction = new QAction( QIcon( QgsApplication::getThemeIcon( "/mIconSnappingAllLayers.svg" ) ), QStringLiteral( "All layers" ), modeMenu );
-  mActiveLayerAction = new QAction( QIcon( QgsApplication::getThemeIcon( "/mIconSnappingActiveLayer.svg" ) ), QStringLiteral( "Active layer" ), modeMenu );
-  mAdvancedModeAction = new QAction( QIcon( QgsApplication::getThemeIcon( "/mIconSnappingAdvanced.svg" ) ), QStringLiteral( "Advanced configuration" ), modeMenu );
+  QMenu *modeMenu = new QMenu( tr( "Set Snapping Mode" ), this );
+  mAllLayersAction = new QAction( QIcon( QgsApplication::getThemeIcon( "/mIconSnappingAllLayers.svg" ) ), tr( "All Layers" ), modeMenu );
+  mActiveLayerAction = new QAction( QIcon( QgsApplication::getThemeIcon( "/mIconSnappingActiveLayer.svg" ) ), tr( "Active Layer" ), modeMenu );
+  mAdvancedModeAction = new QAction( QIcon( QgsApplication::getThemeIcon( "/mIconSnappingAdvanced.svg" ) ), tr( "Advanced Configuration" ), modeMenu );
   modeMenu->addAction( mAllLayersAction );
   modeMenu->addAction( mActiveLayerAction );
   modeMenu->addAction( mAdvancedModeAction );
+  if ( mDisplayMode == ToolBar )
+  {
+    modeMenu->addSeparator();
+    QAction *openDialogAction = new QAction( tr( "Open Snapping Options…" ), modeMenu );
+    connect( openDialogAction, &QAction::triggered, QgisApp::instance(), &QgisApp::snappingOptions );
+    modeMenu->addAction( openDialogAction );
+  }
   mModeButton->setMenu( modeMenu );
   mModeButton->setObjectName( QStringLiteral( "SnappingModeButton" ) );
   if ( mDisplayMode == Widget )
@@ -93,10 +141,10 @@ QgsSnappingWidget::QgsSnappingWidget( QgsProject *project, QgsMapCanvas *canvas,
   mTypeButton = new QToolButton();
   mTypeButton->setToolTip( tr( "Snapping Type" ) );
   mTypeButton->setPopupMode( QToolButton::InstantPopup );
-  QMenu *typeMenu = new QMenu( tr( "Set snapping mode" ), this );
-  mVertexAction = new QAction( QIcon( QgsApplication::getThemeIcon( "/mIconSnappingVertex.svg" ) ), QStringLiteral( "Vertex" ), typeMenu );
-  mVertexAndSegmentAction = new QAction( QIcon( QgsApplication::getThemeIcon( "/mIconSnappingVertexAndSegment.svg" ) ), QStringLiteral( "Vertex and segment" ), typeMenu );
-  mSegmentAction = new QAction( QIcon( QgsApplication::getThemeIcon( "/mIconSnappingSegment.svg" ) ), QStringLiteral( "Segment" ), typeMenu );
+  QMenu *typeMenu = new QMenu( tr( "Set Snapping Mode" ), this );
+  mVertexAction = new QAction( QIcon( QgsApplication::getThemeIcon( "/mIconSnappingVertex.svg" ) ), tr( "Vertex" ), typeMenu );
+  mVertexAndSegmentAction = new QAction( QIcon( QgsApplication::getThemeIcon( "/mIconSnappingVertexAndSegment.svg" ) ), tr( "Vertex and Segment" ), typeMenu );
+  mSegmentAction = new QAction( QIcon( QgsApplication::getThemeIcon( "/mIconSnappingSegment.svg" ) ), tr( "Segment" ), typeMenu );
   typeMenu->addAction( mVertexAction );
   typeMenu->addAction( mVertexAndSegmentAction );
   typeMenu->addAction( mSegmentAction );
@@ -119,13 +167,25 @@ QgsSnappingWidget::QgsSnappingWidget( QgsProject *project, QgsMapCanvas *canvas,
   // units
   mUnitsComboBox = new QComboBox();
   mUnitsComboBox->addItem( tr( "px" ), QgsTolerance::Pixels );
-  mUnitsComboBox->addItem( QgsUnitTypes::toString( mProject->distanceUnits() ), QgsTolerance::ProjectUnits );
-  mUnitsComboBox->setToolTip( tr( "Snapping Unit Type: Pixels (px) or Map Units (mu)" ) );
+  // Get canvas units
+  const QString mapCanvasDistanceUnits { QgsUnitTypes::toString( mCanvas->mapSettings().mapUnits() ) };
+  mUnitsComboBox->addItem( mapCanvasDistanceUnits, QgsTolerance::ProjectUnits );
+  mUnitsComboBox->setToolTip( tr( "Snapping Unit Type: Pixels (px) or Project/Map Units (%1)" ).arg( mapCanvasDistanceUnits ) );
   mUnitsComboBox->setObjectName( QStringLiteral( "SnappingUnitComboBox" ) );
-  connect( mUnitsComboBox, static_cast<void ( QComboBox::* )( int )>( &QComboBox::currentIndexChanged ), this, &QgsSnappingWidget::changeUnit );
+  connect( mUnitsComboBox, qgis::overload<int>::of( &QComboBox::currentIndexChanged ),
+           this, &QgsSnappingWidget::changeUnit );
+
+  connect( mCanvas, &QgsMapCanvas::destinationCrsChanged, this, [ = ]
+  {
+    // Update map units from canvas
+    const QString mapCanvasDistanceUnits { QgsUnitTypes::toString( mCanvas->mapSettings().mapUnits() ) };
+    mUnitsComboBox->setItemText( 1, mapCanvasDistanceUnits );
+    mUnitsComboBox->setToolTip( tr( "Snapping Unit Type: Pixels (px) or Map Units (%1)" ).arg( mapCanvasDistanceUnits ) );
+    model->resetLayerTreeModel();
+  } );
 
   // topological editing button
-  mTopologicalEditingAction = new QAction( tr( "topological editing" ), this );
+  mTopologicalEditingAction = new QAction( tr( "Topological Editing" ), this );
   mTopologicalEditingAction->setCheckable( true );
   mTopologicalEditingAction->setIcon( QIcon( QgsApplication::getThemeIcon( "/mIconTopologicalEditing.svg" ) ) );
   mTopologicalEditingAction->setToolTip( tr( "Enable Topological Editing" ) );
@@ -133,7 +193,7 @@ QgsSnappingWidget::QgsSnappingWidget( QgsProject *project, QgsMapCanvas *canvas,
   connect( mTopologicalEditingAction, &QAction::toggled, this, &QgsSnappingWidget::enableTopologicalEditing );
 
   // snapping on intersection button
-  mIntersectionSnappingAction = new QAction( tr( "snapping on intersection" ), this );
+  mIntersectionSnappingAction = new QAction( tr( "Snapping on Intersection" ), this );
   mIntersectionSnappingAction->setCheckable( true );
   mIntersectionSnappingAction->setIcon( QIcon( QgsApplication::getThemeIcon( "/mIconSnappingIntersection.svg" ) ) );
   mIntersectionSnappingAction->setToolTip( tr( "Enable Snapping on Intersection" ) );
@@ -141,12 +201,32 @@ QgsSnappingWidget::QgsSnappingWidget( QgsProject *project, QgsMapCanvas *canvas,
   connect( mIntersectionSnappingAction, &QAction::toggled, this, &QgsSnappingWidget::enableIntersectionSnapping );
 
   // snapping on intersection button
-  mEnableTracingAction = new QAction( tr( "enable tracing" ), this );
+  mEnableTracingAction = new QAction( tr( "Enable Tracing" ), this );
   mEnableTracingAction->setCheckable( true );
   mEnableTracingAction->setIcon( QIcon( QgsApplication::getThemeIcon( "/mActionTracing.svg" ) ) );
   mEnableTracingAction->setToolTip( tr( "Enable Tracing (T)" ) );
-  mEnableTracingAction->setShortcut( tr( "T", "Enable Tracing" ) );
+  mEnableTracingAction->setShortcut( tr( "T", "Keyboard shortcut: Enable tracing" ) );
   mEnableTracingAction->setObjectName( QStringLiteral( "EnableTracingAction" ) );
+
+  // tracing offset
+  mTracingOffsetSpinBox = new QgsDoubleSpinBox;
+  mTracingOffsetSpinBox->setRange( -1000000, 1000000 );
+  mTracingOffsetSpinBox->setDecimals( 6 );
+  mTracingOffsetSpinBox->setClearValue( 0 );
+  mTracingOffsetSpinBox->setClearValueMode( QgsDoubleSpinBox::ClearValueMode::CustomValue );
+  // Note: set to false to "fix" a crash
+  // See https://github.com/qgis/QGIS/pull/8266 for some more context
+  mTracingOffsetSpinBox->setShowClearButton( false );
+  QMenu *tracingMenu = new QMenu( this );
+  QWidgetAction *widgetAction = new QWidgetAction( tracingMenu );
+  QVBoxLayout *tracingWidgetLayout = new QVBoxLayout;
+  tracingWidgetLayout->addWidget( new QLabel( "Offset" ) );
+  tracingWidgetLayout->addWidget( mTracingOffsetSpinBox );
+  QWidget *tracingWidget = new QWidget;
+  tracingWidget->setLayout( tracingWidgetLayout );
+  widgetAction->setDefaultWidget( tracingWidget );
+  tracingMenu->addAction( widgetAction );
+  mEnableTracingAction->setMenu( tracingMenu );
 
   // layout
   if ( mDisplayMode == ToolBar )
@@ -154,6 +234,21 @@ QgsSnappingWidget::QgsSnappingWidget( QgsProject *project, QgsMapCanvas *canvas,
     // hiding widget in a toolbar is not possible, actions are required
     tb->addAction( mEnabledAction );
     mModeAction = tb->addWidget( mModeButton );
+
+    // edit advanced config button
+    QToolButton *advConfigButton = new QToolButton( this );
+    advConfigButton->setPopupMode( QToolButton::InstantPopup );
+    QMenu *advConfigMenu = new QMenu( this );
+    QWidgetAction *advConfigWidgetAction = new QWidgetAction( advConfigMenu );
+    advConfigWidgetAction->setDefaultWidget( mAdvancedConfigWidget );
+    advConfigMenu->addAction( advConfigWidgetAction );
+    advConfigButton->setIcon( QIcon( QgsApplication::getThemeIcon( "/mActionShowAllLayers.svg" ) ) );
+    advConfigButton->setToolTip( tr( "Edit advanced configuration" ) );
+    advConfigButton->setObjectName( QStringLiteral( "EditAdvancedConfigurationButton" ) );
+    advConfigButton->setMenu( advConfigMenu );
+    mEditAdvancedConfigAction = tb->addWidget( advConfigButton );
+
+    // other buttons / actions
     mTypeAction = tb->addWidget( mTypeButton );
     mToleranceAction = tb->addWidget( mToleranceSpinBox );
     mUnitAction = tb->addWidget( mUnitsComboBox );
@@ -173,51 +268,28 @@ QgsSnappingWidget::QgsSnappingWidget( QgsProject *project, QgsMapCanvas *canvas,
 
     layout->addWidget( mModeButton );
     layout->addWidget( mTypeButton );
-    layout->addWidget( mToleranceSpinBox ) ;
-    layout->addWidget( mUnitsComboBox ) ;
+    layout->addWidget( mToleranceSpinBox );
+    layout->addWidget( mUnitsComboBox );
 
     QToolButton *topoButton = new QToolButton();
     topoButton->addAction( mTopologicalEditingAction );
     topoButton->setDefaultAction( mTopologicalEditingAction );
-    if ( mDisplayMode == Widget )
-    {
-      topoButton->setToolButtonStyle( Qt::ToolButtonTextBesideIcon );
-    }
+    topoButton->setToolButtonStyle( Qt::ToolButtonTextBesideIcon );
     layout->addWidget( topoButton );
+
     QToolButton *interButton = new QToolButton();
     interButton->addAction( mIntersectionSnappingAction );
     interButton->setDefaultAction( mIntersectionSnappingAction );
-    if ( mDisplayMode == Widget )
-    {
-      interButton->setToolButtonStyle( Qt::ToolButtonTextBesideIcon );
-    }
+    interButton->setToolButtonStyle( Qt::ToolButtonTextBesideIcon );
     layout->addWidget( interButton );
 
     layout->setContentsMargins( 0, 0, 0, 0 );
     layout->setAlignment( Qt::AlignRight );
     layout->setSpacing( mDisplayMode == Widget ? 3 : 0 );
 
-    mLayerTreeView = new QTreeView();
-    QgsSnappingLayerTreeModel *model = new QgsSnappingLayerTreeModel( mProject, this );
-    model->setLayerTreeModel( new QgsLayerTreeModel( mProject->layerTreeRoot(), model ) );
-
-    connect( model, &QgsSnappingLayerTreeModel::rowsInserted, this, &QgsSnappingWidget::onSnappingTreeLayersChanged );
-    connect( model, &QgsSnappingLayerTreeModel::modelReset, this, &QgsSnappingWidget::onSnappingTreeLayersChanged );
-    connect( model, &QgsSnappingLayerTreeModel::rowsRemoved, this, &QgsSnappingWidget::onSnappingTreeLayersChanged );
-
-    // model->setFlags( 0 );
-    mLayerTreeView->setModel( model );
-    mLayerTreeView->resizeColumnToContents( 0 );
-    mLayerTreeView->header()->show();
-    mLayerTreeView->setSelectionMode( QAbstractItemView::NoSelection );
-
-    // item delegates
-    mLayerTreeView->setEditTriggers( QAbstractItemView::AllEditTriggers );
-    mLayerTreeView->setItemDelegate( new QgsSnappingLayerDelegate( mCanvas, this ) );
-
     QGridLayout *topLayout = new QGridLayout();
     topLayout->addLayout( layout, 0, 0, Qt::AlignLeft | Qt::AlignTop );
-    topLayout->addWidget( mLayerTreeView, 1, 0 );
+    topLayout->addWidget( mAdvancedConfigWidget, 1, 0 );
     setLayout( topLayout );
   }
 
@@ -290,14 +362,14 @@ void QgsSnappingWidget::projectSnapSettingsChanged()
     mTypeButton->setDefaultAction( mSegmentAction );
   }
 
+  if ( static_cast<QgsTolerance::UnitType>( mUnitsComboBox->currentData().toInt() ) != config.units() )
+  {
+    mUnitsComboBox->setCurrentIndex( mUnitsComboBox->findData( config.units() ) );
+  }
+
   if ( mToleranceSpinBox->value() != config.tolerance() )
   {
     mToleranceSpinBox->setValue( config.tolerance() );
-  }
-
-  if ( ( QgsTolerance::UnitType )mUnitsComboBox->currentData().toInt() != config.units() )
-  {
-    mUnitsComboBox->setCurrentIndex( mUnitsComboBox->findData( config.units() ) );
   }
 
   if ( config.intersectionSnapping() != mIntersectionSnappingAction->isChecked() )
@@ -329,11 +401,10 @@ void QgsSnappingWidget::toggleSnappingWidgets( bool enabled )
   mTypeButton->setEnabled( enabled );
   mToleranceSpinBox->setEnabled( enabled );
   mUnitsComboBox->setEnabled( enabled );
-  if ( mLayerTreeView )
+  if ( mAdvancedConfigWidget )
   {
-    mLayerTreeView->setEnabled( enabled );
+    mAdvancedConfigWidget->setEnabled( enabled );
   }
-  mTopologicalEditingAction->setEnabled( enabled );
   mIntersectionSnappingAction->setEnabled( enabled );
   mEnableTracingAction->setEnabled( enabled );
 }
@@ -346,7 +417,7 @@ void QgsSnappingWidget::changeTolerance( double tolerance )
 
 void QgsSnappingWidget::changeUnit( int idx )
 {
-  QgsTolerance::UnitType unit = ( QgsTolerance::UnitType )mUnitsComboBox->itemData( idx ).toInt();
+  QgsTolerance::UnitType unit = static_cast<QgsTolerance::UnitType>( mUnitsComboBox->itemData( idx ).toInt() );
   mConfig.setUnits( unit );
   mProject->setSnappingConfig( mConfig );
 
@@ -366,12 +437,19 @@ void QgsSnappingWidget::enableIntersectionSnapping( bool enabled )
 
 void QgsSnappingWidget::onSnappingTreeLayersChanged()
 {
+  mLayerTreeView->expandAll();
   mLayerTreeView->resizeColumnToContents( 0 );
-  QTimer::singleShot( 0, mLayerTreeView, &QTreeView::expandAll );
 }
 
 void QgsSnappingWidget::modeButtonTriggered( QAction *action )
 {
+  if ( action != mAllLayersAction &&
+       action != mActiveLayerAction &&
+       action != mAdvancedModeAction )
+  {
+    return;
+  }
+
   if ( action != mModeButton->defaultAction() )
   {
     mModeButton->setDefaultAction( action );
@@ -444,15 +522,16 @@ void QgsSnappingWidget::modeChanged()
     mTypeAction->setVisible( !advanced );
     mToleranceAction->setVisible( !advanced );
     mUnitAction->setVisible( !advanced );
+    mEditAdvancedConfigAction->setVisible( advanced );
   }
   else
   {
     mTypeButton->setVisible( !advanced );
     mToleranceSpinBox->setVisible( !advanced );
     mUnitsComboBox->setVisible( !advanced );
-    if ( mDisplayMode == Widget && mLayerTreeView )
+    if ( mDisplayMode == Widget && mAdvancedConfigWidget )
     {
-      mLayerTreeView->setVisible( advanced );
+      mAdvancedConfigWidget->setVisible( advanced );
     }
   }
 }
@@ -479,9 +558,10 @@ void QgsSnappingWidget::cleanGroup( QgsLayerTreeNode *node )
     return;
 
   QList<QgsLayerTreeNode *> toRemove;
-  Q_FOREACH ( QgsLayerTreeNode *child, node->children() )
+  const auto constChildren = node->children();
+  for ( QgsLayerTreeNode *child : constChildren )
   {
-    if ( QgsLayerTree::isLayer( child ) && QgsLayerTree::toLayer( child )->layer()->type() != QgsMapLayer::VectorLayer )
+    if ( QgsLayerTree::isLayer( child ) && ( !QgsLayerTree::toLayer( child )->layer() || QgsLayerTree::toLayer( child )->layer()->type() != QgsMapLayerType::VectorLayer ) )
     {
       toRemove << child;
       continue;
@@ -493,6 +573,7 @@ void QgsSnappingWidget::cleanGroup( QgsLayerTreeNode *node )
       toRemove << child;
   }
 
-  Q_FOREACH ( QgsLayerTreeNode *child, toRemove )
+  const auto constToRemove = toRemove;
+  for ( QgsLayerTreeNode *child : constToRemove )
     group->removeChildNode( child );
 }

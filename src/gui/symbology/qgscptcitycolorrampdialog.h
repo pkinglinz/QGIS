@@ -13,12 +13,12 @@
  *                                                                         *
  ***************************************************************************/
 
-#ifndef QGSCPTCITYCOLORRAMPV2DIALOG_H
-#define QGSCPTCITYCOLORRAMPV2DIALOG_H
+#ifndef QGSCPTCITYCOLORRAMPDIALOG_H
+#define QGSCPTCITYCOLORRAMPDIALOG_H
 
 
-#include "ui_qgscptcitycolorrampv2dialogbase.h"
-#include "qgis.h"
+#include "ui_qgscptcitycolorrampdialogbase.h"
+#include "qgis_sip.h"
 #include <QDialog>
 
 #include "qgscptcityarchive.h"
@@ -33,7 +33,8 @@ class TreeFilterProxyModel;
 class ListFilterProxyModel;
 class UngroupProxyModel;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsCptCityColorRampDialog
  * A dialog which allows users to modify the properties of a QgsCptCityColorRamp.
  * \since QGIS 3.0
@@ -45,33 +46,44 @@ class GUI_EXPORT QgsCptCityColorRampDialog : public QDialog, private Ui::QgsCptC
 
   public:
 
-    /** Constructor for QgsCptCityColorRampDialog.
+    /**
+     * Constructor for QgsCptCityColorRampDialog.
      * \param ramp initial ramp to show in dialog
      * \param parent parent widget
      */
-    QgsCptCityColorRampDialog( const QgsCptCityColorRamp &ramp, QWidget *parent SIP_TRANSFERTHIS = 0 );
+    QgsCptCityColorRampDialog( const QgsCptCityColorRamp &ramp, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
-    /** Returns a color ramp representing the current settings from the dialog.
+    /**
+     * Returns a color ramp representing the current settings from the dialog.
      * \see setRamp()
      */
     QgsCptCityColorRamp ramp() const { return mRamp; }
 
-    /** Sets the color ramp to show in the dialog.
+    /**
+     * Sets the color ramp to show in the dialog.
      * \param ramp color ramp
      * \see ramp()
      */
     void setRamp( const QgsCptCityColorRamp &ramp );
 
-    /** Returns the name of the ramp currently selected in the dialog.
+    /**
+     * Returns the name of the ramp currently selected in the dialog.
      */
     QString selectedName() const
     {
       return QFileInfo( mRamp.schemeName() ).baseName() + mRamp.variantName();
     }
 
-    /** Returns true if the ramp should be converted to a QgsGradientColorRamp.
+    /**
+     * Returns TRUE if the ramp should be converted to a QgsGradientColorRamp.
      */
     bool saveAsGradientRamp() const;
+
+    /**
+     * Returns a reference to the dialog's button box.
+     * \since QGIS 3.10
+     */
+    QDialogButtonBox *buttonBox() const;
 
     bool eventFilter( QObject *obj, QEvent *event ) override;
 
@@ -83,12 +95,12 @@ class GUI_EXPORT QgsCptCityColorRampDialog : public QDialog, private Ui::QgsCptC
   private slots:
     void populateVariants();
 
-    void on_mTreeView_clicked( const QModelIndex & );
-    void on_mListWidget_itemClicked( QListWidgetItem *item );
-    void on_mListWidget_itemSelectionChanged();
-    void on_tabBar_currentChanged( int index );
-    void on_pbtnLicenseDetails_pressed();
-    void on_cboVariantName_currentIndexChanged( int index );
+    void mTreeView_clicked( const QModelIndex & );
+    void mListWidget_itemClicked( QListWidgetItem *item );
+    void mListWidget_itemSelectionChanged();
+    void tabBar_currentChanged( int index );
+    void pbtnLicenseDetails_pressed();
+    void cboVariantName_currentIndexChanged( int index );
     void onFinished();
     void showHelp();
     /* void refresh(); */
@@ -122,7 +134,8 @@ class GUI_EXPORT QgsCptCityColorRampDialog : public QDialog, private Ui::QgsCptC
 #ifndef SIP_RUN
 /// @cond PRIVATE
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class TreeFilterProxyModel
  */
 class TreeFilterProxyModel : public QSortFilterProxyModel

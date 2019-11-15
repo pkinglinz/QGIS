@@ -25,9 +25,9 @@
 
 QgsEditorWidgetWrapper::QgsEditorWidgetWrapper( QgsVectorLayer *vl, int fieldIdx, QWidget *editor, QWidget *parent )
   : QgsWidgetWrapper( vl, editor, parent )
+  , mFieldIdx( fieldIdx )
   , mValidConstraint( true )
   , mIsBlockingCommit( false )
-  , mFieldIdx( fieldIdx )
 {
 }
 
@@ -38,8 +38,9 @@ int QgsEditorWidgetWrapper::fieldIdx() const
 
 QgsField QgsEditorWidgetWrapper::field() const
 {
-  if ( mFieldIdx < layer()->fields().count() )
-    return layer()->fields().at( mFieldIdx );
+  QgsVectorLayer *vl = layer();
+  if ( vl && mFieldIdx < vl->fields().count() )
+    return vl->fields().at( mFieldIdx );
   else
     return QgsField();
 }
@@ -67,56 +68,95 @@ void QgsEditorWidgetWrapper::setEnabled( bool enabled )
 
 void QgsEditorWidgetWrapper::setFeature( const QgsFeature &feature )
 {
-  mFeature = feature;
-  setValue( feature.attribute( mFieldIdx ) );
+  setFormFeature( feature );
+  QVariantList newAdditionalFieldValues;
+  const QStringList constAdditionalFields = additionalFields();
+  for ( const QString &fieldName : constAdditionalFields )
+    newAdditionalFieldValues << feature.attribute( fieldName );
+  setValues( feature.attribute( mFieldIdx ), newAdditionalFieldValues );
 }
 
-void QgsEditorWidgetWrapper::valueChanged( const QString &value )
+void QgsEditorWidgetWrapper::setValue( const QVariant &value )
 {
-  emit valueChanged( QVariant( value ) );
+  isRunningDeprecatedSetValue = true;
+  updateValues( value, QVariantList() );
+  isRunningDeprecatedSetValue = false;
 }
 
-void QgsEditorWidgetWrapper::valueChanged( int value )
+void QgsEditorWidgetWrapper::setValues( const QVariant &value, const QVariantList &additionalValues )
 {
-  emit valueChanged( QVariant( value ) );
+  updateValues( value, additionalValues );
 }
 
-void QgsEditorWidgetWrapper::valueChanged( double value )
+void QgsEditorWidgetWrapper::emitValueChanged()
 {
-  emit valueChanged( QVariant( value ) );
-}
-
-void QgsEditorWidgetWrapper::valueChanged( bool value )
-{
-  emit valueChanged( QVariant( value ) );
-}
-
-void QgsEditorWidgetWrapper::valueChanged( qlonglong value )
-{
-  emit valueChanged( QVariant( value ) );
-}
-
-void QgsEditorWidgetWrapper::valueChanged()
-{
+  Q_NOWARN_DEPRECATED_PUSH
   emit valueChanged( value() );
+  Q_NOWARN_DEPRECATED_POP
+  emit valuesChanged( value(), additionalFieldValues() );
 }
 
-void QgsEditorWidgetWrapper::updateConstraintWidgetStatus( ConstraintResult constraintResult )
+void QgsEditorWidgetWrapper::updateConstraintWidgetStatus()
 {
-  switch ( constraintResult )
+  if ( !mConstraintResultVisible )
   {
-    case ConstraintResultPass:
-      widget()->setStyleSheet( QString() );
-      break;
-
-    case ConstraintResultFailHard:
-      widget()->setStyleSheet( QStringLiteral( "background-color: #dd7777;" ) );
-      break;
-
-    case ConstraintResultFailSoft:
-      widget()->setStyleSheet( QStringLiteral( "background-color: #ffd85d;" ) );
-      break;
+    widget()->setStyleSheet( QString() );
   }
+  else
+  {
+    switch ( mConstraintResult )
+    {
+      case ConstraintResultPass:
+        widget()->setStyleSheet( QString() );
+        break;
+
+      case ConstraintResultFailHard:
+        widget()->setStyleSheet( QStringLiteral( "background-color: #FFE0B2;" ) );
+        break;
+
+      case ConstraintResultFailSoft:
+        widget()->setStyleSheet( QStringLiteral( "background-color: #FFECB3;" ) );
+        break;
+    }
+  }
+}
+
+bool QgsEditorWidgetWrapper::setFormFeatureAttribute( const QString &attributeName, const QVariant &attributeValue )
+{
+  return mFormFeature.setAttribute( attributeName, attributeValue );
+}
+
+void QgsEditorWidgetWrapper::updateValues( const QVariant &value, const QVariantList &additionalValues )
+{
+  // this method should be made pure virtual in QGIS 4
+  Q_UNUSED( additionalValues );
+  Q_NOWARN_DEPRECATED_PUSH
+  // avoid infinite recursive loop
+  if ( !isRunningDeprecatedSetValue )
+    setValue( value );
+  Q_NOWARN_DEPRECATED_POP
+}
+
+QgsEditorWidgetWrapper::ConstraintResult QgsEditorWidgetWrapper::constraintResult() const
+{
+  return mConstraintResult;
+}
+
+bool QgsEditorWidgetWrapper::constraintResultVisible() const
+{
+  return mConstraintResultVisible;
+}
+
+void QgsEditorWidgetWrapper::setConstraintResultVisible( bool constraintResultVisible )
+{
+  if ( mConstraintResultVisible == constraintResultVisible )
+    return;
+
+  mConstraintResultVisible = constraintResultVisible;
+
+  updateConstraintWidgetStatus();
+
+  emit constraintResultVisibleChanged( mConstraintResultVisible );
 }
 
 void QgsEditorWidgetWrapper::updateConstraint( const QgsFeature &ft, QgsFieldConstraints::ConstraintOrigin constraintOrigin )
@@ -210,7 +250,9 @@ void QgsEditorWidgetWrapper::updateConstraint( const QgsVectorLayer *layer, int 
 
     ConstraintResult result = !hardConstraintsOk ? ConstraintResultFailHard
                               : ( !softConstraintsOk ? ConstraintResultFailSoft : ConstraintResultPass );
-    updateConstraintWidgetStatus( result );
+    //set the constraint result
+    mConstraintResult = result;
+    updateConstraintWidgetStatus();
     emit constraintStatusChanged( expressionDesc, description, errStr, result );
   }
 }
@@ -223,6 +265,11 @@ bool QgsEditorWidgetWrapper::isValidConstraint() const
 bool QgsEditorWidgetWrapper::isBlockingCommit() const
 {
   return mIsBlockingCommit;
+}
+
+QList<QgsVectorLayerRef> QgsEditorWidgetWrapper::layerDependencies() const
+{
+  return QList<QgsVectorLayerRef>();
 }
 
 QString QgsEditorWidgetWrapper::constraintFailureReason() const

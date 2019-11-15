@@ -44,10 +44,6 @@ QgsWCSSourceSelect::QgsWCSSourceSelect( QWidget *parent, Qt::WindowFlags fl, Qgs
   connect( buttonBox, &QDialogButtonBox::helpRequested, this, &QgsWCSSourceSelect::showHelp );
 }
 
-QgsWCSSourceSelect::~QgsWCSSourceSelect()
-{
-}
-
 void QgsWCSSourceSelect::populateLayerList()
 {
 
@@ -83,7 +79,7 @@ void QgsWCSSourceSelect::populateLayerList()
         coverage != coverages.end();
         ++coverage )
   {
-    QgsDebugMsg( QString( "coverage orderId = %1 identifier = %2" ).arg( coverage->orderId ).arg( coverage->identifier ) );
+    QgsDebugMsg( QStringLiteral( "coverage orderId = %1 identifier = %2" ).arg( coverage->orderId ).arg( coverage->identifier ) );
 
     QgsTreeWidgetItem *lItem = createItem( coverage->orderId, QStringList() << coverage->identifier << coverage->title << coverage->abstract, items, coverageAndStyleCount, coverageParents, coverageParentNames );
 
@@ -91,7 +87,7 @@ void QgsWCSSourceSelect::populateLayerList()
     lItem->setData( 0, Qt::UserRole + 1, "" );
 
     // Make only leaves selectable
-    if ( !coverageParents.keys( coverage->orderId ).isEmpty() )
+    if ( coverageParents.contains( coverage->orderId ) )
     {
       lItem->setFlags( Qt::ItemIsEnabled );
     }
@@ -147,7 +143,7 @@ void QgsWCSSourceSelect::addButtonClicked()
   }
 
   QString cache;
-  QgsDebugMsg( QString( "selectedCacheLoadControl = %1" ).arg( selectedCacheLoadControl() ) );
+  QgsDebugMsg( QStringLiteral( "selectedCacheLoadControl = %1" ).arg( selectedCacheLoadControl() ) );
   cache = QgsNetworkAccessManager::cacheLoadControlName( selectedCacheLoadControl() );
   uri.setParam( QStringLiteral( "cache" ), cache );
 
@@ -155,7 +151,7 @@ void QgsWCSSourceSelect::addButtonClicked()
 }
 
 
-void QgsWCSSourceSelect::on_mLayersTreeWidget_itemSelectionChanged()
+void QgsWCSSourceSelect::mLayersTreeWidget_itemSelectionChanged()
 {
 
   QString identifier = selectedIdentifier();
@@ -230,7 +226,6 @@ QStringList QgsWCSSourceSelect::selectedLayersFormats()
 
 QStringList QgsWCSSourceSelect::selectedLayersCrses()
 {
-
   QString identifier = selectedIdentifier();
   if ( identifier.isEmpty() ) { return QStringList(); }
 

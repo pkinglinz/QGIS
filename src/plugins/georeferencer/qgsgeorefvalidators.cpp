@@ -24,7 +24,7 @@ QgsDMSAndDDValidator::QgsDMSAndDDValidator( QObject *parent )
 
 QValidator::State QgsDMSAndDDValidator::validate( QString &input, int &pos ) const
 {
-  Q_UNUSED( pos );
+  Q_UNUSED( pos )
 
   QRegExp rx( "-?\\d*" );
   if ( rx.exactMatch( input ) )
@@ -58,7 +58,7 @@ QValidator::State QgsDMSAndDDValidator::validate( QString &input, int &pos ) con
       if ( rx.exactMatch( input ) )
       {
         int in = input.leftRef( input.indexOf( ' ' ) ).toInt();
-        int grad =  input.startsWith( '-' ) ? in - 1 : in + 1;
+        int grad = input.startsWith( '-' ) ? in - 1 : in + 1;
         if ( grad <= 180 )
           input = QString::number( grad );
 

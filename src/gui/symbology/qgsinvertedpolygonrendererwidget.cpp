@@ -20,6 +20,7 @@
 
 #include "qgslogger.h"
 #include "qgsvectorlayer.h"
+#include "qgsapplication.h"
 
 QgsRendererWidget *QgsInvertedPolygonRendererWidget::create( QgsVectorLayer *layer, QgsStyle *style, QgsFeatureRenderer *renderer )
 {
@@ -50,6 +51,8 @@ QgsInvertedPolygonRendererWidget::QgsInvertedPolygonRendererWidget( QgsVectorLay
     return;
   }
   setupUi( this );
+  connect( mRendererComboBox, static_cast<void ( QComboBox::* )( int )>( &QComboBox::currentIndexChanged ), this, &QgsInvertedPolygonRendererWidget::mRendererComboBox_currentIndexChanged );
+  connect( mMergePolygonsCheckBox, &QCheckBox::stateChanged, this, &QgsInvertedPolygonRendererWidget::mMergePolygonsCheckBox_stateChanged );
 
   // try to recognize the previous renderer
   // (null renderer means "no previous renderer")
@@ -93,7 +96,7 @@ QgsInvertedPolygonRendererWidget::QgsInvertedPolygonRendererWidget( QgsVectorLay
   if ( oldIdx == currentEmbeddedIdx )
   {
     // force update
-    on_mRendererComboBox_currentIndexChanged( currentEmbeddedIdx );
+    mRendererComboBox_currentIndexChanged( currentEmbeddedIdx );
   }
 }
 
@@ -117,15 +120,25 @@ void QgsInvertedPolygonRendererWidget::setContext( const QgsSymbolWidgetContext 
     mEmbeddedRendererWidget->setContext( context );
 }
 
-void QgsInvertedPolygonRendererWidget::on_mRendererComboBox_currentIndexChanged( int index )
+void QgsInvertedPolygonRendererWidget::setDockMode( bool dockMode )
+{
+  QgsRendererWidget::setDockMode( dockMode );
+  if ( mEmbeddedRendererWidget )
+    mEmbeddedRendererWidget->setDockMode( dockMode );
+}
+
+void QgsInvertedPolygonRendererWidget::mRendererComboBox_currentIndexChanged( int index )
 {
   QString rendererId = mRendererComboBox->itemData( index ).toString();
   QgsRendererAbstractMetadata *m = QgsApplication::rendererRegistry()->rendererMetadata( rendererId );
   if ( m )
   {
-    mEmbeddedRendererWidget.reset( m->createRendererWidget( mLayer, mStyle, const_cast<QgsFeatureRenderer *>( mRenderer->embeddedRenderer() )->clone() ) );
+    std::unique_ptr< QgsFeatureRenderer > oldRenderer( mRenderer->embeddedRenderer()->clone() );
+    mEmbeddedRendererWidget.reset( m->createRendererWidget( mLayer, mStyle, oldRenderer.get() ) );
     connect( mEmbeddedRendererWidget.get(), &QgsRendererWidget::widgetChanged, this, &QgsInvertedPolygonRendererWidget::widgetChanged );
     mEmbeddedRendererWidget->setContext( mContext );
+    mEmbeddedRendererWidget->setDockMode( this->dockMode() );
+    connect( mEmbeddedRendererWidget.get(), &QgsPanelWidget::showPanel, this, &QgsPanelWidget::openPanel );
 
     if ( layout()->count() > 2 )
     {
@@ -136,7 +149,7 @@ void QgsInvertedPolygonRendererWidget::on_mRendererComboBox_currentIndexChanged(
   }
 }
 
-void QgsInvertedPolygonRendererWidget::on_mMergePolygonsCheckBox_stateChanged( int state )
+void QgsInvertedPolygonRendererWidget::mMergePolygonsCheckBox_stateChanged( int state )
 {
   mRenderer->setPreprocessingEnabled( state == Qt::Checked );
   emit widgetChanged();

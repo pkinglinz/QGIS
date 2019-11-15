@@ -29,7 +29,8 @@ namespace pal
 {
   class Feats;
 
-  /** \ingroup core
+  /**
+   * \ingroup core
    */
   class CostCalculator
   {
@@ -39,17 +40,19 @@ namespace pal
 
       static void setPolygonCandidatesCost( int nblp, QList< LabelPosition * > &lPos, RTree<pal::FeaturePart *, double, 2, double> *obstacles, double bbx[4], double bby[4] );
 
-      //! Set cost to the smallest distance between lPos's centroid and a polygon stored in geoetry field
+      //! Sets cost to the smallest distance between lPos's centroid and a polygon stored in geoetry field
       static void setCandidateCostFromPolygon( LabelPosition *lp, RTree<pal::FeaturePart *, double, 2, double> *obstacles, double bbx[4], double bby[4] );
 
       //! Sort candidates by costs, skip the worse ones, evaluate polygon candidates
       static int finalizeCandidatesCosts( Feats *feat, int max_p, RTree<pal::FeaturePart *, double, 2, double> *obstacles, double bbx[4], double bby[4] );
 
-      /** Sorts label candidates in ascending order of cost
+      /**
+       * Sorts label candidates in ascending order of cost
        */
       static bool candidateSortGrow( const LabelPosition *c1, const LabelPosition *c2 );
 
-      /** Sorts label candidates in descending order of cost
+      /**
+       * Sorts label candidates in descending order of cost
        */
       static bool candidateSortShrink( const LabelPosition *c1, const LabelPosition *c2 );
   };
@@ -60,7 +63,7 @@ namespace pal
    *
    *  Eight segments from center of candidate to (rpx,rpy) points (0°, 45°, 90°, ..., 315°)
    *  dist store the shortest square distance from the center to an object
-   *  ok[i] is the to true whether the corresponding dist[i] is set
+   *  ok[i] is the to TRUE whether the corresponding dist[i] is set
    *
    * \note not available in Python bindings
    */

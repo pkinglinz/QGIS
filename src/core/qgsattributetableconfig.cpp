@@ -17,13 +17,6 @@
 #include "qgsfields.h"
 #include <QStringList>
 
-QgsAttributeTableConfig::QgsAttributeTableConfig()
-  : mActionWidgetStyle( DropDown )
-  , mSortOrder( Qt::AscendingOrder )
-{
-
-}
-
 QVector<QgsAttributeTableConfig::ColumnConfig> QgsAttributeTableConfig::columns() const
 {
   return mColumns;
@@ -106,7 +99,8 @@ void QgsAttributeTableConfig::update( const QgsFields &fields )
 
 bool QgsAttributeTableConfig::actionWidgetVisible() const
 {
-  Q_FOREACH ( const ColumnConfig &columnConfig, mColumns )
+  const auto constMColumns = mColumns;
+  for ( const ColumnConfig &columnConfig : constMColumns )
   {
     if ( columnConfig.type == Action && !columnConfig.hidden )
       return true;
@@ -265,7 +259,8 @@ void QgsAttributeTableConfig::writeXml( QDomNode &node ) const
 
   QDomElement columnsElement  = doc.createElement( QStringLiteral( "columns" ) );
 
-  Q_FOREACH ( const ColumnConfig &column, mColumns )
+  const auto constMColumns = mColumns;
+  for ( const ColumnConfig &column : constMColumns )
   {
     QDomElement columnElement = doc.createElement( QStringLiteral( "column" ) );
 
@@ -288,6 +283,25 @@ void QgsAttributeTableConfig::writeXml( QDomNode &node ) const
   configElement.appendChild( columnsElement );
 
   node.appendChild( configElement );
+}
+
+bool QgsAttributeTableConfig::hasSameColumns( const QgsAttributeTableConfig &other ) const
+{
+  if ( columns().size() == other.columns().size() )
+  {
+    for ( int i = 0; i < columns().size(); i++ )
+    {
+      if ( columns().at( i ).name != other.columns().at( i ).name ||
+           columns().at( i ).type != other.columns().at( i ).type ||
+           columns().at( i ).hidden != other.columns().at( i ).hidden )
+      {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  return false;
 }
 
 bool QgsAttributeTableConfig::ColumnConfig::operator== ( const ColumnConfig &other ) const

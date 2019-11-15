@@ -21,7 +21,8 @@
 
 SIP_NO_FILE
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsColorWidgetFactory
  * \note not available in Python bindings
  */
@@ -29,6 +30,11 @@ SIP_NO_FILE
 class GUI_EXPORT QgsColorWidgetFactory : public QgsEditorWidgetFactory
 {
   public:
+
+    /**
+     * Constructor for QgsColorWidgetFactory, where \a name is a human-readable
+     * name for the factory.
+     */
     QgsColorWidgetFactory( const QString &name );
 
     // QgsEditorWidgetFactory interface

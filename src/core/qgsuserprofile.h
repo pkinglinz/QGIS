@@ -20,7 +20,8 @@
 #include "qgserror.h"
 #include <QIcon>
 
-/** \ingroup core
+/**
+ * \ingroup core
  * User profile contains information about the user profile folders on the machine.
  * In QGIS 3 all settings, plugins, etc were moved into a %APPDATA%/profiles folder for each platform.
  * This allows for manage different user profiles per machine vs the single default one that was allowed in the
@@ -62,7 +63,7 @@ class CORE_EXPORT QgsUserProfile
     void initSettings() const;
 
     /**
-     * Return the alias for the user profile.
+     * Returns the alias for the user profile.
      * \return If no alias is set name() is returned.
      */
     const QString alias() const;
@@ -70,7 +71,7 @@ class CORE_EXPORT QgsUserProfile
     /**
      * Set the alias of the profile. The alias is a user friendly name.
      * \param alias A user friendly name for the profile.
-     * \return True of setting the alias was successful.
+     * \return TRUE of setting the alias was successful.
      */
     QgsError setAlias( const QString &alias );
 

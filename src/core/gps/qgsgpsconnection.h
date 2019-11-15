@@ -27,6 +27,12 @@
 
 class QIODevice;
 
+#ifdef SIP_RUN
+% ModuleHeaderCode
+#include "qgsgpsconnection.h"
+% End
+#endif
+
 struct CORE_EXPORT QgsSatelliteInfo
 {
   int id;
@@ -36,32 +42,58 @@ struct CORE_EXPORT QgsSatelliteInfo
   int signal;
 };
 
-struct CORE_EXPORT QgsGPSInformation
+struct CORE_EXPORT QgsGpsInformation
 {
-  double latitude;
-  double longitude;
-  double elevation;
-  double speed; //in km/h
-  double direction;
+
+  /**
+   * GPS fix status
+   * \since QGIS 3.10
+   */
+  enum FixStatus
+  {
+    NoData,
+    NoFix,
+    Fix2D,
+    Fix3D
+  };
+
+  double latitude = 0;
+  double longitude = 0;
+  double elevation = 0;
+  double speed = 0; //in km/h
+  double direction = 0;
   QList<QgsSatelliteInfo> satellitesInView;
-  double pdop;
-  double hdop;
-  double vdop;
-  double hacc; //horizontal accuracy in meters
-  double vacc; //vertical accuracy in meters
+  double pdop = 0;
+  double hdop = 0;
+  double vdop = 0;
+  double hacc = -1; //horizontal accuracy in meters
+  double vacc = -1; //vertical accuracy in meters
   QDateTime utcDateTime;
   QChar fixMode;
-  int fixType;
-  int quality; // from GPGGA
-  int satellitesUsed; // from GPGGA
+  int fixType = 0; // valid values: 1,2,3
+  int quality = -1; // from GPGGA, valid values: 0,1,2, maybe others
+  int satellitesUsed = 0; // from GPGGA
   QChar status; // from GPRMC A,V
   QList<int> satPrn; // list of SVs in use; needed for QgsSatelliteInfo.inUse and other uses
-  bool satInfoComplete; // based on GPGSV sentences - to be used to determine when to graph signal and satellite position
+  bool satInfoComplete = false; // based on GPGSV sentences - to be used to determine when to graph signal and satellite position
+
+  /**
+   * Returns whether the connection information is valid
+   * \since QGIS 3.10
+   */
+  bool isValid() const;
+
+  /**
+   * Returns the fix status
+   * \since QGIS 3.10
+   */
+  FixStatus fixStatus() const;
 };
 
-/** \ingroup core
+/**
+ * \ingroup core
  * Abstract base class for connection to a GPS device*/
-class CORE_EXPORT QgsGPSConnection : public QObject
+class CORE_EXPORT QgsGpsConnection : public QObject
 {
 #ifdef SIP_RUN
 #include <qgsgpsdconnection.h>
@@ -73,8 +105,8 @@ class CORE_EXPORT QgsGPSConnection : public QObject
     SIP_CONVERT_TO_SUBCLASS_CODE
     if ( sipCpp->inherits( "QgsGpsdConnection" ) )
       sipType = sipType_QgsGpsdConnection;
-    else if ( sipCpp->inherits( "QgsNMEAConnection" ) )
-      sipType = sipType_QgsNMEAConnection;
+    else if ( sipCpp->inherits( "QgsNmeaConnection" ) )
+      sipType = sipType_QgsNmeaConnection;
     else
       sipType = NULL;
     SIP_END
@@ -91,11 +123,12 @@ class CORE_EXPORT QgsGPSConnection : public QObject
       GPSDataReceived
     };
 
-    /** Constructor
+    /**
+     * Constructor
         \param dev input device for the connection (e.g. serial device). The class takes ownership of the object
       */
-    QgsGPSConnection( QIODevice *dev SIP_TRANSFER );
-    virtual ~QgsGPSConnection();
+    QgsGpsConnection( QIODevice *dev SIP_TRANSFER );
+    ~QgsGpsConnection() override;
     //! Opens connection to device
     bool connect();
     //! Closes connection to device
@@ -108,17 +141,17 @@ class CORE_EXPORT QgsGPSConnection : public QObject
     Status status() const { return mStatus; }
 
     //! Returns the current gps information (lat, lon, etc.)
-    QgsGPSInformation currentGPSInformation() const { return mLastGPSInformation; }
+    QgsGpsInformation currentGPSInformation() const { return mLastGPSInformation; }
 
   signals:
-    void stateChanged( const QgsGPSInformation &info );
+    void stateChanged( const QgsGpsInformation &info );
     void nmeaSentenceReceived( const QString &substring ); // added to capture 'raw' data
 
   protected:
     //! Data source (e.g. serial device, socket, file,...)
     QIODevice *mSource = nullptr;
     //! Last state of the gps related variables (e.g. position, time, ...)
-    QgsGPSInformation mLastGPSInformation;
+    QgsGpsInformation mLastGPSInformation;
     //! Connection status
     Status mStatus;
 

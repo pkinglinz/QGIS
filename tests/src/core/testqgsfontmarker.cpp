@@ -36,7 +36,8 @@
 //qgis test includes
 #include "qgsrenderchecker.h"
 
-/** \ingroup UnitTests
+/**
+ * \ingroup UnitTests
  * This is a unit test for font marker symbol types.
  */
 class TestQgsFontMarkerSymbol : public QObject
@@ -44,13 +45,7 @@ class TestQgsFontMarkerSymbol : public QObject
     Q_OBJECT
 
   public:
-    TestQgsFontMarkerSymbol()
-      : mTestHasError( false )
-      , mpPointsLayer( 0 )
-      , mFontMarkerLayer( 0 )
-      , mMarkerSymbol( 0 )
-      , mSymbolRenderer( 0 )
-    {}
+    TestQgsFontMarkerSymbol() = default;
 
   private slots:
     void initTestCase();// will be called before the first testfunction is executed.
@@ -63,7 +58,7 @@ class TestQgsFontMarkerSymbol : public QObject
     void bounds();
 
   private:
-    bool mTestHasError;
+    bool mTestHasError =  false ;
 
     bool imageCheck( const QString &type );
     QgsMapSettings mMapSettings;
@@ -134,7 +129,7 @@ void TestQgsFontMarkerSymbol::fontMarkerSymbol()
   mFontMarkerLayer->setColor( Qt::blue );
   QFont font = QgsFontUtils::getStandardTestFont( QStringLiteral( "Bold" ) );
   mFontMarkerLayer->setFontFamily( font.family() );
-  mFontMarkerLayer->setCharacter( 'A' );
+  mFontMarkerLayer->setCharacter( QChar( 'A' ) );
   mFontMarkerLayer->setSize( 12 );
   QVERIFY( imageCheck( "fontmarker" ) );
 }
@@ -144,7 +139,7 @@ void TestQgsFontMarkerSymbol::fontMarkerSymbolStroke()
   mFontMarkerLayer->setColor( Qt::blue );
   QFont font = QgsFontUtils::getStandardTestFont( QStringLiteral( "Bold" ) );
   mFontMarkerLayer->setFontFamily( font.family() );
-  mFontMarkerLayer->setCharacter( 'A' );
+  mFontMarkerLayer->setCharacter( QChar( 'A' ) );
   mFontMarkerLayer->setSize( 30 );
   mFontMarkerLayer->setStrokeWidth( 3.5 );
   QVERIFY( imageCheck( "fontmarker_outline" ) );
@@ -156,7 +151,7 @@ void TestQgsFontMarkerSymbol::bounds()
   QFont font = QgsFontUtils::getStandardTestFont( QStringLiteral( "Bold" ) );
   mFontMarkerLayer->setFontFamily( font.family() );
   //use a narrow character to test that width is correctly calculated
-  mFontMarkerLayer->setCharacter( 'l' );
+  mFontMarkerLayer->setCharacter( QChar( 'l' ) );
   mFontMarkerLayer->setSize( 12 );
   mFontMarkerLayer->setStrokeWidth( 0 );
   mFontMarkerLayer->setDataDefinedProperty( QgsSymbolLayer::PropertySize, QgsProperty::fromExpression( QStringLiteral( "min(\"importance\" * 4.47214, 7.07106)" ) ) );

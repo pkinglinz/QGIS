@@ -16,15 +16,10 @@
 *                                                                         *
 ***************************************************************************
 """
-from builtins import str
 
 __author__ = 'Victor Olaya'
 __date__ = 'February 2013'
 __copyright__ = '(C) 2013, Victor Olaya'
-
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
 
 import os
 import posixpath
@@ -43,6 +38,7 @@ from qgis.core import (QgsApplication,
                        QgsProcessingParameterDefinition,
                        QgsProcessingParameterBoolean,
                        QgsProcessingParameterNumber,
+                       QgsProcessingParameterDistance,
                        QgsProcessingParameterFile,
                        QgsProcessingParameterBand,
                        QgsProcessingParameterString,
@@ -61,7 +57,7 @@ from qgis.PyQt.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QMessageBox
 
 def extractSchemaPath(filepath):
     """
-    Trys to find where the file is relative to the QGIS source code directory.
+    Tries to find where the file is relative to the QGIS source code directory.
     If it is already placed in the processing or QGIS testdata directory it will
     return an appropriate schema and relative filepath
 
@@ -135,7 +131,14 @@ def splitAlgIdAndParameters(command):
     """
     exp = re.compile(r"""['"](.*?)['"]\s*,\s*(.*)""")
     m = exp.search(command[len('processing.run('):-1])
-    return m.group(1), ast.literal_eval(m.group(2))
+    alg_id = m.group(1)
+    params = m.group(2)
+
+    # replace QgsCoordinateReferenceSystem('EPSG:4325') with just string value
+    exp = re.compile(r"""QgsCoordinateReferenceSystem\((['"].*?['"])\)""")
+    params = exp.sub('\\1', params)
+
+    return alg_id, ast.literal_eval(params)
 
 
 def createTest(text):
@@ -225,7 +228,7 @@ def createTest(text):
             params[param.name()] = token
         elif isinstance(param, QgsProcessingParameterBoolean):
             params[param.name()] = token
-        elif isinstance(param, QgsProcessingParameterNumber):
+        elif isinstance(param, (QgsProcessingParameterNumber, QgsProcessingParameterDistance)):
             if param.dataType() == QgsProcessingParameterNumber.Integer:
                 params[param.name()] = int(token)
             else:
@@ -247,6 +250,9 @@ def createTest(text):
     definition['params'] = params
 
     for i, out in enumerate([out for out in alg.destinationParameterDefinitions() if not out.flags() & QgsProcessingParameterDefinition.FlagHidden]):
+        if not out.name() in parameters:
+            continue
+
         token = parameters[out.name()]
 
         if isinstance(out, QgsProcessingParameterRasterDestination):
@@ -260,6 +266,15 @@ def createTest(text):
                 return
 
             dataset = gdal.Open(token, GA_ReadOnly)
+            if dataset is None:
+                QMessageBox.warning(None,
+                                    tr('Error'),
+                                    tr('Seems some outputs are temporary '
+                                       'files. To create test you need to '
+                                       'redirect all algorithm outputs to '
+                                       'files'))
+                return
+
             dataArray = nan_to_num(dataset.ReadAsArray(0))
             strhash = hashlib.sha224(dataArray.data).hexdigest()
 
@@ -299,7 +314,7 @@ class ShowTestDialog(QDialog):
         QDialog.__init__(self)
         self.setModal(True)
         self.resize(600, 400)
-        self.setWindowTitle(self.tr('Unit test'))
+        self.setWindowTitle(self.tr('Unit Test'))
         layout = QVBoxLayout()
         self.text = QTextEdit()
         self.text.setFontFamily("monospace")

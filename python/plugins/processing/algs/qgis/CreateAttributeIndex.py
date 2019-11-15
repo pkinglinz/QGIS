@@ -21,12 +21,10 @@ __author__ = 'Nyall Dawson'
 __date__ = 'November 2016'
 __copyright__ = '(C) 2016, Nyall Dawson'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 from qgis.core import (QgsVectorDataProvider,
                        QgsFields,
+                       QgsProcessing,
+                       QgsProcessingAlgorithm,
                        QgsProcessingParameterVectorLayer,
                        QgsProcessingParameterField,
                        QgsProcessingOutputVectorLayer)
@@ -43,15 +41,22 @@ class CreateAttributeIndex(QgisAlgorithm):
     def group(self):
         return self.tr('Vector general')
 
+    def groupId(self):
+        return 'vectorgeneral'
+
     def __init__(self):
         super().__init__()
 
     def initAlgorithm(self, config=None):
         self.addParameter(QgsProcessingParameterVectorLayer(self.INPUT,
-                                                            self.tr('Input Layer')))
+                                                            self.tr('Input Layer'),
+                                                            types=[QgsProcessing.TypeVector]))
         self.addParameter(QgsProcessingParameterField(self.FIELD,
                                                       self.tr('Attribute to index'), None, self.INPUT))
         self.addOutput(QgsProcessingOutputVectorLayer(self.OUTPUT, self.tr('Indexed layer')))
+
+    def flags(self):
+        return super().flags() | QgsProcessingAlgorithm.FlagNoThreading
 
     def name(self):
         return 'createattributeindex'

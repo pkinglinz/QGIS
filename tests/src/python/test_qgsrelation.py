@@ -9,8 +9,6 @@ the Free Software Foundation; either version 2 of the License, or
 __author__ = 'Matthias Kuhn'
 __date__ = '07/10/2013'
 __copyright__ = 'Copyright 2013, The QGIS Project'
-# This will get replaced with a git SHA1 when you do a git archive
-__revision__ = '$Format:%H$'
 
 import qgis  # NOQA
 
@@ -20,6 +18,7 @@ from qgis.core import (QgsVectorLayer,
                        QgsGeometry,
                        QgsPointXY,
                        QgsAttributeEditorElement,
+                       QgsAttributeEditorRelation,
                        QgsProject
                        )
 from utilities import unitTestDataPath
@@ -34,17 +33,17 @@ def createReferencingLayer():
                            "referencinglayer", "memory")
     pr = layer.dataProvider()
     f1 = QgsFeature()
-    f1.setFields(layer.pendingFields())
+    f1.setFields(layer.fields())
     f1.setAttributes(["test1", 123])
-    f1.setGeometry(QgsGeometry.fromPoint(QgsPointXY(100, 200)))
+    f1.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(100, 200)))
     f2 = QgsFeature()
-    f2.setFields(layer.pendingFields())
+    f2.setFields(layer.fields())
     f2.setAttributes(["test2", 123])
-    f2.setGeometry(QgsGeometry.fromPoint(QgsPointXY(101, 201)))
+    f2.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(101, 201)))
     f3 = QgsFeature()
-    f3.setFields(layer.pendingFields())
+    f3.setFields(layer.fields())
     f3.setAttributes(["foobar'bar", 124])
-    f3.setGeometry(QgsGeometry.fromPoint(QgsPointXY(101, 201)))
+    f3.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(101, 201)))
     assert pr.addFeatures([f1, f2, f3])
     return layer
 
@@ -55,17 +54,17 @@ def createReferencedLayer():
         "referencedlayer", "memory")
     pr = layer.dataProvider()
     f1 = QgsFeature()
-    f1.setFields(layer.pendingFields())
+    f1.setFields(layer.fields())
     f1.setAttributes(["foo", 123, 321])
-    f1.setGeometry(QgsGeometry.fromPoint(QgsPointXY(1, 1)))
+    f1.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(1, 1)))
     f2 = QgsFeature()
-    f2.setFields(layer.pendingFields())
+    f2.setFields(layer.fields())
     f2.setAttributes(["bar", 456, 654])
-    f2.setGeometry(QgsGeometry.fromPoint(QgsPointXY(2, 2)))
+    f2.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(2, 2)))
     f3 = QgsFeature()
-    f3.setFields(layer.pendingFields())
+    f3.setFields(layer.fields())
     f3.setAttributes(["foobar'bar", 789, 554])
-    f3.setGeometry(QgsGeometry.fromPoint(QgsPointXY(2, 3)))
+    f3.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(2, 3)))
     assert pr.addFeatures([f1, f2, f3])
     return layer
 
@@ -162,7 +161,10 @@ class TestQgsRelation(unittest.TestCase):
     def testValidRelationAfterChangingStyle(self):
         # load project
         myPath = os.path.join(unitTestDataPath(), 'relations.qgs')
-        QgsProject.instance().read(myPath)
+        p = QgsProject.instance()
+        self.assertTrue(p.read(myPath))
+        for l in p.mapLayers().values():
+            self.assertTrue(l.isValid())
 
         # get referenced layer
         relations = QgsProject.instance().relationManager().relations()
@@ -171,6 +173,7 @@ class TestQgsRelation(unittest.TestCase):
 
         # check that the relation is valid
         valid = False
+        self.assertEqual(len(referencedLayer.editFormConfig().tabs()[0].children()), 7)
         for tab in referencedLayer.editFormConfig().tabs():
             for t in tab.children():
                 if (t.type() == QgsAttributeEditorElement.AeTypeRelation):
@@ -179,6 +182,11 @@ class TestQgsRelation(unittest.TestCase):
 
         # update style
         referencedLayer.styleManager().setCurrentStyle("custom")
+
+        for l in p.mapLayers().values():
+            self.assertTrue(l.isValid())
+
+        self.assertEqual(len(referencedLayer.editFormConfig().tabs()[0].children()), 7)
 
         # check that the relation is still valid
         referencedLayer = relation.referencedLayer()

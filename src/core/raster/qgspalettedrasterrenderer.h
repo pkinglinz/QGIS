@@ -19,7 +19,7 @@
 #define QGSPALETTEDRASTERRENDERER_H
 
 #include "qgis_core.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include <QVector>
 
 #include "qgsrasterrenderer.h"
@@ -28,7 +28,8 @@
 class QColor;
 class QDomElement;
 
-/** \ingroup core
+/**
+ * \ingroup core
   * Renderer for paletted raster images.
 */
 class CORE_EXPORT QgsPalettedRasterRenderer: public QgsRasterRenderer
@@ -80,11 +81,13 @@ class CORE_EXPORT QgsPalettedRasterRenderer: public QgsRasterRenderer
      */
     ClassData classes() const;
 
-    /** Return optional category label
+    /**
+     * Returns optional category label
      * \since QGIS 2.1 */
     QString label( int idx ) const;
 
-    /** Set category label
+    /**
+     * Set category label
      *  \since QGIS 2.1 */
     void setLabel( int idx, const QString &label );
 
@@ -95,21 +98,22 @@ class CORE_EXPORT QgsPalettedRasterRenderer: public QgsRasterRenderer
     int band() const { return mBand; }
 
     void writeXml( QDomDocument &doc, QDomElement &parentElem ) const override;
-
     void legendSymbologyItems( QList< QPair< QString, QColor > > &symbolItems SIP_OUT ) const override;
-
     QList<int> usesBands() const override;
+    void toSld( QDomDocument &doc, QDomElement &element, const QgsStringMap &props = QgsStringMap() ) const override;
+    bool accept( QgsStyleEntityVisitorInterface *visitor ) const override;
 
     /**
      * Set the source color \a ramp. Ownership is transferred to the renderer.
-     * \since QGIS 3.0
      * \see sourceColorRamp()
+     * \since QGIS 3.0
      */
     void setSourceColorRamp( QgsColorRamp *ramp SIP_TRANSFER );
 
-    /** Get the source color ramp
-     * \since QGIS 3.0
+    /**
+     * Gets the source color ramp
      * \see setSourceColorRamp()
+     * \since QGIS 3.0
      */
     QgsColorRamp *sourceColorRamp() const;
 
@@ -121,23 +125,23 @@ class CORE_EXPORT QgsPalettedRasterRenderer: public QgsRasterRenderer
 
     /**
      * Converts a \a string containing a color table or class data to to paletted renderer class data.
-     * \since QGIS 3.0
      * \see classDataFromFile()
      * \see classDataToString()
+     * \since QGIS 3.0
      */
     static QgsPalettedRasterRenderer::ClassData classDataFromString( const QString &string );
 
     /**
      * Opens a color table file and returns corresponding paletted renderer class data.
-     * \since QGIS 3.0
      * \see classDataFromString()
+     * \since QGIS 3.0
      */
     static QgsPalettedRasterRenderer::ClassData classDataFromFile( const QString &path );
 
     /**
      * Converts classes to a string representation, using the .clr/gdal color table file format.
-     * \since QGIS 3.0
      * \see classDataFromString()
+     * \since QGIS 3.0
      */
     static QString classDataToString( const QgsPalettedRasterRenderer::ClassData &classes );
 

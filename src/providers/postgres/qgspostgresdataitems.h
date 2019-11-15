@@ -18,10 +18,12 @@
 #include <QMainWindow>
 
 #include "qgsdataitem.h"
+#include "qgsdataitemprovider.h"
 
 #include "qgspostgresconn.h"
 #include "qgsmimedatautils.h"
 #include "qgsvectorlayerexporter.h"
+#include "qgswkbtypes.h"
 
 class QgsPGRootItem;
 class QgsPGConnectionItem;
@@ -36,19 +38,12 @@ class QgsPGRootItem : public QgsDataCollectionItem
 
     QVector<QgsDataItem *> createChildren() override;
 
-#ifdef HAVE_GUI
-    virtual QWidget *paramWidget() override;
-
-    QList<QAction *> actions( QWidget *parent ) override;
-#endif
+    QVariant sortKey() const override { return 3; }
 
     static QMainWindow *sMainWindow;
 
   public slots:
-#ifdef HAVE_GUI
     void onConnectionsChanged();
-    void newConnection();
-#endif
 };
 
 class QgsPGConnectionItem : public QgsDataCollectionItem
@@ -58,13 +53,7 @@ class QgsPGConnectionItem : public QgsDataCollectionItem
     QgsPGConnectionItem( QgsDataItem *parent, const QString &name, const QString &path );
 
     QVector<QgsDataItem *> createChildren() override;
-    virtual bool equal( const QgsDataItem *other ) override;
-#ifdef HAVE_GUI
-    QList<QAction *> actions( QWidget *parent ) override;
-#endif
-
-    virtual bool acceptDrop() override { return true; }
-    virtual bool handleDrop( const QMimeData *data, Qt::DropAction action ) override;
+    bool equal( const QgsDataItem *other ) override;
 
     bool handleDrop( const QMimeData *data, const QString &toSchema );
 
@@ -72,12 +61,6 @@ class QgsPGConnectionItem : public QgsDataCollectionItem
     void addGeometryColumn( const QgsPostgresLayerProperty & );
 
   public slots:
-#ifdef HAVE_GUI
-    void editConnection();
-    void deleteConnection();
-    void refreshConnection();
-    void createSchema();
-#endif
 
     // refresh specified schema or all schemas if schema name is empty
     void refreshSchema( const QString &schema );
@@ -91,18 +74,8 @@ class QgsPGSchemaItem : public QgsDataCollectionItem
     QgsPGSchemaItem( QgsDataItem *parent, const QString &connectionName, const QString &name, const QString &path );
 
     QVector<QgsDataItem *> createChildren() override;
-#ifdef HAVE_GUI
-    QList<QAction *> actions( QWidget *parent ) override;
-#endif
 
-    virtual bool acceptDrop() override { return true; }
-    virtual bool handleDrop( const QMimeData *data, Qt::DropAction action ) override;
-
-  public slots:
-#ifdef HAVE_GUI
-    void deleteSchema();
-    void renameSchema();
-#endif
+    QString connectionName() const { return mConnectionName; }
 
   private:
     QgsPGLayerItem *createLayer( QgsPostgresLayerProperty layerProperty );
@@ -119,20 +92,23 @@ class QgsPGLayerItem : public QgsLayerItem
 
     QString createUri();
 
-#ifdef HAVE_GUI
-    QList<QAction *> actions( QWidget *parent ) override;
-#endif
-    virtual QString comments() const override;
+    QString comments() const override;
 
-  public slots:
-#ifdef HAVE_GUI
-    void deleteLayer();
-    void renameLayer();
-    void truncateTable();
-#endif
+    const QgsPostgresLayerProperty &layerInfo() const { return mLayerProperty; }
 
   private:
     QgsPostgresLayerProperty mLayerProperty;
+};
+
+//! Provider for Postgres data item
+class QgsPostgresDataItemProvider : public QgsDataItemProvider
+{
+  public:
+    QString name() override;
+
+    int capabilities() const override;
+
+    QgsDataItem *createDataItem( const QString &pathIn, QgsDataItem *parentItem ) override;
 };
 
 #endif // QGSPOSTGRESDATAITEMS_H

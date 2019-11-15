@@ -21,7 +21,8 @@
 
 SIP_NO_FILE
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsValueMapWidgetFactory
  * \note not available in Python bindings
  */
@@ -29,11 +30,17 @@ SIP_NO_FILE
 class GUI_EXPORT QgsValueMapWidgetFactory : public QgsEditorWidgetFactory
 {
   public:
+
+    /**
+     * Constructor for QgsValueMapWidgetFactory, where \a name is a human-readable
+     * name for the factory.
+     */
     QgsValueMapWidgetFactory( const QString &name );
+
     QgsEditorWidgetWrapper *create( QgsVectorLayer *vl, int fieldIdx, QWidget *editor, QWidget *parent ) const override;
     QgsSearchWidgetWrapper *createSearchWidget( QgsVectorLayer *vl, int fieldIdx, QWidget *parent ) const override;
     QgsEditorConfigWidget *configWidget( QgsVectorLayer *vl, int fieldIdx, QWidget *parent ) const override;
-    virtual QHash<const char *, int> supportedWidgetTypes() override;
+    QHash<const char *, int> supportedWidgetTypes() override;
 };
 
 #endif // QGSVALUEMAPWIDGETFACTORY_H

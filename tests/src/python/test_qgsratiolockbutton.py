@@ -9,8 +9,6 @@ the Free Software Foundation; either version 2 of the License, or
 __author__ = 'Nyall Dawson'
 __date__ = '18/07/2017'
 __copyright__ = 'Copyright 2017, The QGIS Project'
-# This will get replaced with a git SHA1 when you do a git archive
-__revision__ = '$Format:%H$'
 
 import qgis  # NOQA
 
@@ -98,6 +96,37 @@ class TestQgsRatioLockButton(unittest.TestCase):
         spin_width.setValue(200)
         self.assertEqual(spin_width.value(), 200)
         self.assertEqual(spin_height.value(), 1000)
+
+    def testResetRatio(self):
+        w = qgis.gui.QgsRatioLockButton()
+
+        spin_width = QDoubleSpinBox()
+        spin_width.setMaximum(100000)
+        spin_height = QDoubleSpinBox()
+        spin_height.setMaximum(100000)
+
+        spin_width.setValue(1000)
+        w.setWidthSpinBox(spin_width)
+        spin_height.setValue(500)
+        w.setHeightSpinBox(spin_height)
+
+        w.setLocked(True)
+        spin_width.setValue(2000)
+        self.assertEqual(spin_height.value(), 1000)
+
+        spin_width.blockSignals(True)
+        spin_width.setValue(1000)
+        spin_width.blockSignals(False)
+
+        spin_height.setValue(2000)
+        self.assertEqual(spin_width.value(), 4000)  # signals were blocked, so ratio wasn't updated
+
+        spin_width.blockSignals(True)
+        spin_width.setValue(2000)
+        spin_width.blockSignals(False)
+        w.resetRatio() # since signals were blocked, we need to manually reset ratio
+        spin_height.setValue(1000)
+        self.assertEqual(spin_width.value(), 1000)
 
 
 if __name__ == '__main__':

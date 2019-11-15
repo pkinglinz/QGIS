@@ -21,19 +21,16 @@ __author__ = 'Victor Olaya'
 __date__ = 'August 2012'
 __copyright__ = '(C) 2012, Victor Olaya'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 import os
 
 from qgis.PyQt.QtGui import QIcon
 
-from qgis.core import (QgsFeature,
+from qgis.core import (QgsApplication,
+                       QgsFeature,
                        QgsGeometry,
                        QgsGeometryCollection,
-                       QgsPolygonV2,
-                       QgsMultiPolygonV2,
+                       QgsPolygon,
+                       QgsMultiPolygon,
                        QgsMultiSurface,
                        QgsWkbTypes,
                        QgsFeatureSink,
@@ -51,13 +48,19 @@ pluginPath = os.path.split(os.path.split(os.path.dirname(__file__))[0])[0]
 class LinesToPolygons(QgisFeatureBasedAlgorithm):
 
     def icon(self):
-        return QIcon(os.path.join(pluginPath, 'images', 'ftools', 'to_lines.png'))
+        return QgsApplication.getThemeIcon("/algorithms/mAlgorithmLineToPolygon.svg")
+
+    def svgIconPath(self):
+        return QgsApplication.iconPath("/algorithms/mAlgorithmLineToPolygon.svg")
 
     def tags(self):
         return self.tr('line,polygon,convert').split(',')
 
     def group(self):
         return self.tr('Vector geometry')
+
+    def groupId(self):
+        return 'vectorgeometry'
 
     def __init__(self):
         super().__init__()
@@ -74,18 +77,24 @@ class LinesToPolygons(QgisFeatureBasedAlgorithm):
     def outputType(self):
         return QgsProcessing.TypeVectorPolygon
 
+    def inputLayerTypes(self):
+        return [QgsProcessing.TypeVectorLine]
+
     def outputWkbType(self, input_wkb_type):
         return self.convertWkbToPolygons(input_wkb_type)
 
-    def processFeature(self, feature, feedback):
+    def processFeature(self, feature, context, feedback):
         if feature.hasGeometry():
             feature.setGeometry(QgsGeometry(self.convertToPolygons(feature.geometry())))
             if feature.geometry().isEmpty():
                 feedback.reportError(self.tr("One or more line ignored due to geometry not having a minimum of three vertices."))
-        return feature
+        return [feature]
+
+    def supportInPlaceEdit(self, layer):
+        return False
 
     def convertWkbToPolygons(self, wkb):
-        multi_wkb = None
+        multi_wkb = QgsWkbTypes.NoGeometry
         if QgsWkbTypes.singleType(QgsWkbTypes.flatType(wkb)) == QgsWkbTypes.LineString:
             multi_wkb = QgsWkbTypes.MultiPolygon
         elif QgsWkbTypes.singleType(QgsWkbTypes.flatType(wkb)) == QgsWkbTypes.CompoundCurve:
@@ -98,11 +107,11 @@ class LinesToPolygons(QgisFeatureBasedAlgorithm):
         return multi_wkb
 
     def convertToPolygons(self, geometry):
-        surfaces = self.getSurfaces(geometry.geometry())
+        surfaces = self.getSurfaces(geometry.constGet())
         output_wkb = self.convertWkbToPolygons(geometry.wkbType())
         out_geom = None
         if QgsWkbTypes.flatType(output_wkb) == QgsWkbTypes.MultiPolygon:
-            out_geom = QgsMultiPolygonV2()
+            out_geom = QgsMultiPolygon()
         else:
             out_geom = QgsMultiSurface()
 
@@ -120,7 +129,7 @@ class LinesToPolygons(QgisFeatureBasedAlgorithm):
         else:
             # not collection
             if geometry.vertexCount() > 2:
-                surface = QgsPolygonV2()
+                surface = QgsPolygon()
                 surface.setExteriorRing(geometry.clone())
                 surfaces.append(surface)
 

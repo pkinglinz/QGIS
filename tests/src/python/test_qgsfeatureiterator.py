@@ -9,8 +9,6 @@ the Free Software Foundation; either version 2 of the License, or
 __author__ = 'Matthias Kuhn'
 __date__ = '18/09/2013'
 __copyright__ = 'Copyright 2013, The QGIS Project'
-# This will get replaced with a git SHA1 when you do a git archive
-__revision__ = '$Format:%H$'
 
 import qgis  # NOQA
 
@@ -103,13 +101,13 @@ class TestQgsFeatureIterator(unittest.TestCase):
 
     def addFeatures(self, vl):
         feat = QgsFeature()
-        fields = vl.pendingFields()
+        fields = vl.fields()
         feat.setFields(fields)
         feat['Staff'] = 4
         vl.addFeature(feat)
 
         feat = QgsFeature()
-        fields = vl.pendingFields()
+        fields = vl.fields()
         feat.setFields(fields)
         feat['Staff'] = 2
         vl.addFeature(feat)
@@ -142,6 +140,17 @@ class TestQgsFeatureIterator(unittest.TestCase):
         self.assertEqual(fet['exp2'], -156)
         self.assertEqual(fet['exp1'], -234)
 
+    def test_ExpressionFieldDependingOnOtherFields(self):
+        myShpFile = os.path.join(TEST_DATA_DIR, 'points.shp')
+        layer = QgsVectorLayer(myShpFile, 'Points', 'ogr')
+        self.assertTrue(layer.isValid())
+
+        idx = layer.addExpressionField("eval('Class')", QgsField('exp1', QVariant.String))  # NOQA
+
+        fet = next(layer.getFeatures(QgsFeatureRequest().setFlags(QgsFeatureRequest.NoGeometry).setSubsetOfAttributes(['exp1'], layer.fields())))
+
+        self.assertEqual(fet['exp1'], 'Jet')
+
     def test_ExpressionFieldNestedCircular(self):
         """ test circular virtual field definitions """
 
@@ -149,7 +158,7 @@ class TestQgsFeatureIterator(unittest.TestCase):
         layer = QgsVectorLayer(myShpFile, 'Points', 'ogr')
         self.assertTrue(layer.isValid())
 
-        cnt = layer.pendingFields().count()  # NOQA
+        cnt = layer.fields().count()  # NOQA
         idx = layer.addExpressionField('"exp3"*2', QgsField('exp1', QVariant.LongLong))  # NOQA
         idx = layer.addExpressionField('"exp1"-1', QgsField('exp2', QVariant.LongLong))  # NOQA
         idx = layer.addExpressionField('"exp2"*3', QgsField('exp3', QVariant.LongLong))  # NOQA

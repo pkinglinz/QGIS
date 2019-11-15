@@ -16,7 +16,7 @@
 #ifndef QGSLAYOUTADDPAGESDIALOG_H
 #define QGSLAYOUTADDPAGESDIALOG_H
 
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgis_gui.h"
 #include "ui_qgslayoutnewpagedialog.h"
 
@@ -44,7 +44,7 @@ class QgsLayoutAddPagesDialog : public QDialog, private Ui::QgsLayoutNewPageDial
     /**
      * Constructor for QgsLayoutAddPagesDialog.
      */
-    QgsLayoutAddPagesDialog( QWidget *parent = nullptr, Qt::WindowFlags flags = 0 );
+    QgsLayoutAddPagesDialog( QWidget *parent = nullptr, Qt::WindowFlags flags = nullptr );
 
     /**
      * Sets the \a layout associated with the dialog. This allows the dialog
@@ -79,6 +79,7 @@ class QgsLayoutAddPagesDialog : public QDialog, private Ui::QgsLayoutNewPageDial
     void pageSizeChanged( int index );
     void orientationChanged( int index );
     void setToCustomSize();
+    void showHelp();
 
   private:
 

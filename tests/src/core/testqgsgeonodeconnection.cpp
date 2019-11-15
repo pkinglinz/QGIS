@@ -21,7 +21,8 @@
 #include "qgslogger.h"
 #include "qgsmessagelog.h"
 
-/** \ingroup UnitTests
+/**
+ * \ingroup UnitTests
  * This is a unit test for the QgsGeoConnection class.
  */
 
@@ -146,12 +147,12 @@ void TestQgsGeoNodeConnection::testStyleAPI()
   QgsGeoNodeRequest geonodeRequest( mKartozaGeoNodeQGISServerURL, true );
   QgsGeoNodeStyle defaultStyle = geonodeRequest.fetchDefaultStyleBlocking( QStringLiteral( "airports" ) );
   QVERIFY( !defaultStyle.name.isEmpty() );
-  QVERIFY( defaultStyle.body.toString().startsWith( QStringLiteral( "<qgis" ) ) );
+  QVERIFY( defaultStyle.body.toString().startsWith( QLatin1String( "<qgis" ) ) );
   QVERIFY( defaultStyle.body.toString().contains( QStringLiteral( "</qgis>" ) ) );
 
   QgsGeoNodeStyle geoNodeStyle = geonodeRequest.fetchStyleBlocking( QStringLiteral( "76" ) );
   QVERIFY( !geoNodeStyle.name.isEmpty() );
-  QVERIFY( geoNodeStyle.body.toString().startsWith( QStringLiteral( "<qgis" ) ) );
+  QVERIFY( geoNodeStyle.body.toString().startsWith( QLatin1String( "<qgis" ) ) );
   QVERIFY( geoNodeStyle.body.toString().contains( QStringLiteral( "</qgis>" ) ) );
 
   QList<QgsGeoNodeStyle> geoNodeStyles = geonodeRequest.fetchStylesBlocking( QStringLiteral( "airports" ) );

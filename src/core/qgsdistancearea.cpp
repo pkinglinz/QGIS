@@ -33,6 +33,9 @@
 #include "qgssurface.h"
 #include "qgsunittypes.h"
 #include "qgsexception.h"
+#include "qgsmultilinestring.h"
+
+#include <geodesic.h>
 
 #define DEG2RAD(x)    ((x)*M_PI/180)
 #define RAD2DEG(r) (180.0 * (r) / M_PI)
@@ -44,26 +47,28 @@ QgsDistanceArea::QgsDistanceArea()
   mSemiMajor = -1.0;
   mSemiMinor = -1.0;
   mInvFlattening = -1.0;
-  setSourceCrs( QgsCoordinateReferenceSystem::fromSrsId( GEOCRS_ID ) ); // WGS 84
-  setEllipsoid( GEO_NONE );
+  QgsCoordinateTransformContext context; // this is ok - by default we have a source/dest of WGS84, so no reprojection takes place
+  setSourceCrs( QgsCoordinateReferenceSystem::fromSrsId( GEOCRS_ID ), context ); // WGS 84
+  setEllipsoid( geoNone() );
 }
 
 bool QgsDistanceArea::willUseEllipsoid() const
 {
-  return mEllipsoid != GEO_NONE;
+  return mEllipsoid != geoNone();
 }
 
-void QgsDistanceArea::setSourceCrs( const QgsCoordinateReferenceSystem &srcCRS )
+void QgsDistanceArea::setSourceCrs( const QgsCoordinateReferenceSystem &srcCRS, const QgsCoordinateTransformContext &context )
 {
+  mCoordTransform.setContext( context );
   mCoordTransform.setSourceCrs( srcCRS );
 }
 
 bool QgsDistanceArea::setEllipsoid( const QString &ellipsoid )
 {
   // Shortcut if ellipsoid is none.
-  if ( ellipsoid == GEO_NONE )
+  if ( ellipsoid == geoNone() )
   {
-    mEllipsoid = GEO_NONE;
+    mEllipsoid = geoNone();
     return true;
   }
 
@@ -158,7 +163,7 @@ double QgsDistanceArea::measure( const QgsAbstractGeometry *geomV2, MeasureType 
       if ( !surface )
         return 0.0;
 
-      QgsPolygonV2 *polygon = surface->surfaceToPolygon();
+      QgsPolygon *polygon = surface->surfaceToPolygon();
 
       double area = 0;
       const QgsCurve *outerRing = polygon->exteriorRing();
@@ -180,7 +185,7 @@ double QgsDistanceArea::measureArea( const QgsGeometry &geometry ) const
   if ( geometry.isNull() )
     return 0.0;
 
-  const QgsAbstractGeometry *geomV2 = geometry.geometry();
+  const QgsAbstractGeometry *geomV2 = geometry.constGet();
   return measure( geomV2, Area );
 }
 
@@ -189,7 +194,7 @@ double QgsDistanceArea::measureLength( const QgsGeometry &geometry ) const
   if ( geometry.isNull() )
     return 0.0;
 
-  const QgsAbstractGeometry *geomV2 = geometry.geometry();
+  const QgsAbstractGeometry *geomV2 = geometry.constGet();
   return measure( geomV2, Length );
 }
 
@@ -198,7 +203,7 @@ double QgsDistanceArea::measurePerimeter( const QgsGeometry &geometry ) const
   if ( geometry.isNull() )
     return 0.0;
 
-  const QgsAbstractGeometry *geomV2 = geometry.geometry();
+  const QgsAbstractGeometry *geomV2 = geometry.constGet();
   if ( !geomV2 || geomV2->dimension() < 2 )
   {
     return 0.0;
@@ -210,7 +215,7 @@ double QgsDistanceArea::measurePerimeter( const QgsGeometry &geometry ) const
   }
 
   //create list with (single) surfaces
-  QList< const QgsSurface * > surfaces;
+  QVector< const QgsSurface * > surfaces;
   const QgsSurface *surf = qgsgeometry_cast<const QgsSurface *>( geomV2 );
   if ( surf )
   {
@@ -227,7 +232,7 @@ double QgsDistanceArea::measurePerimeter( const QgsGeometry &geometry ) const
   }
 
   double length = 0;
-  QList<const QgsSurface *>::const_iterator surfaceIt = surfaces.constBegin();
+  QVector<const QgsSurface *>::const_iterator surfaceIt = surfaces.constBegin();
   for ( ; surfaceIt != surfaces.constEnd(); ++surfaceIt )
   {
     if ( !*surfaceIt )
@@ -235,7 +240,7 @@ double QgsDistanceArea::measurePerimeter( const QgsGeometry &geometry ) const
       continue;
     }
 
-    QgsPolygonV2 *poly = ( *surfaceIt )->surfaceToPolygon();
+    QgsPolygon *poly = ( *surfaceIt )->surfaceToPolygon();
     const QgsCurve *outerRing = poly->exteriorRing();
     if ( outerRing )
     {
@@ -259,13 +264,13 @@ double QgsDistanceArea::measureLine( const QgsCurve *curve ) const
   }
 
   QgsPointSequence linePointsV2;
-  QList<QgsPointXY> linePoints;
+  QVector<QgsPointXY> linePoints;
   curve->points( linePointsV2 );
   QgsGeometry::convertPointList( linePointsV2, linePoints );
   return measureLine( linePoints );
 }
 
-double QgsDistanceArea::measureLine( const QList<QgsPointXY> &points ) const
+double QgsDistanceArea::measureLine( const QVector<QgsPointXY> &points ) const
 {
   if ( points.size() < 2 )
     return 0;
@@ -280,7 +285,7 @@ double QgsDistanceArea::measureLine( const QList<QgsPointXY> &points ) const
     else
       p1 = points[0];
 
-    for ( QList<QgsPointXY>::const_iterator i = points.begin(); i != points.end(); ++i )
+    for ( QVector<QgsPointXY>::const_iterator i = points.constBegin(); i != points.constEnd(); ++i )
     {
       if ( willUseEllipsoid() )
       {
@@ -300,7 +305,7 @@ double QgsDistanceArea::measureLine( const QList<QgsPointXY> &points ) const
   }
   catch ( QgsCsException &cse )
   {
-    Q_UNUSED( cse );
+    Q_UNUSED( cse )
     QgsMessageLog::logMessage( QObject::tr( "Caught a coordinate system exception while trying to transform a point. Unable to calculate line length." ) );
     return 0.0;
   }
@@ -315,30 +320,30 @@ double QgsDistanceArea::measureLine( const QgsPointXY &p1, const QgsPointXY &p2 
   {
     QgsPointXY pp1 = p1, pp2 = p2;
 
-    QgsDebugMsgLevel( QString( "Measuring from %1 to %2" ).arg( p1.toString( 4 ), p2.toString( 4 ) ), 3 );
+    QgsDebugMsgLevel( QStringLiteral( "Measuring from %1 to %2" ).arg( p1.toString( 4 ), p2.toString( 4 ) ), 3 );
     if ( willUseEllipsoid() )
     {
-      QgsDebugMsgLevel( QString( "Ellipsoidal calculations is enabled, using ellipsoid %1" ).arg( mEllipsoid ), 4 );
-      QgsDebugMsgLevel( QString( "From proj4 : %1" ).arg( mCoordTransform.sourceCrs().toProj4() ), 4 );
-      QgsDebugMsgLevel( QString( "To   proj4 : %1" ).arg( mCoordTransform.destinationCrs().toProj4() ), 4 );
+      QgsDebugMsgLevel( QStringLiteral( "Ellipsoidal calculations is enabled, using ellipsoid %1" ).arg( mEllipsoid ), 4 );
+      QgsDebugMsgLevel( QStringLiteral( "From proj4 : %1" ).arg( mCoordTransform.sourceCrs().toProj4() ), 4 );
+      QgsDebugMsgLevel( QStringLiteral( "To   proj4 : %1" ).arg( mCoordTransform.destinationCrs().toProj4() ), 4 );
       pp1 = mCoordTransform.transform( p1 );
       pp2 = mCoordTransform.transform( p2 );
-      QgsDebugMsgLevel( QString( "New points are %1 and %2, calculating..." ).arg( pp1.toString( 4 ), pp2.toString( 4 ) ), 4 );
+      QgsDebugMsgLevel( QStringLiteral( "New points are %1 and %2, calculating..." ).arg( pp1.toString( 4 ), pp2.toString( 4 ) ), 4 );
       result = computeDistanceBearing( pp1, pp2 );
     }
     else
     {
-      QgsDebugMsgLevel( "Cartesian calculation on canvas coordinates", 4 );
+      QgsDebugMsgLevel( QStringLiteral( "Cartesian calculation on canvas coordinates" ), 4 );
       result = p2.distance( p1 );
     }
   }
   catch ( QgsCsException &cse )
   {
-    Q_UNUSED( cse );
+    Q_UNUSED( cse )
     QgsMessageLog::logMessage( QObject::tr( "Caught a coordinate system exception while trying to transform a point. Unable to calculate line length." ) );
     result = 0.0;
   }
-  QgsDebugMsgLevel( QString( "The result was %1" ).arg( result ), 3 );
+  QgsDebugMsgLevel( QStringLiteral( "The result was %1" ).arg( result ), 3 );
   return result;
 }
 
@@ -361,19 +366,19 @@ double QgsDistanceArea::measureLineProjected( const QgsPointXY &p1, double dista
     }
     p2 = p1.project( distance, azimuth );
   }
-  QgsDebugMsgLevel( QString( "Converted distance of %1 %2 to %3 distance %4 %5, using azimuth[%6] from point[%7] to point[%8] sourceCrs[%9] mEllipsoid[%10] isGeographic[%11] [%12]" )
-                    .arg( QString::number( distance, 'f', 7 ) )
-                    .arg( QgsUnitTypes::toString( QgsUnitTypes::DistanceMeters ) )
-                    .arg( QString::number( result, 'f', 7 ) )
-                    .arg( ( ( mCoordTransform.sourceCrs().isGeographic() ) == 1 ? QString( "Geographic" ) : QString( "Cartesian" ) ) )
-                    .arg( QgsUnitTypes::toString( sourceCrs().mapUnits() ) )
+  QgsDebugMsgLevel( QStringLiteral( "Converted distance of %1 %2 to %3 distance %4 %5, using azimuth[%6] from point[%7] to point[%8] sourceCrs[%9] mEllipsoid[%10] isGeographic[%11] [%12]" )
+                    .arg( QString::number( distance, 'f', 7 ),
+                          QgsUnitTypes::toString( QgsUnitTypes::DistanceMeters ),
+                          QString::number( result, 'f', 7 ),
+                          mCoordTransform.sourceCrs().isGeographic() ? QStringLiteral( "Geographic" ) : QStringLiteral( "Cartesian" ),
+                          QgsUnitTypes::toString( sourceCrs().mapUnits() ) )
                     .arg( azimuth )
-                    .arg( p1.wellKnownText() )
-                    .arg( p2.wellKnownText() )
-                    .arg( sourceCrs().description() )
-                    .arg( mEllipsoid )
+                    .arg( p1.asWkt(),
+                          p2.asWkt(),
+                          sourceCrs().description(),
+                          mEllipsoid )
                     .arg( sourceCrs().isGeographic() )
-                    .arg( QString( "SemiMajor[%1] SemiMinor[%2] InvFlattening[%3] " ).arg( QString::number( mSemiMajor, 'f', 7 ) ).arg( QString::number( mSemiMinor, 'f', 7 ) ).arg( QString::number( mInvFlattening, 'f', 7 ) ) ), 4 );
+                    .arg( QStringLiteral( "SemiMajor[%1] SemiMinor[%2] InvFlattening[%3] " ).arg( QString::number( mSemiMajor, 'f', 7 ), QString::number( mSemiMinor, 'f', 7 ), QString::number( mInvFlattening, 'f', 7 ) ) ), 4 );
   if ( projectedPoint )
   {
     *projectedPoint = QgsPointXY( p2 );
@@ -452,6 +457,335 @@ QgsPointXY QgsDistanceArea::computeSpheroidProject(
   return QgsPointXY( RAD2DEG( lambda2 ), RAD2DEG( lat2 ) );
 }
 
+double QgsDistanceArea::latitudeGeodesicCrossesAntimeridian( const QgsPointXY &pp1, const QgsPointXY &pp2, double &fractionAlongLine ) const
+{
+  QgsPointXY p1 = pp1;
+  QgsPointXY p2 = pp2;
+  if ( p1.x() < -120 )
+    p1.setX( p1.x() + 360 );
+  if ( p2.x() < -120 )
+    p2.setX( p2.x() + 360 );
+
+  // we need p2.x() > 180 and p1.x() < 180
+  double p1x = p1.x() < 180 ? p1.x() : p2.x();
+  double p1y = p1.x() < 180 ? p1.y() : p2.y();
+  double p2x = p1.x() < 180 ? p2.x() : p1.x();
+  double p2y = p1.x() < 180 ? p2.y() : p1.y();
+  // lat/lon are our candidate intersection position - we want this to get as close to 180 as possible
+  // the first candidate is p2
+  double lat = p2y;
+  double lon = p2x;
+
+  if ( mEllipsoid == geoNone() )
+  {
+    fractionAlongLine = ( 180 - p1x ) / ( p2x - p1x );
+    if ( p1.x() >= 180 )
+      fractionAlongLine = 1 - fractionAlongLine;
+    return p1y + ( 180 - p1x ) / ( p2x - p1x ) * ( p2y - p1y );
+  }
+
+  geod_geodesic geod;
+  geod_init( &geod, mSemiMajor, 1 / mInvFlattening );
+
+  geod_geodesicline line;
+  geod_inverseline( &line, &geod, p1y, p1x, p2y, p2x, GEOD_ALL );
+
+  const double totalDist = line.s13;
+  double intersectionDist = line.s13;
+
+  int iterations = 0;
+  double t = 0;
+  // iterate until our intersection candidate is within ~1 mm of the antimeridian (or too many iterations happened)
+  while ( std::fabs( lon - 180.0 ) > 0.00000001 && iterations < 100 )
+  {
+    if ( iterations > 0 && std::fabs( p2x - p1x ) > 5 )
+    {
+      // if we have too large a range of longitudes, we use a binary search to narrow the window -- this ensures we will converge
+      if ( lon < 180 )
+      {
+        p1x = lon;
+        p1y = lat;
+      }
+      else
+      {
+        p2x = lon;
+        p2y = lat;
+      }
+      QgsDebugMsgLevel( QStringLiteral( "Narrowed window to %1, %2 - %3, %4" ).arg( p1x ).arg( p1y ).arg( p2x ).arg( p2y ), 4 );
+
+      geod_inverseline( &line, &geod, p1y, p1x, p2y, p2x, GEOD_ALL );
+      intersectionDist = line.s13 * 0.5;
+    }
+    else
+    {
+      // we have a sufficiently narrow window -- use Newton's method
+      // adjust intersection distance by fraction of how close the previous candidate was to 180 degrees longitude -
+      // this helps us close in to the correct longitude quickly
+      intersectionDist *= ( 180.0 - p1x ) / ( lon - p1x );
+    }
+
+    // now work out the point on the geodesic this far from p1 - this becomes our new candidate for crossing the antimeridian
+
+    geod_position( &line, intersectionDist, &lat, &lon, &t );
+    // we don't want to wrap longitudes > 180 around)
+    if ( lon < 0 )
+      lon += 360;
+
+    iterations++;
+    QgsDebugMsgLevel( QStringLiteral( "After %1 iterations lon is %2, lat is %3, dist from p1: %4" ).arg( iterations ).arg( lon ).arg( lat ).arg( intersectionDist ), 4 );
+  }
+
+  fractionAlongLine = intersectionDist / totalDist;
+  if ( p1.x() >= 180 )
+    fractionAlongLine = 1 - fractionAlongLine;
+
+  // either converged on 180 longitude or hit too many iterations
+  return lat;
+}
+
+QgsGeometry QgsDistanceArea::splitGeometryAtAntimeridian( const QgsGeometry &geometry ) const
+{
+  if ( QgsWkbTypes::geometryType( geometry.wkbType() ) != QgsWkbTypes::LineGeometry )
+    return geometry;
+
+  QgsGeometry g = geometry;
+  // TODO - avoid segmentization of curved geometries (if this is even possible!)
+  if ( QgsWkbTypes::isCurvedType( g.wkbType() ) )
+    g.convertToStraightSegment();
+
+  std::unique_ptr< QgsMultiLineString > res = qgis::make_unique< QgsMultiLineString >();
+  for ( auto part = g.const_parts_begin(); part != g.const_parts_end(); ++part )
+  {
+    const QgsLineString *line = qgsgeometry_cast< const QgsLineString * >( *part );
+    if ( !line )
+      continue;
+    if ( line->isEmpty() )
+    {
+      continue;
+    }
+
+    std::unique_ptr< QgsLineString > l = qgis::make_unique< QgsLineString >();
+    try
+    {
+      double x = 0;
+      double y = 0;
+      double z = 0;
+      double m = 0;
+      QVector< QgsPoint > newPoints;
+      newPoints.reserve( line->numPoints() );
+      double prevLon = 0;
+      double prevLat = 0;
+      double lon = 0;
+      double lat = 0;
+      double prevZ = 0;
+      double prevM = 0;
+      for ( int i = 0; i < line->numPoints(); i++ )
+      {
+        QgsPoint p = line->pointN( i );
+        x = p.x();
+        if ( mCoordTransform.sourceCrs().isGeographic() )
+        {
+          x = std::fmod( x, 360.0 );
+          if ( x > 180 )
+            x -= 360;
+          p.setX( x );
+        }
+        y = p.y();
+        lon = x;
+        lat = y;
+        mCoordTransform.transformInPlace( lon, lat, z );
+
+        //test if we crossed the antimeridian in this segment
+        if ( i > 0 && ( ( prevLon < -120 && lon > 120 ) || ( prevLon > 120 && lon  < -120 ) ) )
+        {
+          // we did!
+          // when crossing the antimeridian, we need to calculate the latitude
+          // at which the geodesic intersects the antimeridian
+          double fract = 0;
+          double lat180 = latitudeGeodesicCrossesAntimeridian( QgsPointXY( prevLon, prevLat ), QgsPointXY( lon, lat ), fract );
+          if ( line->is3D() )
+          {
+            z = prevZ + ( p.z() - prevZ ) * fract;
+          }
+          if ( line->isMeasure() )
+          {
+            m = prevM + ( p.m() - prevM ) * fract;
+          }
+
+          QgsPointXY antiMeridianPoint;
+          if ( prevLon < -120 )
+            antiMeridianPoint = mCoordTransform.transform( QgsPointXY( -180, lat180 ), QgsCoordinateTransform::ReverseTransform );
+          else
+            antiMeridianPoint = mCoordTransform.transform( QgsPointXY( 180, lat180 ), QgsCoordinateTransform::ReverseTransform );
+
+          QgsPoint newPoint( antiMeridianPoint );
+          if ( line->is3D() )
+            newPoint.addZValue( z );
+          if ( line->isMeasure() )
+            newPoint.addMValue( m );
+
+          if ( std::isfinite( newPoint.x() ) && std::isfinite( newPoint.y() ) )
+          {
+            newPoints << newPoint;
+          }
+          res->addGeometry( new QgsLineString( newPoints ) );
+
+          newPoints.clear();
+          newPoints.reserve( line->numPoints() - i + 1 );
+
+          if ( lon < -120 )
+            antiMeridianPoint = mCoordTransform.transform( QgsPointXY( -180, lat180 ), QgsCoordinateTransform::ReverseTransform );
+          else
+            antiMeridianPoint = mCoordTransform.transform( QgsPointXY( 180, lat180 ), QgsCoordinateTransform::ReverseTransform );
+
+          if ( std::isfinite( antiMeridianPoint.x() ) && std::isfinite( antiMeridianPoint.y() ) )
+          {
+            // we want to keep the previously calculated z/m value for newPoint, if present. They're the same each
+            // of the antimeridian split
+            newPoint.setX( antiMeridianPoint.x() );
+            newPoint.setY( antiMeridianPoint.y() );
+            newPoints << newPoint;
+          }
+        }
+        newPoints << p;
+
+        prevLon = lon;
+        prevLat = lat;
+        if ( line->is3D() )
+          prevZ = p.z();
+        if ( line->isMeasure() )
+          prevM = p.m();
+      }
+      res->addGeometry( new QgsLineString( newPoints ) );
+    }
+    catch ( QgsCsException & )
+    {
+      QgsMessageLog::logMessage( QObject::tr( "Caught a coordinate system exception while trying to transform linestring. Unable to calculate break point." ) );
+      res->addGeometry( line->clone() );
+      break;
+    }
+  }
+
+  return QgsGeometry( std::move( res ) );
+}
+
+
+QVector< QVector<QgsPointXY> > QgsDistanceArea::geodesicLine( const QgsPointXY &p1, const QgsPointXY &p2, const double interval, const bool breakLine ) const
+{
+  if ( !willUseEllipsoid() )
+  {
+    return QVector< QVector< QgsPointXY > >() << ( QVector< QgsPointXY >() << p1 << p2 );
+  }
+
+  geod_geodesic geod;
+  geod_init( &geod, mSemiMajor, 1 / mInvFlattening );
+
+  QgsPointXY pp1, pp2;
+  try
+  {
+    pp1 = mCoordTransform.transform( p1 );
+    pp2 = mCoordTransform.transform( p2 );
+  }
+  catch ( QgsCsException & )
+  {
+    QgsMessageLog::logMessage( QObject::tr( "Caught a coordinate system exception while trying to transform a point. Unable to calculate geodesic line." ) );
+    return QVector< QVector< QgsPointXY > >();
+  }
+
+  geod_geodesicline line;
+  geod_inverseline( &line, &geod, pp1.y(), pp1.x(), pp2.y(), pp2.x(), GEOD_ALL );
+  const double totalDist = line.s13;
+
+  QVector< QVector< QgsPointXY > > res;
+  QVector< QgsPointXY > currentPart;
+  currentPart << p1;
+  double d = interval;
+  double prevLon = pp1.x();
+  double prevLat = pp1.y();
+  bool lastRun = false;
+  double t = 0;
+  while ( true )
+  {
+    double lat, lon;
+    if ( lastRun )
+    {
+      lat = pp2.y();
+      lon = pp2.x();
+      if ( lon > 180 )
+        lon -= 360;
+    }
+    else
+    {
+      geod_position( &line, d, &lat, &lon, &t );
+    }
+
+    if ( breakLine && ( ( prevLon < -120 && lon > 120 ) || ( prevLon > 120 && lon < -120 ) ) )
+    {
+      // when breaking the geodesic at the antimeridian, we need to calculate the latitude
+      // at which the geodesic intersects the antimeridian, and add points to both line segments at this latitude
+      // on the antimeridian.
+      double fraction;
+      double lat180 = latitudeGeodesicCrossesAntimeridian( QgsPointXY( prevLon, prevLat ), QgsPointXY( lon, lat ), fraction );
+
+      try
+      {
+        QgsPointXY p;
+        if ( prevLon < -120 )
+          p = mCoordTransform.transform( QgsPointXY( -180, lat180 ), QgsCoordinateTransform::ReverseTransform );
+        else
+          p = mCoordTransform.transform( QgsPointXY( 180, lat180 ), QgsCoordinateTransform::ReverseTransform );
+
+        if ( std::isfinite( p.x() ) && std::isfinite( p.y() ) )
+          currentPart << p;
+      }
+      catch ( QgsCsException & )
+      {
+        QgsMessageLog::logMessage( QObject::tr( "Caught a coordinate system exception while trying to transform a point." ) );
+      }
+
+      res << currentPart;
+      currentPart.clear();
+      try
+      {
+        QgsPointXY p;
+        if ( lon < -120 )
+          p = mCoordTransform.transform( QgsPointXY( -180, lat180 ), QgsCoordinateTransform::ReverseTransform );
+        else
+          p = mCoordTransform.transform( QgsPointXY( 180, lat180 ), QgsCoordinateTransform::ReverseTransform );
+
+        if ( std::isfinite( p.x() ) && std::isfinite( p.y() ) )
+          currentPart << p;
+      }
+      catch ( QgsCsException & )
+      {
+        QgsMessageLog::logMessage( QObject::tr( "Caught a coordinate system exception while trying to transform a point." ) );
+      }
+
+    }
+
+    prevLon = lon;
+    prevLat = lat;
+
+    try
+    {
+      currentPart << mCoordTransform.transform( QgsPointXY( lon, lat ), QgsCoordinateTransform::ReverseTransform );
+    }
+    catch ( QgsCsException & )
+    {
+      QgsMessageLog::logMessage( QObject::tr( "Caught a coordinate system exception while trying to transform a point." ) );
+    }
+
+    if ( lastRun )
+      break;
+
+    d += interval;
+    if ( d >= totalDist )
+      lastRun = true;
+  }
+  res << currentPart;
+  return res;
+}
+
 QgsUnitTypes::DistanceUnit QgsDistanceArea::lengthUnits() const
 {
   return willUseEllipsoid() ? QgsUnitTypes::DistanceMeters : mCoordTransform.sourceCrs().mapUnits();
@@ -472,20 +806,20 @@ double QgsDistanceArea::measurePolygon( const QgsCurve *curve ) const
 
   QgsPointSequence linePointsV2;
   curve->points( linePointsV2 );
-  QList<QgsPointXY> linePoints;
+  QVector<QgsPointXY> linePoints;
   QgsGeometry::convertPointList( linePointsV2, linePoints );
   return measurePolygon( linePoints );
 }
 
 
-double QgsDistanceArea::measurePolygon( const QList<QgsPointXY> &points ) const
+double QgsDistanceArea::measurePolygon( const QVector<QgsPointXY> &points ) const
 {
   try
   {
     if ( willUseEllipsoid() )
     {
-      QList<QgsPointXY> pts;
-      for ( QList<QgsPointXY>::const_iterator i = points.begin(); i != points.end(); ++i )
+      QVector<QgsPointXY> pts;
+      for ( QVector<QgsPointXY>::const_iterator i = points.constBegin(); i != points.constEnd(); ++i )
       {
         pts.append( mCoordTransform.transform( *i ) );
       }
@@ -498,7 +832,7 @@ double QgsDistanceArea::measurePolygon( const QList<QgsPointXY> &points ) const
   }
   catch ( QgsCsException &cse )
   {
-    Q_UNUSED( cse );
+    Q_UNUSED( cse )
     QgsMessageLog::logMessage( QObject::tr( "Caught a coordinate system exception while trying to transform a point. Unable to calculate polygon area." ) );
     return 0.0;
   }
@@ -637,13 +971,13 @@ double QgsDistanceArea::getQbar( double x ) const
 void QgsDistanceArea::computeAreaInit()
 {
   //don't try to perform calculations if no ellipsoid
-  if ( mEllipsoid == GEO_NONE )
+  if ( mEllipsoid == geoNone() )
   {
     return;
   }
 
   double a2 = ( mSemiMajor * mSemiMajor );
-  double e2 = 1 - ( a2 / ( mSemiMinor * mSemiMinor ) );
+  double e2 = 1 - ( ( mSemiMinor * mSemiMinor ) / a2 );
   double e4, e6;
 
   m_TwoPI = M_PI + M_PI;
@@ -659,7 +993,7 @@ void QgsDistanceArea::computeAreaInit()
 
   m_QbarA = -1.0 - ( 2.0 / 3.0 ) * e2 - ( 3.0 / 5.0 ) * e4  - ( 4.0 / 7.0 ) * e6;
   m_QbarB = ( 2.0 / 9.0 ) * e2 + ( 2.0 / 5.0 ) * e4  + ( 4.0 / 7.0 ) * e6;
-  m_QbarC =                     - ( 3.0 / 25.0 ) * e4 - ( 12.0 / 35.0 ) * e6;
+  m_QbarC = - ( 3.0 / 25.0 ) * e4 - ( 12.0 / 35.0 ) * e6;
   m_QbarD = ( 4.0 / 49.0 ) * e6;
 
   m_Qp = getQ( M_PI_2 );
@@ -685,7 +1019,7 @@ void QgsDistanceArea::setFromParams( const QgsEllipsoidUtils::EllipsoidParameter
   }
 }
 
-double QgsDistanceArea::computePolygonArea( const QList<QgsPointXY> &points ) const
+double QgsDistanceArea::computePolygonArea( const QVector<QgsPointXY> &points ) const
 {
   if ( points.isEmpty() )
   {
@@ -774,7 +1108,7 @@ double QgsDistanceArea::computePolygonArea( const QList<QgsPointXY> &points ) co
   return area;
 }
 
-double QgsDistanceArea::computePolygonFlatArea( const QList<QgsPointXY> &points ) const
+double QgsDistanceArea::computePolygonFlatArea( const QVector<QgsPointXY> &points ) const
 {
   // Normal plane area calculations.
   double area = 0.0;
@@ -812,7 +1146,7 @@ double QgsDistanceArea::convertLengthMeasurement( double length, QgsUnitTypes::D
   double factorUnits = QgsUnitTypes::fromUnitToUnitFactor( measureUnits, toUnits );
 
   double result = length * factorUnits;
-  QgsDebugMsgLevel( QString( "Converted length of %1 %2 to %3 %4" ).arg( length )
+  QgsDebugMsgLevel( QStringLiteral( "Converted length of %1 %2 to %3 %4" ).arg( length )
                     .arg( QgsUnitTypes::toString( measureUnits ) )
                     .arg( result )
                     .arg( QgsUnitTypes::toString( toUnits ) ), 3 );
@@ -826,7 +1160,7 @@ double QgsDistanceArea::convertAreaMeasurement( double area, QgsUnitTypes::AreaU
   double factorUnits = QgsUnitTypes::fromUnitToUnitFactor( measureUnits, toUnits );
 
   double result = area * factorUnits;
-  QgsDebugMsgLevel( QString( "Converted area of %1 %2 to %3 %4" ).arg( area )
+  QgsDebugMsgLevel( QStringLiteral( "Converted area of %1 %2 to %3 %4" ).arg( area )
                     .arg( QgsUnitTypes::toString( measureUnits ) )
                     .arg( result )
                     .arg( QgsUnitTypes::toString( toUnits ) ), 3 );

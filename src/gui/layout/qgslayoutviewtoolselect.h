@@ -16,11 +16,13 @@
 #ifndef QGSLAYOUTVIEWTOOLSELECT_H
 #define QGSLAYOUTVIEWTOOLSELECT_H
 
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgis_gui.h"
 #include "qgslayoutviewtool.h"
 #include "qgslayoutviewrubberband.h"
 #include <memory>
+
+class QgsLayoutMouseHandles;
 
 /**
  * \ingroup gui
@@ -38,11 +40,26 @@ class GUI_EXPORT QgsLayoutViewToolSelect : public QgsLayoutViewTool
      * Constructor for QgsLayoutViewToolSelect.
      */
     QgsLayoutViewToolSelect( QgsLayoutView *view SIP_TRANSFERTHIS );
+    ~QgsLayoutViewToolSelect() override;
 
     void layoutPressEvent( QgsLayoutViewMouseEvent *event ) override;
     void layoutMoveEvent( QgsLayoutViewMouseEvent *event ) override;
     void layoutReleaseEvent( QgsLayoutViewMouseEvent *event ) override;
+    void wheelEvent( QWheelEvent *event ) override;
+    void keyPressEvent( QKeyEvent *event ) override;
     void deactivate() override;
+
+    ///@cond PRIVATE
+
+    /**
+     * Returns the view's mouse handles.
+     * \note Not available in Python bindings.
+     */
+    SIP_SKIP QgsLayoutMouseHandles *mouseHandles();
+    ///@endcond
+
+    //! Sets the a \a layout.
+    void setLayout( QgsLayout *layout );
 
   private:
 
@@ -57,6 +74,7 @@ class GUI_EXPORT QgsLayoutViewToolSelect : public QgsLayoutViewTool
     //! Start of rubber band creation
     QPointF mRubberBandStartPos;
 
+    QPointer< QgsLayoutMouseHandles > mMouseHandles; //owned by scene
 };
 
 #endif // QGSLAYOUTVIEWTOOLSELECT_H

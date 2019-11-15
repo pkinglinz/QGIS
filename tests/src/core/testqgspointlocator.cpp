@@ -30,7 +30,7 @@ struct FilterExcludePoint : public QgsPointLocator::MatchFilter
 {
   explicit FilterExcludePoint( const QgsPointXY &p ) : mPoint( p ) {}
 
-  bool acceptMatch( const QgsPointLocator::Match &match ) { return match.point() != mPoint; }
+  bool acceptMatch( const QgsPointLocator::Match &match ) override { return match.point() != mPoint; }
 
   QgsPointXY mPoint;
 };
@@ -42,7 +42,7 @@ struct FilterExcludeEdge : public QgsPointLocator::MatchFilter
     , mP2( p2 )
   {}
 
-  bool acceptMatch( const QgsPointLocator::Match &match )
+  bool acceptMatch( const QgsPointLocator::Match &match ) override
   {
     QgsPointXY p1, p2;
     match.edgePoints( p1, p2 );
@@ -57,9 +57,7 @@ class TestQgsPointLocator : public QObject
 {
     Q_OBJECT
   public:
-    TestQgsPointLocator()
-      : mVL( 0 )
-    {}
+    TestQgsPointLocator() = default;
 
   private:
     QgsVectorLayer *mVL = nullptr;
@@ -82,11 +80,11 @@ class TestQgsPointLocator : public QObject
       //           + (1,0)
       mVL = new QgsVectorLayer( QStringLiteral( "Polygon" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
       QgsFeature ff( 0 );
-      QgsPolygon polygon;
-      QgsPolyline polyline;
+      QgsPolygonXY polygon;
+      QgsPolylineXY polyline;
       polyline << QgsPointXY( 0, 1 ) << QgsPointXY( 1, 0 ) << QgsPointXY( 1, 1 ) << QgsPointXY( 0, 1 );
       polygon << polyline;
-      QgsGeometry ffGeom = QgsGeometry::fromPolygon( polygon );
+      QgsGeometry ffGeom = QgsGeometry::fromPolygonXY( polygon );
       ff.setGeometry( ffGeom );
       QgsFeatureList flist;
       flist << ff;
@@ -130,6 +128,32 @@ class TestQgsPointLocator : public QObject
       m.edgePoints( pt1, pt2 );
       QCOMPARE( pt1, QgsPointXY( 1, 0 ) );
       QCOMPARE( pt2, QgsPointXY( 1, 1 ) );
+    }
+
+    void testNearestArea()
+    {
+      QgsPointLocator loc( mVL );
+      QgsPointXY pt1( 1.1, 0.5 );
+      QgsPointLocator::Match m1 = loc.nearestArea( pt1, 0 );
+      QVERIFY( !m1.isValid() );
+
+      QgsPointXY pt2( 0.9, 0.9 );
+      QgsPointLocator::Match m2 = loc.nearestArea( pt2, 0 );
+      QVERIFY( m2.isValid() );
+      QVERIFY( m2.hasArea() );
+      QCOMPARE( m2.layer(), mVL );
+      QCOMPARE( m2.featureId(), ( QgsFeatureId )1 );
+      QCOMPARE( m2.point(), QgsPointXY( 0.9, 0.9 ) );
+      QCOMPARE( m2.distance(), 0.0 );
+
+      QgsPointXY pt3( 1.1, 1.1 );
+      QgsPointLocator::Match m3 = loc.nearestArea( pt3, 999 );
+      QVERIFY( m3.isValid() );
+      QVERIFY( m3.hasArea() );
+      QCOMPARE( m3.layer(), mVL );
+      QCOMPARE( m3.featureId(), ( QgsFeatureId )1 );
+      QCOMPARE( m3.point(), QgsPointXY( 1.0, 1.0 ) );
+      QCOMPARE( m3.distance(), .1 * std::sqrt( 2 ) );
     }
 
     void testPointInPolygon()
@@ -186,6 +210,24 @@ class TestQgsPointLocator : public QObject
       QCOMPARE( lst3.count(), 2 );
     }
 
+    void testVerticesInTolerance()
+    {
+      QgsPointLocator loc( mVL );
+      QgsPointLocator::MatchList lst = loc.verticesInRect( QgsPointXY( 0, 2 ), 0.5 );
+      QCOMPARE( lst.count(), 0 );
+
+      QgsPointLocator::MatchList lst2 = loc.verticesInRect( QgsPointXY( 0, 1.5 ), 0.5 );
+      QCOMPARE( lst2.count(), 2 );  // one matching point, but it is the first point in ring, so it is duplicated
+      QCOMPARE( lst2[0].vertexIndex(), 0 );
+      QCOMPARE( lst2[1].vertexIndex(), 3 );
+
+      QgsPointLocator::MatchList lst3 = loc.verticesInRect( QgsPointXY( 0, 1.5 ), 1 );
+      QCOMPARE( lst3.count(), 3 );
+      QCOMPARE( lst3[0].vertexIndex(), 0 );
+      QCOMPARE( lst3[1].vertexIndex(), 2 );
+      QCOMPARE( lst3[2].vertexIndex(), 3 );
+    }
+
 
     void testLayerUpdates()
     {
@@ -200,11 +242,11 @@ class TestQgsPointLocator : public QObject
 
       // add a new feature
       QgsFeature ff( 0 );
-      QgsPolygon polygon;
-      QgsPolyline polyline;
+      QgsPolygonXY polygon;
+      QgsPolylineXY polyline;
       polyline << QgsPointXY( 10, 11 ) << QgsPointXY( 11, 10 ) << QgsPointXY( 11, 11 ) << QgsPointXY( 10, 11 );
       polygon << polyline;
-      QgsGeometry ffGeom = QgsGeometry::fromPolygon( polygon ) ;
+      QgsGeometry ffGeom = QgsGeometry::fromPolygonXY( polygon ) ;
       ff.setGeometry( ffGeom );
       QgsFeatureList flist;
       flist << ff;
@@ -250,13 +292,13 @@ class TestQgsPointLocator : public QObject
     void testExtent()
     {
       QgsRectangle bbox1( 10, 10, 11, 11 ); // out of layer's bounds
-      QgsPointLocator loc1( mVL, QgsCoordinateReferenceSystem(), &bbox1 );
+      QgsPointLocator loc1( mVL, QgsCoordinateReferenceSystem(), QgsCoordinateTransformContext(), &bbox1 );
 
       QgsPointLocator::Match m1 = loc1.nearestVertex( QgsPointXY( 2, 2 ), 999 );
       QVERIFY( !m1.isValid() );
 
       QgsRectangle bbox2( 0, 0, 1, 1 ); // in layer's bounds
-      QgsPointLocator loc2( mVL, QgsCoordinateReferenceSystem(), &bbox2 );
+      QgsPointLocator loc2( mVL, QgsCoordinateReferenceSystem(), QgsCoordinateTransformContext(), &bbox2 );
 
       QgsPointLocator::Match m2 = loc2.nearestVertex( QgsPointXY( 2, 2 ), 999 );
       QVERIFY( m2.isValid() );
@@ -272,7 +314,7 @@ class TestQgsPointLocator : public QObject
       flist << ff;
       vlNullGeom->dataProvider()->addFeatures( flist );
 
-      QgsPointLocator loc( vlNullGeom, QgsCoordinateReferenceSystem(), nullptr );
+      QgsPointLocator loc( vlNullGeom, QgsCoordinateReferenceSystem(), QgsCoordinateTransformContext(), nullptr );
 
       QgsPointLocator::Match m1 = loc.nearestVertex( QgsPointXY( 2, 2 ), std::numeric_limits<double>::max() );
       QVERIFY( !m1.isValid() );
@@ -288,13 +330,13 @@ class TestQgsPointLocator : public QObject
       QgsVectorLayer *vlEmptyGeom = new QgsVectorLayer( QStringLiteral( "Polygon" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
       QgsFeature ff( 0 );
       QgsGeometry g;
-      g.setGeometry( new QgsPolygonV2() );
+      g.set( new QgsPolygon() );
       ff.setGeometry( g );
       QgsFeatureList flist;
       flist << ff;
       vlEmptyGeom->dataProvider()->addFeatures( flist );
 
-      QgsPointLocator loc( vlEmptyGeom, QgsCoordinateReferenceSystem(), nullptr );
+      QgsPointLocator loc( vlEmptyGeom, QgsCoordinateReferenceSystem(), QgsCoordinateTransformContext(), nullptr );
 
       QgsPointLocator::Match m1 = loc.nearestVertex( QgsPointXY( 2, 2 ), std::numeric_limits<double>::max() );
       QVERIFY( !m1.isValid() );
@@ -304,6 +346,134 @@ class TestQgsPointLocator : public QObject
 
       delete vlEmptyGeom;
     }
+
+    void testAsynchronousMode()
+    {
+      QgsPointLocator loc( mVL, QgsCoordinateReferenceSystem(), QgsCoordinateTransformContext(), nullptr );
+      QgsPointXY pt( 2, 2 );
+
+      QEventLoop loop;
+      connect( &loc, &QgsPointLocator::initFinished, &loop, &QEventLoop::quit );
+
+      // locator is not ready yet
+      QgsPointLocator::Match m = loc.nearestVertex( pt, 999, nullptr, true );
+      QVERIFY( !m.isValid() );
+      QVERIFY( loc.mIsIndexing );
+
+      // we block until initFinished is called from another thread
+      loop.exec();
+
+      QVERIFY( !loc.mIsIndexing );
+
+      // now locator is ready
+      m = loc.nearestVertex( pt, 999 );
+      QVERIFY( m.isValid() );
+      QVERIFY( m.hasVertex() );
+      QCOMPARE( m.layer(), mVL );
+      QCOMPARE( m.featureId(), ( QgsFeatureId )1 );
+      QCOMPARE( m.point(), QgsPointXY( 1, 1 ) );
+      QCOMPARE( m.distance(), std::sqrt( 2.0 ) );
+      QCOMPARE( m.vertexIndex(), 2 );
+    }
+
+    void testLayerUpdatesAsynchronous()
+    {
+
+      QgsPointLocator loc( mVL );
+
+      QEventLoop loop;
+      connect( &loc, &QgsPointLocator::initFinished, &loop, &QEventLoop::quit );
+
+      // trigger locator initialization
+      QgsPointLocator::Match mAddV0 = loc.nearestVertex( QgsPointXY( 12, 12 ), 999, nullptr, true );
+
+      // locator is not ready yet
+      QVERIFY( !mAddV0.isValid() );
+      QVERIFY( loc.mIsIndexing );
+
+      mVL->startEditing();
+
+      // add a new feature
+      QgsFeature ff( 0 );
+      QgsPolygonXY polygon;
+      QgsPolylineXY polyline;
+      polyline << QgsPointXY( 10, 11 ) << QgsPointXY( 11, 10 ) << QgsPointXY( 11, 11 ) << QgsPointXY( 10, 11 );
+      polygon << polyline;
+      QgsGeometry ffGeom = QgsGeometry::fromPolygonXY( polygon ) ;
+      ff.setGeometry( ffGeom );
+      QgsFeatureList flist;
+      flist << ff;
+      bool resA = mVL->addFeature( ff );
+      QVERIFY( resA );
+
+      // indexing is still running, change geometry
+      QgsGeometry *newGeom = new QgsGeometry( ff.geometry() );
+      newGeom->moveVertex( 10, 10, 2 ); // change 11,11 to 10,10
+      mVL->changeGeometry( ff.id(), *newGeom );
+      delete newGeom;
+
+      // we block until initFinished is called from another thread
+      loop.exec();
+
+      QVERIFY( !loc.mIsIndexing );
+
+      // verify it is changed in the point locator
+      QgsPointLocator::Match mChV = loc.nearestVertex( QgsPointXY( 12, 12 ), 999 );
+      QVERIFY( mChV.isValid() );
+      QVERIFY( mChV.point() != QgsPointXY( 11, 11 ) ); // that point does not exist anymore
+      mChV = loc.nearestVertex( QgsPointXY( 9, 9 ), 999 );
+      QVERIFY( mChV.isValid() );
+      QVERIFY( mChV.point() == QgsPointXY( 10, 10 ) ); // updated point
+
+      // delete feature while no indexing is running
+      bool resD = mVL->deleteFeature( ff.id() );
+      QVERIFY( resD );
+
+      // verify it is deleted from the point locator
+      QgsPointLocator::Match mDelV = loc.nearestVertex( QgsPointXY( 12, 12 ), 999 );
+      QVERIFY( mDelV.isValid() );
+      QCOMPARE( mDelV.point(), QgsPointXY( 1, 1 ) );
+
+      mVL->rollBack();
+    }
+
+    void testWaitForIndexingFinished()
+    {
+      QgsPointLocator loc( mVL, QgsCoordinateReferenceSystem(), QgsCoordinateTransformContext(), nullptr );
+      QgsPointXY pt( 2, 2 );
+
+      // locator is not ready yet
+      QgsPointLocator::Match m = loc.nearestVertex( pt, 999, nullptr, true );
+      QVERIFY( !m.isValid() );
+      QVERIFY( loc.mIsIndexing );
+
+      // non relaxed call, this will block until the first indexing is finished
+      // so the match point has to be valid
+      m = loc.nearestVertex( pt, 999, nullptr );
+      QVERIFY( m.isValid() );
+      QVERIFY( !loc.mIsIndexing );
+
+      // now locator is ready
+      m = loc.nearestVertex( pt, 999 );
+      QVERIFY( m.isValid() );
+      QVERIFY( m.hasVertex() );
+      QCOMPARE( m.layer(), mVL );
+      QCOMPARE( m.featureId(), ( QgsFeatureId )1 );
+      QCOMPARE( m.point(), QgsPointXY( 1, 1 ) );
+      QCOMPARE( m.distance(), std::sqrt( 2.0 ) );
+      QCOMPARE( m.vertexIndex(), 2 );
+    }
+
+    void testDeleteLocator()
+    {
+      QgsPointLocator *loc = new QgsPointLocator( mVL, QgsCoordinateReferenceSystem(), QgsCoordinateTransformContext(), nullptr );
+      QgsPointXY pt( 2, 2 );
+
+      // delete locator while we are indexing (could happen when closing project for instance)
+      loc->nearestVertex( pt, 999, nullptr, true );
+      delete loc;
+    }
+
 };
 
 QGSTEST_MAIN( TestQgsPointLocator )

@@ -6,12 +6,12 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>536</width>
-    <height>401</height>
+    <width>863</width>
+    <height>547</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Select By Expression</string>
+   <string>Select by Expression</string>
   </property>
   <layout class="QGridLayout" name="gridLayout">
    <property name="leftMargin">
@@ -26,21 +26,21 @@
    <property name="bottomMargin">
     <number>3</number>
    </property>
-   <item row="1" column="4">
+   <item row="1" column="5">
     <widget class="QPushButton" name="mPbnClose">
      <property name="text">
-      <string>Close</string>
+      <string>&amp;Close</string>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="2">
+    <widget class="QToolButton" name="mButtonZoomToFeatures">
+     <property name="text">
+      <string>Zoom to Features</string>
      </property>
     </widget>
    </item>
    <item row="1" column="1">
-    <widget class="QToolButton" name="mButtonZoomToFeatures">
-     <property name="text">
-      <string>Zoom to features</string>
-     </property>
-    </widget>
-   </item>
-   <item row="1" column="0">
     <spacer name="horizontalSpacer">
      <property name="orientation">
       <enum>Qt::Horizontal</enum>
@@ -53,10 +53,7 @@
      </property>
     </spacer>
    </item>
-   <item row="0" column="0" colspan="5">
-    <widget class="QgsExpressionBuilderWidget" name="mExpressionBuilder" native="true"/>
-   </item>
-   <item row="1" column="2">
+   <item row="1" column="3">
     <widget class="QToolButton" name="mButtonSelect">
      <property name="text">
       <string>…</string>
@@ -69,32 +66,41 @@
      </property>
     </widget>
    </item>
-   <item row="1" column="3">
+   <item row="1" column="0">
     <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
      <property name="standardButtons">
-      <set>QDialogButtonBox::Close|QDialogButtonBox::Help</set>
+      <set>QDialogButtonBox::Help</set>
      </property>
     </widget>
+   </item>
+   <item row="0" column="0" colspan="6">
+    <widget class="QgsExpressionBuilderWidget" name="mExpressionBuilder" native="true"/>
    </item>
   </layout>
   <action name="mActionSelect">
    <property name="text">
-    <string>Select features</string>
+    <string>Select Features</string>
    </property>
   </action>
   <action name="mActionAddToSelection">
    <property name="text">
-    <string>Add to current selection</string>
+    <string>Add to Current Selection</string>
    </property>
   </action>
   <action name="mActionRemoveFromSelection">
    <property name="text">
-    <string>Remove from current selection</string>
+    <string>Remove from Current Selection</string>
    </property>
   </action>
   <action name="mActionSelectIntersect">
    <property name="text">
-    <string>Filter current selection</string>
+    <string>Filter Current Selection</string>
    </property>
   </action>
  </widget>

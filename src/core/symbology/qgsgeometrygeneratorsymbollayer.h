@@ -13,19 +13,20 @@
  *                                                                         *
  ***************************************************************************/
 
-#ifndef QGSGEOMETRYGENERATORSYMBOLLAYERV2_H
-#define QGSGEOMETRYGENERATORSYMBOLLAYERV2_H
+#ifndef QGSGEOMETRYGENERATORSYMBOLLAYER_H
+#define QGSGEOMETRYGENERATORSYMBOLLAYER_H
 
 #include "qgis_core.h"
 #include "qgssymbollayer.h"
 
-/** \ingroup core
+/**
+ * \ingroup core
  * \class QgsGeometryGeneratorSymbolLayer
  */
 class CORE_EXPORT QgsGeometryGeneratorSymbolLayer : public QgsSymbolLayer
 {
   public:
-    ~QgsGeometryGeneratorSymbolLayer();
+    ~QgsGeometryGeneratorSymbolLayer() override;
 
     static QgsSymbolLayer *create( const QgsStringMap &properties ) SIP_FACTORY;
 
@@ -63,19 +64,22 @@ class CORE_EXPORT QgsGeometryGeneratorSymbolLayer : public QgsSymbolLayer
     void setGeometryExpression( const QString &exp );
 
     /**
-     * Get the expression to generate this geometry.
+     * Gets the expression to generate this geometry.
      */
     QString geometryExpression() const { return mExpression->expression(); }
 
-    virtual QgsSymbol *subSymbol() override { return mSymbol; }
+    QgsSymbol *subSymbol() override { return mSymbol; }
 
-    virtual bool setSubSymbol( QgsSymbol *symbol SIP_TRANSFER ) override;
+    bool setSubSymbol( QgsSymbol *symbol SIP_TRANSFER ) override;
 
-    virtual QSet<QString> usedAttributes( const QgsRenderContext &context ) const override;
+    QSet<QString> usedAttributes( const QgsRenderContext &context ) const override;
+    bool hasDataDefinedProperties() const override;
 
-    //! Will always return true.
-    //! This is a hybrid layer, it constructs its own geometry so it does not
-    //! care about the geometry of its parents.
+    /**
+     * Will always return TRUE.
+     * This is a hybrid layer, it constructs its own geometry so it does not
+     * care about the geometry of its parents.
+     */
     bool isCompatibleWithSymbol( QgsSymbol *symbol ) const override;
 
     /**
@@ -111,4 +115,4 @@ class CORE_EXPORT QgsGeometryGeneratorSymbolLayer : public QgsSymbolLayer
     QgsSymbol::SymbolType mSymbolType;
 };
 
-#endif // QGSGEOMETRYGENERATORSYMBOLLAYERV2_H
+#endif // QGSGEOMETRYGENERATORSYMBOLLAYER_H

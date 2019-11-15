@@ -17,31 +17,48 @@
 #include "qgsvectorlayer.h"
 #include <QColorDialog>
 
-QgsEllipseSymbolLayerWidget::QgsEllipseSymbolLayerWidget( const QgsVectorLayer *vl, QWidget *parent )
+QgsEllipseSymbolLayerWidget::QgsEllipseSymbolLayerWidget( QgsVectorLayer *vl, QWidget *parent )
   : QgsSymbolLayerWidget( parent, vl )
 
 {
   setupUi( this );
+  connect( mShapeListWidget, &QListWidget::itemSelectionChanged, this, &QgsEllipseSymbolLayerWidget::mShapeListWidget_itemSelectionChanged );
+  connect( mWidthSpinBox, static_cast < void ( QDoubleSpinBox::* )( double ) > ( &QDoubleSpinBox::valueChanged ), this, &QgsEllipseSymbolLayerWidget::mWidthSpinBox_valueChanged );
+  connect( mHeightSpinBox, static_cast < void ( QDoubleSpinBox::* )( double ) > ( &QDoubleSpinBox::valueChanged ), this, &QgsEllipseSymbolLayerWidget::mHeightSpinBox_valueChanged );
+  connect( mRotationSpinBox, static_cast < void ( QDoubleSpinBox::* )( double ) > ( &QDoubleSpinBox::valueChanged ), this, &QgsEllipseSymbolLayerWidget::mRotationSpinBox_valueChanged );
+  connect( mStrokeStyleComboBox, static_cast<void ( QComboBox::* )( int )>( &QComboBox::currentIndexChanged ), this, &QgsEllipseSymbolLayerWidget::mStrokeStyleComboBox_currentIndexChanged );
+  connect( mStrokeWidthSpinBox, static_cast < void ( QDoubleSpinBox::* )( double ) > ( &QDoubleSpinBox::valueChanged ), this, &QgsEllipseSymbolLayerWidget::mStrokeWidthSpinBox_valueChanged );
+  connect( btnChangeColorStroke, &QgsColorButton::colorChanged, this, &QgsEllipseSymbolLayerWidget::btnChangeColorStroke_colorChanged );
+  connect( btnChangeColorFill, &QgsColorButton::colorChanged, this, &QgsEllipseSymbolLayerWidget::btnChangeColorFill_colorChanged );
+  connect( mSymbolWidthUnitWidget, &QgsUnitSelectionWidget::changed, this, &QgsEllipseSymbolLayerWidget::mSymbolWidthUnitWidget_changed );
+  connect( mStrokeWidthUnitWidget, &QgsUnitSelectionWidget::changed, this, &QgsEllipseSymbolLayerWidget::mStrokeWidthUnitWidget_changed );
+  connect( mSymbolHeightUnitWidget, &QgsUnitSelectionWidget::changed, this, &QgsEllipseSymbolLayerWidget::mSymbolHeightUnitWidget_changed );
+  connect( mOffsetUnitWidget, &QgsUnitSelectionWidget::changed, this, &QgsEllipseSymbolLayerWidget::mOffsetUnitWidget_changed );
+  connect( mHorizontalAnchorComboBox, static_cast<void ( QComboBox::* )( int )>( &QComboBox::currentIndexChanged ), this, &QgsEllipseSymbolLayerWidget::mHorizontalAnchorComboBox_currentIndexChanged );
+  connect( mVerticalAnchorComboBox, static_cast<void ( QComboBox::* )( int )>( &QComboBox::currentIndexChanged ), this, &QgsEllipseSymbolLayerWidget::mVerticalAnchorComboBox_currentIndexChanged );
 
-  mSymbolWidthUnitWidget->setUnits( QgsUnitTypes::RenderUnitList() << QgsUnitTypes::RenderMillimeters << QgsUnitTypes::RenderMapUnits << QgsUnitTypes::RenderPixels
+  mSymbolWidthUnitWidget->setUnits( QgsUnitTypes::RenderUnitList() << QgsUnitTypes::RenderMillimeters << QgsUnitTypes::RenderMetersInMapUnits << QgsUnitTypes::RenderMapUnits << QgsUnitTypes::RenderPixels
                                     << QgsUnitTypes::RenderPoints << QgsUnitTypes::RenderInches );
-  mSymbolHeightUnitWidget->setUnits( QgsUnitTypes::RenderUnitList() << QgsUnitTypes::RenderMillimeters << QgsUnitTypes::RenderMapUnits << QgsUnitTypes::RenderPixels
+  mSymbolHeightUnitWidget->setUnits( QgsUnitTypes::RenderUnitList() << QgsUnitTypes::RenderMillimeters << QgsUnitTypes::RenderMetersInMapUnits << QgsUnitTypes::RenderMapUnits << QgsUnitTypes::RenderPixels
                                      << QgsUnitTypes::RenderPoints << QgsUnitTypes::RenderInches );
-  mStrokeWidthUnitWidget->setUnits( QgsUnitTypes::RenderUnitList() << QgsUnitTypes::RenderMillimeters << QgsUnitTypes::RenderMapUnits << QgsUnitTypes::RenderPixels
+  mStrokeWidthUnitWidget->setUnits( QgsUnitTypes::RenderUnitList() << QgsUnitTypes::RenderMillimeters << QgsUnitTypes::RenderMetersInMapUnits << QgsUnitTypes::RenderMapUnits << QgsUnitTypes::RenderPixels
                                     << QgsUnitTypes::RenderPoints << QgsUnitTypes::RenderInches );
-  mOffsetUnitWidget->setUnits( QgsUnitTypes::RenderUnitList() << QgsUnitTypes::RenderMillimeters << QgsUnitTypes::RenderMapUnits << QgsUnitTypes::RenderPixels
+  mOffsetUnitWidget->setUnits( QgsUnitTypes::RenderUnitList() << QgsUnitTypes::RenderMillimeters << QgsUnitTypes::RenderMetersInMapUnits << QgsUnitTypes::RenderMapUnits << QgsUnitTypes::RenderPixels
                                << QgsUnitTypes::RenderPoints << QgsUnitTypes::RenderInches );
 
   btnChangeColorFill->setAllowOpacity( true );
   btnChangeColorFill->setColorDialogTitle( tr( "Select Fill Color" ) );
   btnChangeColorFill->setContext( QStringLiteral( "symbology" ) );
   btnChangeColorFill->setShowNoColor( true );
-  btnChangeColorFill->setNoColorString( tr( "Transparent fill" ) );
+  btnChangeColorFill->setNoColorString( tr( "Transparent Fill" ) );
   btnChangeColorStroke->setAllowOpacity( true );
   btnChangeColorStroke->setColorDialogTitle( tr( "Select Stroke Color" ) );
   btnChangeColorStroke->setContext( QStringLiteral( "symbology" ) );
   btnChangeColorStroke->setShowNoColor( true );
-  btnChangeColorStroke->setNoColorString( tr( "Transparent stroke" ) );
+  btnChangeColorStroke->setNoColorString( tr( "Transparent Stroke" ) );
+
+  mFillColorDDBtn->registerLinkedWidget( btnChangeColorFill );
+  mStrokeColorDDBtn->registerLinkedWidget( btnChangeColorStroke );
 
   spinOffsetX->setClearValue( 0.0 );
   spinOffsetY->setClearValue( 0.0 );
@@ -56,7 +73,8 @@ QgsEllipseSymbolLayerWidget::QgsEllipseSymbolLayerWidget( const QgsVectorLayer *
   mShapeListWidget->setIconSize( QSize( size, size ) );
 
   double markerSize = size * 0.8;
-  Q_FOREACH ( const QString &name, names )
+  const auto constNames = names;
+  for ( const QString &name : constNames )
   {
     QgsEllipseSymbolLayer *lyr = new QgsEllipseSymbolLayer();
     lyr->setSymbolWidthUnit( QgsUnitTypes::RenderPixels );
@@ -140,7 +158,7 @@ QgsSymbolLayer *QgsEllipseSymbolLayerWidget::symbolLayer()
   return mLayer;
 }
 
-void QgsEllipseSymbolLayerWidget::on_mShapeListWidget_itemSelectionChanged()
+void QgsEllipseSymbolLayerWidget::mShapeListWidget_itemSelectionChanged()
 {
   if ( mLayer )
   {
@@ -153,7 +171,7 @@ void QgsEllipseSymbolLayerWidget::on_mShapeListWidget_itemSelectionChanged()
   }
 }
 
-void QgsEllipseSymbolLayerWidget::on_mWidthSpinBox_valueChanged( double d )
+void QgsEllipseSymbolLayerWidget::mWidthSpinBox_valueChanged( double d )
 {
   if ( mLayer )
   {
@@ -162,7 +180,7 @@ void QgsEllipseSymbolLayerWidget::on_mWidthSpinBox_valueChanged( double d )
   }
 }
 
-void QgsEllipseSymbolLayerWidget::on_mHeightSpinBox_valueChanged( double d )
+void QgsEllipseSymbolLayerWidget::mHeightSpinBox_valueChanged( double d )
 {
   if ( mLayer )
   {
@@ -171,7 +189,7 @@ void QgsEllipseSymbolLayerWidget::on_mHeightSpinBox_valueChanged( double d )
   }
 }
 
-void QgsEllipseSymbolLayerWidget::on_mRotationSpinBox_valueChanged( double d )
+void QgsEllipseSymbolLayerWidget::mRotationSpinBox_valueChanged( double d )
 {
   if ( mLayer )
   {
@@ -180,9 +198,9 @@ void QgsEllipseSymbolLayerWidget::on_mRotationSpinBox_valueChanged( double d )
   }
 }
 
-void QgsEllipseSymbolLayerWidget::on_mStrokeStyleComboBox_currentIndexChanged( int index )
+void QgsEllipseSymbolLayerWidget::mStrokeStyleComboBox_currentIndexChanged( int index )
 {
-  Q_UNUSED( index );
+  Q_UNUSED( index )
 
   if ( mLayer )
   {
@@ -191,7 +209,7 @@ void QgsEllipseSymbolLayerWidget::on_mStrokeStyleComboBox_currentIndexChanged( i
   }
 }
 
-void QgsEllipseSymbolLayerWidget::on_mStrokeWidthSpinBox_valueChanged( double d )
+void QgsEllipseSymbolLayerWidget::mStrokeWidthSpinBox_valueChanged( double d )
 {
   if ( mLayer )
   {
@@ -200,7 +218,7 @@ void QgsEllipseSymbolLayerWidget::on_mStrokeWidthSpinBox_valueChanged( double d 
   }
 }
 
-void QgsEllipseSymbolLayerWidget::on_btnChangeColorStroke_colorChanged( const QColor &newColor )
+void QgsEllipseSymbolLayerWidget::btnChangeColorStroke_colorChanged( const QColor &newColor )
 {
   if ( !mLayer )
   {
@@ -211,7 +229,7 @@ void QgsEllipseSymbolLayerWidget::on_btnChangeColorStroke_colorChanged( const QC
   emit changed();
 }
 
-void QgsEllipseSymbolLayerWidget::on_btnChangeColorFill_colorChanged( const QColor &newColor )
+void QgsEllipseSymbolLayerWidget::btnChangeColorFill_colorChanged( const QColor &newColor )
 {
   if ( !mLayer )
   {
@@ -222,7 +240,7 @@ void QgsEllipseSymbolLayerWidget::on_btnChangeColorFill_colorChanged( const QCol
   emit changed();
 }
 
-void QgsEllipseSymbolLayerWidget::on_mSymbolWidthUnitWidget_changed()
+void QgsEllipseSymbolLayerWidget::mSymbolWidthUnitWidget_changed()
 {
   if ( mLayer )
   {
@@ -232,7 +250,7 @@ void QgsEllipseSymbolLayerWidget::on_mSymbolWidthUnitWidget_changed()
   }
 }
 
-void QgsEllipseSymbolLayerWidget::on_mStrokeWidthUnitWidget_changed()
+void QgsEllipseSymbolLayerWidget::mStrokeWidthUnitWidget_changed()
 {
   if ( mLayer )
   {
@@ -242,7 +260,7 @@ void QgsEllipseSymbolLayerWidget::on_mStrokeWidthUnitWidget_changed()
   }
 }
 
-void QgsEllipseSymbolLayerWidget::on_mSymbolHeightUnitWidget_changed()
+void QgsEllipseSymbolLayerWidget::mSymbolHeightUnitWidget_changed()
 {
   if ( mLayer )
   {
@@ -252,7 +270,7 @@ void QgsEllipseSymbolLayerWidget::on_mSymbolHeightUnitWidget_changed()
   }
 }
 
-void QgsEllipseSymbolLayerWidget::on_mOffsetUnitWidget_changed()
+void QgsEllipseSymbolLayerWidget::mOffsetUnitWidget_changed()
 {
   if ( mLayer )
   {
@@ -282,7 +300,7 @@ void QgsEllipseSymbolLayerWidget::blockComboSignals( bool block )
   cboJoinStyle->blockSignals( block );
 }
 
-void QgsEllipseSymbolLayerWidget::on_mHorizontalAnchorComboBox_currentIndexChanged( int index )
+void QgsEllipseSymbolLayerWidget::mHorizontalAnchorComboBox_currentIndexChanged( int index )
 {
   if ( mLayer )
   {
@@ -291,7 +309,7 @@ void QgsEllipseSymbolLayerWidget::on_mHorizontalAnchorComboBox_currentIndexChang
   }
 }
 
-void QgsEllipseSymbolLayerWidget::on_mVerticalAnchorComboBox_currentIndexChanged( int index )
+void QgsEllipseSymbolLayerWidget::mVerticalAnchorComboBox_currentIndexChanged( int index )
 {
   if ( mLayer )
   {

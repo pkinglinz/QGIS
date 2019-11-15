@@ -5,12 +5,18 @@ INCLUDE_DIRECTORIES(
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_SOURCE_DIR}/src/core
   ${CMAKE_SOURCE_DIR}/src/core/auth
-  ${CMAKE_SOURCE_DIR}/src/core/composer
   ${CMAKE_SOURCE_DIR}/src/core/expression
   ${CMAKE_SOURCE_DIR}/src/core/geometry
+  ${CMAKE_SOURCE_DIR}/src/core/layertree
+  ${CMAKE_SOURCE_DIR}/src/core/layout
+  ${CMAKE_SOURCE_DIR}/src/core/locator
   ${CMAKE_SOURCE_DIR}/src/core/metadata
+  ${CMAKE_SOURCE_DIR}/src/core/mesh
+  ${CMAKE_SOURCE_DIR}/src/core/pal
   ${CMAKE_SOURCE_DIR}/src/core/raster
   ${CMAKE_SOURCE_DIR}/src/core/symbology
+  ${CMAKE_SOURCE_DIR}/src/core/effects
+  ${CMAKE_SOURCE_DIR}/src/core/validity
   ${CMAKE_SOURCE_DIR}/src/ui
   ${CMAKE_SOURCE_DIR}/src/gui
   ${CMAKE_SOURCE_DIR}/src/gui/editorwidgets
@@ -20,9 +26,16 @@ INCLUDE_DIRECTORIES(
   ${CMAKE_SOURCE_DIR}/src/gui/raster
   ${CMAKE_SOURCE_DIR}/src/python
   ${CMAKE_SOURCE_DIR}/src/app
+  ${CMAKE_SOURCE_DIR}/src/app/mesh
   ${CMAKE_SOURCE_DIR}/src/app/pluginmanager
   ${CMAKE_SOURCE_DIR}/src/test
+  ${CMAKE_SOURCE_DIR}/src/analysis
+  ${CMAKE_SOURCE_DIR}/src/analysis/mesh
+  ${CMAKE_SOURCE_DIR}/external
+  ${CMAKE_SOURCE_DIR}/external/nlohmann
+  ${CMAKE_SOURCE_DIR}/external/nmea
 
+  ${CMAKE_BINARY_DIR}/src/analysis
   ${CMAKE_BINARY_DIR}/src/core
   ${CMAKE_BINARY_DIR}/src/gui
   ${CMAKE_BINARY_DIR}/src/python
@@ -32,8 +45,8 @@ INCLUDE_DIRECTORIES(
 )
 INCLUDE_DIRECTORIES(SYSTEM
   ${QT_INCLUDE_DIR}
+  ${QWT_INCLUDE_DIR}
   ${GDAL_INCLUDE_DIR}
-  ${PROJ_INCLUDE_DIR}
   ${GEOS_INCLUDE_DIR}
   ${QCA_INCLUDE_DIR}
   ${QTKEYCHAIN_INCLUDE_DIR}
@@ -54,13 +67,12 @@ MACRO (ADD_QGIS_TEST testname testsrc)
   SET(qgis_${testname}_SRCS ${testsrc} ${util_SRCS})
   ADD_CUSTOM_TARGET(qgis_${testname}moc ALL DEPENDS ${qgis_${testname}_MOC_SRCS})
   ADD_EXECUTABLE(qgis_${testname} ${qgis_${testname}_SRCS})
-  SET_TARGET_PROPERTIES(qgis_${testname} PROPERTIES AUTOMOC TRUE)
   TARGET_LINK_LIBRARIES(qgis_${testname}
-    ${QT_QTXML_LIBRARY}
-    ${QT_QTCORE_LIBRARY}
-    ${QT_QTSQL_LIBRARY}
-    ${QT_QTSVG_LIBRARY}
-    ${QT_QTTEST_LIBRARY}
+    ${Qt5Core_LIBRARIES}
+    ${Qt5Xml_LIBRARIES}
+    ${Qt5Sql_LIBRARIES}
+    ${Qt5Svg_LIBRARIES}
+    ${Qt5Test_LIBRARIES}
     ${PROJ_LIBRARY}
     ${GEOS_LIBRARY}
     ${GDAL_LIBRARY}
@@ -74,7 +86,7 @@ MACRO (ADD_QGIS_TEST testname testsrc)
   ENDIF(WITH_QWTPOLAR AND NOT WITH_INTERNAL_QWTPOLAR)
   IF(WIN32)
     ADD_DEFINITIONS(-DQWT_DLL)
-    TARGET_LINK_LIBRARIES(qgis_${testname} DbgHelp)
+    TARGET_LINK_LIBRARIES(qgis_${testname} dbghelp)
   ENDIF(WIN32)
   IF (APPLE)
     TARGET_LINK_LIBRARIES(qgis_${testname} ${APP_SERVICES_LIBRARY} )
@@ -88,12 +100,35 @@ ENDMACRO (ADD_QGIS_TEST)
 #############################################################
 # Tests:
 
+IF (WITH_BINDINGS)
 ADD_QGIS_TEST(apppythontest testqgisapppython.cpp)
+ENDIF ()
+ADD_QGIS_TEST(qgisapp testqgisapp.cpp)
+ADD_QGIS_TEST(appbrowserproviders testqgsappbrowserproviders.cpp)
 ADD_QGIS_TEST(qgisappclipboard testqgisappclipboard.cpp)
 ADD_QGIS_TEST(attributetabletest testqgsattributetable.cpp)
+ADD_QGIS_TEST(applocatorfilters testqgsapplocatorfilters.cpp)
 ADD_QGIS_TEST(fieldcalculatortest testqgsfieldcalculator.cpp)
+ADD_QGIS_TEST(maptooladdfeatureline testqgsmaptooladdfeatureline.cpp)
+ADD_QGIS_TEST(maptooladdfeaturepoint testqgsmaptooladdfeaturepoint.cpp)
 ADD_QGIS_TEST(maptoolidentifyaction testqgsmaptoolidentifyaction.cpp)
+ADD_QGIS_TEST(maptoollabel testqgsmaptoollabel.cpp)
 ADD_QGIS_TEST(maptoolselect testqgsmaptoolselect.cpp)
+ADD_QGIS_TEST(maptoolreshape testqgsmaptoolreshape.cpp)
+ADD_QGIS_TEST(maptoolrotatefeature testqgsmaptoolrotatefeature.cpp)
+ADD_QGIS_TEST(maptoolcircularstringtest testqgsmaptoolcircularstring.cpp)
+ADD_QGIS_TEST(maptoolcircletest testqgsmaptoolcircle.cpp)
+ADD_QGIS_TEST(maptoolmovefeaturetest testqgsmaptoolmovefeature.cpp)
+ADD_QGIS_TEST(maptoolellipsetest testqgsmaptoolellipse.cpp)
+ADD_QGIS_TEST(maptoolrectangletest testqgsmaptoolrectangle.cpp)
+ADD_QGIS_TEST(maptoolregularpolygontest testqgsmaptoolregularpolygon.cpp)
 ADD_QGIS_TEST(measuretool testqgsmeasuretool.cpp)
-ADD_QGIS_TEST(nodetool testqgsnodetool.cpp)
+ADD_QGIS_TEST(vertextool testqgsvertextool.cpp)
 ADD_QGIS_TEST(vectorlayersaveasdialogtest testqgsvectorlayersaveasdialog.cpp)
+ADD_QGIS_TEST(maptoolreverselinetest testqgsmaptoolreverseline.cpp)
+ADD_QGIS_TEST(maptooltrimextendfeaturetest testqgsmaptooltrimextendfeature.cpp)
+ADD_QGIS_TEST(projectproperties testqgsprojectproperties.cpp)
+ADD_QGIS_TEST(layoutvaliditychecks testqgsapplayoutvaliditychecks.cpp)
+ADD_QGIS_TEST(meshcalculator testqgsmeshcalculatordialog.cpp)
+ADD_QGIS_TEST(meshlayerpropertiesdialog testqgsmeshlayerpropertiesdialog.cpp)
+ADD_QGIS_TEST(gpsinformationwidget testqgsgpsinformationwidget.cpp)

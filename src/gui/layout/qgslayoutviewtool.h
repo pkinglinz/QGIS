@@ -16,7 +16,7 @@
 #ifndef QGSLAYOUTVIEWTOOL_H
 #define QGSLAYOUTVIEWTOOL_H
 
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgis_gui.h"
 #include <QCursor>
 #include <QAction>
@@ -28,6 +28,7 @@ class QKeyEvent;
 class QgsLayoutView;
 class QgsLayoutViewMouseEvent;
 class QgsLayout;
+class QgsLayoutItem;
 
 #ifdef SIP_RUN
 % ModuleHeaderCode
@@ -65,7 +66,7 @@ class GUI_EXPORT QgsLayoutViewTool : public QObject
     };
     Q_DECLARE_FLAGS( Flags, Flag )
 
-    virtual ~QgsLayoutViewTool();
+    ~QgsLayoutViewTool() override;
 
     /**
      * Returns the current combination of flags set for the tool.
@@ -126,7 +127,7 @@ class GUI_EXPORT QgsLayoutViewTool : public QObject
     void setAction( QAction *action );
 
     /**
-     * Returns the action associated with the tool or nullptr if no action is associated.
+     * Returns the action associated with the tool or NULLPTR if no action is associated.
      * \see setAction()
      */
     QAction *action();
@@ -165,6 +166,11 @@ class GUI_EXPORT QgsLayoutViewTool : public QObject
      */
     QgsLayout *layout() const;
 
+    /**
+     * Returns a list of items which should be ignored while snapping events
+     * for this tool.
+     */
+    virtual QList< QgsLayoutItem * > ignoredSnapItems() const;
 
   signals:
 
@@ -178,13 +184,19 @@ class GUI_EXPORT QgsLayoutViewTool : public QObject
      */
     void deactivated();
 
+    /**
+     * Emitted when an \a item is "focused" by the tool, i.e. it should become the active
+     * item and should have its properties displayed in any designer windows.
+     */
+    void itemFocused( QgsLayoutItem *item );
+
   protected:
 
     /**
      * Sets the combination of \a flags that will be used for the tool.
      * \see flags()
      */
-    void setFlags( const QgsLayoutViewTool::Flags flags );
+    void setFlags( QgsLayoutViewTool::Flags flags );
 
     /**
      * Constructor for QgsLayoutViewTool, taking a layout \a view and
@@ -193,9 +205,9 @@ class GUI_EXPORT QgsLayoutViewTool : public QObject
     QgsLayoutViewTool( QgsLayoutView *view SIP_TRANSFERTHIS, const QString &name );
 
     /**
-     * Returns true if a mouse press/release operation which started at
+     * Returns TRUE if a mouse press/release operation which started at
      * \a startViewPoint and ended at \a endViewPoint should be considered
-     * a "click and drag". If false is returned, the operation should be
+     * a "click and drag". If FALSE is returned, the operation should be
      * instead treated as just a click on \a startViewPoint.
      */
     bool isClickAndDrag( QPoint startViewPoint, QPoint endViewPoint ) const;
@@ -205,10 +217,10 @@ class GUI_EXPORT QgsLayoutViewTool : public QObject
     //! Pointer to layout view.
     QgsLayoutView *mView = nullptr;
 
-    QgsLayoutViewTool::Flags mFlags;
+    QgsLayoutViewTool::Flags mFlags = nullptr;
 
     //! Cursor used by tool
-    QCursor mCursor;
+    QCursor mCursor = Qt::ArrowCursor;
 
     //! Optional action associated with tool
     QPointer< QAction > mAction;

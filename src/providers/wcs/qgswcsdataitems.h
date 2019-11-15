@@ -18,29 +18,19 @@
 #include "qgsdataitem.h"
 #include "qgsdatasourceuri.h"
 #include "qgswcscapabilities.h"
+#include "qgsdataitemprovider.h"
 
 class QgsWCSConnectionItem : public QgsDataCollectionItem
 {
     Q_OBJECT
   public:
     QgsWCSConnectionItem( QgsDataItem *parent, QString name, QString path, QString uri );
-    ~QgsWCSConnectionItem();
 
     QVector<QgsDataItem *> createChildren() override;
-    virtual bool equal( const QgsDataItem *other ) override;
-
-#ifdef HAVE_GUI
-    QList<QAction *> actions( QWidget *parent ) override;
-#endif
+    bool equal( const QgsDataItem *other ) override;
 
     QgsWcsCapabilities mWcsCapabilities;
     QVector<QgsWcsCoverageSummary> mLayerProperties;
-
-  public slots:
-#ifdef HAVE_GUI
-    void editConnection();
-    void deleteConnection();
-#endif
 
   private:
     QString mUri;
@@ -55,7 +45,6 @@ class QgsWCSLayerItem : public QgsLayerItem
     QgsWCSLayerItem( QgsDataItem *parent, QString name, QString path,
                      const QgsWcsCapabilitiesProperty &capabilitiesProperty,
                      const QgsDataSourceUri &dataSourceUri, const QgsWcsCoverageSummary &coverageSummary );
-    ~QgsWCSLayerItem();
 
     QString createUri();
 
@@ -69,20 +58,30 @@ class QgsWCSRootItem : public QgsDataCollectionItem
     Q_OBJECT
   public:
     QgsWCSRootItem( QgsDataItem *parent, QString name, QString path );
-    ~QgsWCSRootItem();
 
     QVector<QgsDataItem *> createChildren() override;
 
+    QVariant sortKey() const override { return 9; }
+
 #ifdef HAVE_GUI
-    QList<QAction *> actions( QWidget *parent ) override;
-    virtual QWidget *paramWidget() override;
+    QWidget *paramWidget() override;
 #endif
 
   public slots:
 #ifdef HAVE_GUI
     void onConnectionsChanged();
-    void newConnection();
 #endif
+};
+
+//! Provider for WCS root data item
+class QgsWcsDataItemProvider : public QgsDataItemProvider
+{
+  public:
+    QString name() override;
+
+    int capabilities() const override;
+
+    QgsDataItem *createDataItem( const QString &pathIn, QgsDataItem *parentItem ) override;
 };
 
 #endif // QGSWCSDATAITEMS_H

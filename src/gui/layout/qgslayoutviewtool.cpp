@@ -20,11 +20,12 @@
 QgsLayoutViewTool::QgsLayoutViewTool( QgsLayoutView *view, const QString &name )
   : QObject( view )
   , mView( view )
-  , mFlags( 0 )
-  , mCursor( Qt::ArrowCursor )
   , mToolName( name )
 {
-
+  connect( mView, &QgsLayoutView::willBeDeleted, this, [ = ]
+  {
+    mView = nullptr;
+  } );
 }
 
 bool QgsLayoutViewTool::isClickAndDrag( QPoint startViewPoint, QPoint endViewPoint ) const
@@ -44,9 +45,15 @@ QgsLayout *QgsLayoutViewTool::layout() const
   return mView->currentLayout();
 }
 
+QList<QgsLayoutItem *> QgsLayoutViewTool::ignoredSnapItems() const
+{
+  return QList<QgsLayoutItem *>();
+}
+
 QgsLayoutViewTool::~QgsLayoutViewTool()
 {
-  mView->unsetTool( this );
+  if ( mView )
+    mView->unsetTool( this );
 }
 
 QgsLayoutViewTool::Flags QgsLayoutViewTool::flags() const

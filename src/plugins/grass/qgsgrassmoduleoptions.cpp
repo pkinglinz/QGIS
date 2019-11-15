@@ -45,16 +45,11 @@ QgsGrassModuleOptions::QgsGrassModuleOptions(
   : mIface( iface )
   , mTools( tools )
   , mModule( module )
-  , mRegionModeComboBox( 0 )
   , mDirect( direct )
 {
   QgsDebugMsg( "called." );
 
   mCanvas = mIface->mapCanvas();
-}
-
-QgsGrassModuleOptions::~QgsGrassModuleOptions()
-{
 }
 
 QStringList QgsGrassModuleOptions::arguments()
@@ -131,7 +126,7 @@ QgsGrassModuleStandardOptions::QgsGrassModuleStandardOptions(
 
   QVBoxLayout *mypSimpleLayout = new QVBoxLayout( mypSimpleFrame );
   QVBoxLayout *mypAdvancedLayout = new QVBoxLayout( &mAdvancedFrame );
-  QVBoxLayout *layout = 0;
+  QVBoxLayout *layout = nullptr;
 
   QDomDocument gDomDocument = readInterfaceDescription( mXName, mErrors );
   if ( !mErrors.isEmpty() )
@@ -422,7 +417,7 @@ QgsGrassModuleParam *QgsGrassModuleStandardOptions::itemByKey( QString key )
   }
 
   mErrors << tr( "Item with key %1 not found" ).arg( key );
-  return 0;
+  return nullptr;
 }
 
 QgsGrassModuleParam *QgsGrassModuleStandardOptions::item( QString id )
@@ -438,7 +433,7 @@ QgsGrassModuleParam *QgsGrassModuleStandardOptions::item( QString id )
   }
 
   mErrors << tr( "Item with id %1 not found" ).arg( id );
-  return 0;
+  return nullptr;
 }
 
 QStringList QgsGrassModuleStandardOptions::checkOutput()
@@ -472,7 +467,7 @@ QList<QgsGrassProvider *> QgsGrassModuleStandardOptions::grassProviders()
   QList<QgsGrassProvider *> providers;
   Q_FOREACH ( QgsMapLayer *layer, QgsProject::instance()->mapLayers().values() )
   {
-    if ( layer->type() == QgsMapLayer::VectorLayer )
+    if ( layer->type() == QgsMapLayerType::VectorLayer )
     {
       QgsVectorLayer *vector = qobject_cast<QgsVectorLayer *>( layer );
       if ( vector  && vector->providerType() == QLatin1String( "grass" ) )
@@ -493,7 +488,7 @@ QList<QgsGrassRasterProvider *> QgsGrassModuleStandardOptions::grassRasterProvid
   QList<QgsGrassRasterProvider *> providers;
   Q_FOREACH ( QgsMapLayer *layer, QgsProject::instance()->mapLayers().values() )
   {
-    if ( layer->type() == QgsMapLayer::RasterLayer )
+    if ( layer->type() == QgsMapLayerType::RasterLayer )
     {
       QgsRasterLayer *raster = qobject_cast<QgsRasterLayer *>( layer );
       if ( raster  && raster->providerType() == QLatin1String( "grassraster" ) )
@@ -850,7 +845,7 @@ bool QgsGrassModuleStandardOptions::getCurrentMapRegion( QgsGrassModuleInput *in
     return false;
   }
 
-  QStringList mm = input->currentMap().split( QStringLiteral( "@" ) );
+  QStringList mm = input->currentMap().split( '@' );
   QString map = mm.value( 0 );
   QString mapset = QgsGrass::getDefaultMapset();
   if ( mm.size() > 1 )
@@ -866,11 +861,6 @@ bool QgsGrassModuleStandardOptions::getCurrentMapRegion( QgsGrassModuleInput *in
     return false;
   }
   return true;
-}
-
-
-QgsGrassModuleStandardOptions::~QgsGrassModuleStandardOptions()
-{
 }
 
 QDomDocument QgsGrassModuleStandardOptions::readInterfaceDescription( const QString &xname, QStringList &errors )
@@ -928,8 +918,8 @@ QDomDocument QgsGrassModuleStandardOptions::readInterfaceDescription( const QStr
 
   // GRASS commands usually output text in system default encoding.
   // Let's use the System codec whether Qt doesn't recognize the encoding
-  // of the interface description (see https://issues.qgis.org/issues/4547)
-  QTextCodec *codec = 0;
+  // of the interface description (see https://github.com/qgis/QGIS/issues/14461)
+  QTextCodec *codec = nullptr;
 
   QgsDebugMsg( "trying to get encoding name from XML interface description..." );
 
@@ -968,7 +958,7 @@ QDomDocument QgsGrassModuleStandardOptions::readInterfaceDescription( const QStr
     if ( !ok )
     {
       QgsDebugMsg( "parse FAILED. Will let Qt detects encoding" );
-      codec = 0;
+      codec = nullptr;
     }
   }
 

@@ -22,9 +22,10 @@
 
 
 class QgsMapCanvas;
+class QgsMessageBar;
 
-
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsSymbolWidgetContext
  * Contains settings which reflect the context in which a symbol (or renderer) widget is shown, e.g., the
  * map canvas and relevant expression contexts.
@@ -40,26 +41,45 @@ class GUI_EXPORT QgsSymbolWidgetContext // clazy:exclude=rule-of-three
      */
     QgsSymbolWidgetContext() = default;
 
-    /** Copy constructor.
+    /**
+     * Copy constructor.
      * \param other source QgsSymbolWidgetContext
      */
     QgsSymbolWidgetContext( const QgsSymbolWidgetContext &other );
 
     QgsSymbolWidgetContext &operator=( const QgsSymbolWidgetContext &other );
 
-    /** Sets the map canvas associated with the widget. This allows the widget to retrieve the current
+    /**
+     * Sets the map canvas associated with the widget. This allows the widget to retrieve the current
      * map scale and other properties from the canvas.
      * \param canvas map canvas
      * \see mapCanvas()
      */
     void setMapCanvas( QgsMapCanvas *canvas );
 
-    /** Returns the map canvas associated with the widget.
+    /**
+     * Returns the map canvas associated with the widget.
      * \see setMapCanvas()
      */
     QgsMapCanvas *mapCanvas() const;
 
-    /** Sets the optional expression context used for the widget. This expression context is used for
+    /**
+     * Sets the message \a bar associated with the widget. This allows the widget to push feedback messages
+     * to the appropriate message bar.
+     * \see messageBar()
+     * \since QGIS 3.6
+     */
+    void setMessageBar( QgsMessageBar *bar );
+
+    /**
+     * Returns the message bar associated with the widget.
+     * \see setMessageBar()
+     * \since QGIS 3.6
+     */
+    QgsMessageBar *messageBar() const;
+
+    /**
+     * Sets the optional expression context used for the widget. This expression context is used for
      * evaluating data defined symbol properties and for populating based expression widgets in
      * the layer widget.
      * \param context expression context pointer. Ownership is not transferred.
@@ -68,25 +88,29 @@ class GUI_EXPORT QgsSymbolWidgetContext // clazy:exclude=rule-of-three
      */
     void setExpressionContext( QgsExpressionContext *context );
 
-    /** Returns the expression context used for the widget, if set. This expression context is used for
+    /**
+     * Returns the expression context used for the widget, if set. This expression context is used for
      * evaluating data defined symbol properties and for populating based expression widgets in
      * the layer widget.
      * \see setExpressionContext()
      */
     QgsExpressionContext *expressionContext() const;
 
-    /** Sets a list of additional expression context scopes to show as available within the layer.
+    /**
+     * Sets a list of additional expression context scopes to show as available within the layer.
      * \param scopes list of additional scopes which will be added in order to the end of the default expression context
      * \see setExpressionContext()
      */
     void setAdditionalExpressionContextScopes( const QList< QgsExpressionContextScope > &scopes );
 
-    /** Returns the list of additional expression context scopes to show as available within the layer.
+    /**
+     * Returns the list of additional expression context scopes to show as available within the layer.
      * \see setAdditionalExpressionContextScopes()
      */
     QList< QgsExpressionContextScope > additionalExpressionContextScopes() const;
 
-    /** Returns list of scopes: global, project, atlas, map, layer.
+    /**
+     * Returns list of scopes: global, project, atlas, map, layer.
      * Ownership is transferred to the caller.
      * \since QGIS 3.0
      */
@@ -95,6 +119,7 @@ class GUI_EXPORT QgsSymbolWidgetContext // clazy:exclude=rule-of-three
   private:
 
     QgsMapCanvas *mMapCanvas = nullptr;
+    QgsMessageBar *mMessageBar = nullptr;
     std::unique_ptr< QgsExpressionContext > mExpressionContext;
     QList< QgsExpressionContextScope > mAdditionalScopes;
 

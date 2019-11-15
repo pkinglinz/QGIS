@@ -23,7 +23,8 @@
 
 SIP_NO_FILE
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsValueRelationWidgetFactory
  * \note not available in Python bindings
  */
@@ -31,6 +32,11 @@ SIP_NO_FILE
 class GUI_EXPORT QgsValueRelationWidgetFactory : public QgsEditorWidgetFactory
 {
   public:
+
+    /**
+     * Constructor for QgsValueRelationWidgetFactory, where \a name is a human-readable
+     * name for the factory.
+     */
     explicit QgsValueRelationWidgetFactory( const QString &name );
 
     // QgsEditorWidgetFactory interface

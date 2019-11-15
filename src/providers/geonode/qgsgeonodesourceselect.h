@@ -43,9 +43,11 @@ class QgsGeoNodeSourceSelect: public QgsAbstractDataSourceWidget, private Ui::Qg
   public:
 
     QgsGeoNodeSourceSelect( QWidget *parent SIP_TRANSFERTHIS = nullptr, Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags, QgsProviderRegistry::WidgetMode widgetMode = QgsProviderRegistry::WidgetMode::None );
-    ~QgsGeoNodeSourceSelect();
+    ~QgsGeoNodeSourceSelect() override;
 
-  public slots:
+    void reset() override;
+
+  private:
 
     void addButtonClicked() override;
 
@@ -55,7 +57,8 @@ class QgsGeoNodeSourceSelect: public QgsAbstractDataSourceWidget, private Ui::Qg
 
   private:
 
-    /** Stores the available CRS for a server connections.
+    /**
+     * Stores the available CRS for a server connections.
      The first string is the typename, the corresponding list
     stores the CRS for the typename in the form 'EPSG:XXXX'*/
     QMap<QString, QStringList > mAvailableCRS;
@@ -89,11 +92,11 @@ class QgsGeoNodeSourceSelectProvider : public QgsSourceSelectProvider
 {
   public:
 
-    virtual QString providerKey() const override { return QStringLiteral( "geonode" ); }
-    virtual QString text() const override { return QObject::tr( "GeoNode" ); }
-    virtual int ordering() const override { return QgsSourceSelectProvider::OrderGeoCmsProvider + 10; }
-    virtual QIcon icon() const override { return QgsApplication::getThemeIcon( QStringLiteral( "/mActionAddGeonodeLayer.svg" ) ); }
-    virtual QgsAbstractDataSourceWidget *createDataSourceWidget( QWidget *parent = nullptr, Qt::WindowFlags fl = Qt::Widget, QgsProviderRegistry::WidgetMode widgetMode = QgsProviderRegistry::WidgetMode::Embedded ) const override
+    QString providerKey() const override { return QStringLiteral( "geonode" ); }
+    QString text() const override { return QObject::tr( "GeoNode" ); }
+    int ordering() const override { return QgsSourceSelectProvider::OrderGeoCmsProvider + 10; }
+    QIcon icon() const override { return QgsApplication::getThemeIcon( QStringLiteral( "/mActionAddGeonodeLayer.svg" ) ); }
+    QgsAbstractDataSourceWidget *createDataSourceWidget( QWidget *parent = nullptr, Qt::WindowFlags fl = Qt::Widget, QgsProviderRegistry::WidgetMode widgetMode = QgsProviderRegistry::WidgetMode::Embedded ) const override
     {
       return new QgsGeoNodeSourceSelect( parent, fl, widgetMode );
     }

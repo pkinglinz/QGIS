@@ -16,16 +16,17 @@
 #define QGSNULLSYMBOLRENDERERWIDGET_H
 
 #include "qgsrendererwidget.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgis_gui.h"
 
 class QgsNullSymbolRenderer;
 
 class QMenu;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * \class QgsNullSymbolRendererWidget
- * \brief Blank widget for customising QgsNullSymbolRenderer.
+ * \brief Blank widget for customizing QgsNullSymbolRenderer.
  * \since QGIS 2.16
  */
 
@@ -40,10 +41,10 @@ class GUI_EXPORT QgsNullSymbolRendererWidget : public QgsRendererWidget
 
     //! Constructor for QgsNullSymbolRendererWidget
     QgsNullSymbolRendererWidget( QgsVectorLayer *layer, QgsStyle *style, QgsFeatureRenderer *renderer );
-    ~QgsNullSymbolRendererWidget();
+    ~QgsNullSymbolRendererWidget() override;
 
     //! Returns a pointer to the configured renderer
-    virtual QgsFeatureRenderer *renderer();
+    QgsFeatureRenderer *renderer() override;
 
   protected:
 

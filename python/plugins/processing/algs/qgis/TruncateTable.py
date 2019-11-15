@@ -21,11 +21,8 @@ __author__ = 'Nyall Dawson'
 __date__ = 'January 2017'
 __copyright__ = '(C) 2017, Nyall Dawson'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
-from qgis.core import (QgsProcessingParameterVectorLayer,
+from qgis.core import (QgsProcessingAlgorithm,
+                       QgsProcessingParameterVectorLayer,
                        QgsProcessingOutputVectorLayer,
                        QgsProcessingException)
 from processing.algs.qgis.QgisAlgorithm import QgisAlgorithm
@@ -42,6 +39,9 @@ class TruncateTable(QgisAlgorithm):
     def group(self):
         return self.tr('Vector general')
 
+    def groupId(self):
+        return 'vectorgeneral'
+
     def __init__(self):
         super().__init__()
 
@@ -49,6 +49,9 @@ class TruncateTable(QgisAlgorithm):
         self.addParameter(QgsProcessingParameterVectorLayer(self.INPUT,
                                                             self.tr('Input Layer')))
         self.addOutput(QgsProcessingOutputVectorLayer(self.OUTPUT, self.tr('Truncated layer')))
+
+    def flags(self):
+        return super().flags() | QgsProcessingAlgorithm.FlagNoThreading
 
     def name(self):
         return 'truncatetable'

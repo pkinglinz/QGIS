@@ -134,7 +134,7 @@ QRectF QgsGCPCanvasItem::boundingRect() const
 
   QRectF residualArrowRect( QPointF( residualLeft, residualTop ), QPointF( residualRight, residualBottom ) );
   QRectF markerRect( -2, -2, mTextBounds.width() + 6, mTextBounds.height() + 6 );
-  QRectF boundingRect =  residualArrowRect.united( markerRect );
+  QRectF boundingRect = residualArrowRect.united( markerRect );
   if ( !mTextBoxRect.isNull() )
   {
     boundingRect = boundingRect.united( mTextBoxRect );
@@ -163,7 +163,7 @@ void QgsGCPCanvasItem::updatePosition()
 
 void QgsGCPCanvasItem::drawResidualArrow( QPainter *p, const QgsRenderContext &context )
 {
-  Q_UNUSED( context );
+  Q_UNUSED( context )
   if ( !mDataPoint || !mIsGCPSource || !mMapCanvas )
   {
     return;
@@ -193,7 +193,7 @@ double QgsGCPCanvasItem::residualToScreenFactor() const
     QgsMapLayer *mapLayer = canvasLayers.at( 0 );
     if ( mapLayer )
     {
-      QgsRasterLayer *rasterLayer = dynamic_cast<QgsRasterLayer *>( mapLayer );
+      QgsRasterLayer *rasterLayer = qobject_cast<QgsRasterLayer *>( mapLayer );
       if ( rasterLayer )
       {
         mapUnitsPerRasterPixel = rasterLayer->rasterUnitsPerPixelX();

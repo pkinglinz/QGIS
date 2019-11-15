@@ -16,23 +16,20 @@
 *                                                                         *
 ***************************************************************************
 """
-from builtins import range
 
 __author__ = 'Victor Olaya'
 __date__ = 'August 2012'
 __copyright__ = '(C) 2012, Victor Olaya'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 import os
 import random
 
 from qgis.PyQt.QtGui import QIcon
-from qgis.core import (QgsFeatureSink,
+from qgis.core import (QgsApplication,
+                       QgsFeatureSink,
                        QgsProcessingException,
                        QgsProcessingUtils,
+                       QgsProcessingAlgorithm,
                        QgsProcessingParameterVectorLayer,
                        QgsProcessingParameterEnum,
                        QgsProcessingParameterNumber,
@@ -52,10 +49,19 @@ class RandomSelection(QgisAlgorithm):
     NUMBER = 'NUMBER'
 
     def icon(self):
-        return QIcon(os.path.join(pluginPath, 'images', 'ftools', 'random_selection.png'))
+        return QgsApplication.getThemeIcon("/algorithms/mAlgorithmSelectRandom.svg")
+
+    def svgIconPath(self):
+        return QgsApplication.iconPath("/algorithms/mAlgorithmSelectRandom.svg")
 
     def group(self):
         return self.tr('Vector selection')
+
+    def groupId(self):
+        return 'vectorselection'
+
+    def flags(self):
+        return super().flags() | QgsProcessingAlgorithm.FlagNoThreading
 
     def __init__(self):
         super().__init__()
@@ -70,7 +76,7 @@ class RandomSelection(QgisAlgorithm):
                                                      self.tr('Method'), self.methods, False, 0))
         self.addParameter(QgsProcessingParameterNumber(self.NUMBER,
                                                        self.tr('Number/percentage of selected features'), QgsProcessingParameterNumber.Integer,
-                                                       10, False, 0.0, 999999999999.0))
+                                                       10, False, 0.0))
         self.addOutput(QgsProcessingOutputVectorLayer(self.OUTPUT, self.tr('Selected (random)')))
 
     def name(self):
@@ -83,11 +89,11 @@ class RandomSelection(QgisAlgorithm):
         layer = self.parameterAsVectorLayer(parameters, self.INPUT, context)
         method = self.parameterAsEnum(parameters, self.METHOD, context)
 
-        featureCount = layer.featureCount()
+        ids = layer.allFeatureIds()
         value = self.parameterAsInt(parameters, self.NUMBER, context)
 
         if method == 0:
-            if value > featureCount:
+            if value > len(ids):
                 raise QgsProcessingException(
                     self.tr('Selected number is greater than feature count. '
                             'Choose a lower value and try again.'))
@@ -96,9 +102,9 @@ class RandomSelection(QgisAlgorithm):
                 raise QgsProcessingException(
                     self.tr("Percentage can't be greater than 100. Set a "
                             "different value and try again."))
-            value = int(round(value / 100.0, 4) * featureCount)
+            value = int(round(value / 100.0, 4) * len(ids))
 
-        selran = random.sample(list(range(featureCount)), value)
+        selran = random.sample(ids, value)
 
         layer.selectByIds(selran)
         return {self.OUTPUT: parameters[self.INPUT]}

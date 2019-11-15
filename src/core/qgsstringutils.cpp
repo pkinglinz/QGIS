@@ -18,6 +18,8 @@
 #include <QRegExp>
 #include <QStringList>
 #include <QTextBoundaryFinder>
+#include <QRegularExpression>
+#include <cstdlib> // for std::abs
 
 QString QgsStringUtils::capitalize( const QString &string, QgsStringUtils::Capitalization capitalization )
 {
@@ -56,9 +58,74 @@ QString QgsStringUtils::capitalize( const QString &string, QgsStringUtils::Capit
       return temp;
     }
 
+    case TitleCase:
+    {
+      // yes, this is MASSIVELY simplifying the problem!!
+
+      static QStringList smallWords;
+      static QStringList newPhraseSeparators;
+      static QRegularExpression splitWords;
+      if ( smallWords.empty() )
+      {
+        smallWords = QObject::tr( "a|an|and|as|at|but|by|en|for|if|in|nor|of|on|or|per|s|the|to|vs.|vs|via" ).split( '|' );
+        newPhraseSeparators = QObject::tr( ".|:" ).split( '|' );
+        splitWords = QRegularExpression( QStringLiteral( "\\b" ), QRegularExpression::UseUnicodePropertiesOption );
+      }
+
+      const QStringList parts = string.split( splitWords, QString::SkipEmptyParts );
+      QString result;
+      bool firstWord = true;
+      int i = 0;
+      int lastWord = parts.count() - 1;
+      for ( const QString &word : qgis::as_const( parts ) )
+      {
+        if ( newPhraseSeparators.contains( word.trimmed() ) )
+        {
+          firstWord = true;
+          result += word;
+        }
+        else if ( firstWord || ( i == lastWord ) || !smallWords.contains( word ) )
+        {
+          result += word.at( 0 ).toUpper() + word.mid( 1 );
+          firstWord = false;
+        }
+        else
+        {
+          result += word;
+        }
+        i++;
+      }
+      return result;
+    }
+
+    case UpperCamelCase:
+      QString result = QgsStringUtils::capitalize( string.toLower(), QgsStringUtils::ForceFirstLetterToCapital ).simplified();
+      result.remove( ' ' );
+      return result;
   }
   // no warnings
   return string;
+}
+
+// original code from http://www.qtcentre.org/threads/52456-HTML-Unicode-ampersand-encoding
+QString QgsStringUtils::ampersandEncode( const QString &string )
+{
+  QString encoded;
+  for ( int i = 0; i < string.size(); ++i )
+  {
+    QChar ch = string.at( i );
+    if ( ch.unicode() > 160 )
+      encoded += QStringLiteral( "&#%1;" ).arg( static_cast< int >( ch.unicode() ) );
+    else if ( ch.unicode() == 38 )
+      encoded += QStringLiteral( "&amp;" );
+    else if ( ch.unicode() == 60 )
+      encoded += QStringLiteral( "&lt;" );
+    else if ( ch.unicode() == 62 )
+      encoded += QStringLiteral( "&gt;" );
+    else
+      encoded += ch;
+  }
+  return encoded;
 }
 
 int QgsStringUtils::levenshteinDistance( const QString &string1, const QString &string2, bool caseSensitive )
@@ -347,7 +414,7 @@ QString QgsStringUtils::insertLinks( const QString &string, bool *foundLinks )
   // http://alanstorm.com/url_regex_explained
   // note - there's more robust implementations available, but we need one which works within the limitation of QRegExp
   static QRegExp urlRegEx( "(\\b(([\\w-]+://?|www[.])[^\\s()<>]+(?:\\([\\w\\d]+\\)|([^!\"#$%&'()*+,\\-./:;<=>?@[\\\\\\]^_`{|}~\\s]|/))))" );
-  static QRegExp protoRegEx( "^(?:f|ht)tps?://" );
+  static QRegExp protoRegEx( "^(?:f|ht)tps?://|file://" );
   static QRegExp emailRegEx( "([\\w._%+-]+@[\\w.-]+\\.[A-Za-z]+)" );
 
   int offset = 0;
@@ -370,7 +437,7 @@ QString QgsStringUtils::insertLinks( const QString &string, bool *foundLinks )
   {
     found = true;
     QString email = emailRegEx.cap( 1 );
-    QString anchor = QStringLiteral( "<a href=\"mailto:%1\">%1</a>" ).arg( email.toHtmlEscaped(), email.toHtmlEscaped() );
+    QString anchor = QStringLiteral( "<a href=\"mailto:%1\">%1</a>" ).arg( email.toHtmlEscaped() );
     converted.replace( emailRegEx.pos( 1 ), email.length(), anchor );
     offset = emailRegEx.pos( 1 ) + anchor.length();
   }
@@ -379,6 +446,121 @@ QString QgsStringUtils::insertLinks( const QString &string, bool *foundLinks )
     *foundLinks = found;
 
   return converted;
+}
+
+QString QgsStringUtils::htmlToMarkdown( const QString &html )
+{
+
+  QString converted = html;
+  converted.replace( QLatin1String( "<br>" ), QLatin1String( "\n" ) );
+  converted.replace( QLatin1String( "<b>" ), QLatin1String( "**" ) );
+  converted.replace( QLatin1String( "</b>" ), QLatin1String( "**" ) );
+
+  static QRegExp hrefRegEx( "<a\\s+href\\s*=\\s*([^<>]*)\\s*>([^<>]*)</a>" );
+  int offset = 0;
+  while ( hrefRegEx.indexIn( converted, offset ) != -1 )
+  {
+    QString url = hrefRegEx.cap( 1 ).replace( QStringLiteral( "\"" ), QString() );
+    url.replace( QStringLiteral( "'" ), QString() );
+    QString name = hrefRegEx.cap( 2 );
+    QString anchor = QStringLiteral( "[%1](%2)" ).arg( name, url );
+    converted.replace( hrefRegEx, anchor );
+    offset = hrefRegEx.pos( 1 ) + anchor.length();
+  }
+
+  return converted;
+}
+
+QString QgsStringUtils::wordWrap( const QString &string, const int length, const bool useMaxLineLength, const QString &customDelimiter )
+{
+  if ( string.isEmpty() || length == 0 )
+    return string;
+
+  QString newstr;
+  QRegExp rx;
+  int delimiterLength = 0;
+
+  if ( !customDelimiter.isEmpty() )
+  {
+    rx.setPatternSyntax( QRegExp::FixedString );
+    rx.setPattern( customDelimiter );
+    delimiterLength = customDelimiter.length();
+  }
+  else
+  {
+    // \x200B is a ZERO-WIDTH SPACE, needed for worwrap to support a number of complex scripts (Indic, Arabic, etc.)
+    rx.setPattern( QStringLiteral( "[\\s\\x200B]" ) );
+    delimiterLength = 1;
+  }
+
+  const QStringList lines = string.split( '\n' );
+  int strLength, strCurrent, strHit, lastHit;
+
+  for ( int i = 0; i < lines.size(); i++ )
+  {
+    strLength = lines.at( i ).length();
+    strCurrent = 0;
+    strHit = 0;
+    lastHit = 0;
+
+    while ( strCurrent < strLength )
+    {
+      // positive wrap value = desired maximum line width to wrap
+      // negative wrap value = desired minimum line width before wrap
+      if ( useMaxLineLength )
+      {
+        //first try to locate delimiter backwards
+        strHit = lines.at( i ).lastIndexOf( rx, strCurrent + length );
+        if ( strHit == lastHit || strHit == -1 )
+        {
+          //if no new backward delimiter found, try to locate forward
+          strHit = lines.at( i ).indexOf( rx, strCurrent + std::abs( length ) );
+        }
+        lastHit = strHit;
+      }
+      else
+      {
+        strHit = lines.at( i ).indexOf( rx, strCurrent + std::abs( length ) );
+      }
+      if ( strHit > -1 )
+      {
+        newstr.append( lines.at( i ).midRef( strCurrent, strHit - strCurrent ) );
+        newstr.append( '\n' );
+        strCurrent = strHit + delimiterLength;
+      }
+      else
+      {
+        newstr.append( lines.at( i ).midRef( strCurrent ) );
+        strCurrent = strLength;
+      }
+    }
+    if ( i < lines.size() - 1 )
+      newstr.append( '\n' );
+  }
+
+  return newstr;
+}
+
+QString QgsStringUtils::substituteVerticalCharacters( QString string )
+{
+  string = string.replace( ',', QChar( 65040 ) ).replace( QChar( 8229 ), QChar( 65072 ) ); // comma & two-dot leader
+  string = string.replace( QChar( 12289 ), QChar( 65041 ) ).replace( QChar( 12290 ), QChar( 65042 ) ); // ideographic comma & full stop
+  string = string.replace( ':', QChar( 65043 ) ).replace( ';', QChar( 65044 ) );
+  string = string.replace( '!', QChar( 65045 ) ).replace( '?', QChar( 65046 ) );
+  string = string.replace( QChar( 12310 ), QChar( 65047 ) ).replace( QChar( 12311 ), QChar( 65048 ) ); // white lenticular brackets
+  string = string.replace( QChar( 8230 ), QChar( 65049 ) ); // three-dot ellipse
+  string = string.replace( QChar( 8212 ), QChar( 65073 ) ).replace( QChar( 8211 ), QChar( 65074 ) ); // em & en dash
+  string = string.replace( '_', QChar( 65075 ) ).replace( QChar( 65103 ), QChar( 65076 ) ); // low line & wavy low line
+  string = string.replace( '(', QChar( 65077 ) ).replace( ')', QChar( 65078 ) );
+  string = string.replace( '{', QChar( 65079 ) ).replace( '}', QChar( 65080 ) );
+  string = string.replace( '<', QChar( 65087 ) ).replace( '>', QChar( 65088 ) );
+  string = string.replace( '[', QChar( 65095 ) ).replace( ']', QChar( 65096 ) );
+  string = string.replace( QChar( 12308 ), QChar( 65081 ) ).replace( QChar( 12309 ), QChar( 65082 ) );   // tortoise shell brackets
+  string = string.replace( QChar( 12304 ), QChar( 65083 ) ).replace( QChar( 12305 ), QChar( 65084 ) );   // black lenticular brackets
+  string = string.replace( QChar( 12298 ), QChar( 65085 ) ).replace( QChar( 12299 ), QChar( 65086 ) ); // double angle brackets
+  string = string.replace( QChar( 12300 ), QChar( 65089 ) ).replace( QChar( 12301 ), QChar( 65090 ) );   // corner brackets
+  string = string.replace( QChar( 12302 ), QChar( 65091 ) ).replace( QChar( 12303 ), QChar( 65092 ) );   // white corner brackets
+  return string;
 }
 
 QgsStringReplacement::QgsStringReplacement( const QString &match, const QString &replacement, bool caseSensitive, bool wholeWordOnly )
@@ -426,7 +608,8 @@ QgsStringReplacement QgsStringReplacement::fromProperties( const QgsStringMap &p
 QString QgsStringReplacementCollection::process( const QString &input ) const
 {
   QString result = input;
-  Q_FOREACH ( const QgsStringReplacement &r, mReplacements )
+  const auto constMReplacements = mReplacements;
+  for ( const QgsStringReplacement &r : constMReplacements )
   {
     result = r.process( result );
   }
@@ -435,7 +618,8 @@ QString QgsStringReplacementCollection::process( const QString &input ) const
 
 void QgsStringReplacementCollection::writeXml( QDomElement &elem, QDomDocument &doc ) const
 {
-  Q_FOREACH ( const QgsStringReplacement &r, mReplacements )
+  const auto constMReplacements = mReplacements;
+  for ( const QgsStringReplacement &r : constMReplacements )
   {
     QgsStringMap props = r.properties();
     QDomElement propEl = doc.createElement( QStringLiteral( "replacement" ) );

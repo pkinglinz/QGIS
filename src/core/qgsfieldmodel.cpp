@@ -22,11 +22,10 @@
 #include "qgslogger.h"
 #include "qgsapplication.h"
 #include "qgsvectorlayer.h"
+#include "qgsvectorlayerjoinbuffer.h"
 
 QgsFieldModel::QgsFieldModel( QObject *parent )
   : QAbstractItemModel( parent )
-  , mAllowExpression( false )
-  , mAllowEmpty( false )
 {
 }
 
@@ -248,7 +247,7 @@ QModelIndex QgsFieldModel::index( int row, int column, const QModelIndex &parent
 
 QModelIndex QgsFieldModel::parent( const QModelIndex &child ) const
 {
-  Q_UNUSED( child );
+  Q_UNUSED( child )
   return QModelIndex();
 }
 
@@ -264,7 +263,7 @@ int QgsFieldModel::rowCount( const QModelIndex &parent ) const
 
 int QgsFieldModel::columnCount( const QModelIndex &parent ) const
 {
-  Q_UNUSED( parent );
+  Q_UNUSED( parent )
   return 1;
 }
 
@@ -361,8 +360,36 @@ QVariant QgsFieldModel::data( const QModelIndex &index, int role ) const
       return isEmpty;
     }
 
+    case EditorWidgetType:
+    {
+      if ( exprIdx < 0 && !isEmpty )
+      {
+        return mFields.at( index.row() - fieldOffset ).editorWidgetSetup().type();
+      }
+      return QVariant();
+    }
+
+    case JoinedFieldIsEditable:
+    {
+      if ( exprIdx < 0 && !isEmpty )
+      {
+        if ( mLayer && mFields.fieldOrigin( index.row() - fieldOffset ) == QgsFields::OriginJoin )
+        {
+          int srcFieldIndex;
+          const QgsVectorLayerJoinInfo *info = mLayer->joinBuffer()->joinForFieldIndex( index.row() - fieldOffset, mLayer->fields(), srcFieldIndex );
+
+          if ( !info || !info->isEditable() )
+            return false;
+
+          return true;
+        }
+      }
+      return QVariant();
+    }
+
     case Qt::DisplayRole:
     case Qt::EditRole:
+    case Qt::ToolTipRole:
     {
       if ( isEmpty )
       {
@@ -375,6 +402,10 @@ QVariant QgsFieldModel::data( const QModelIndex &index, int role ) const
       else if ( role == Qt::EditRole )
       {
         return mFields.at( index.row() - fieldOffset ).name();
+      }
+      else if ( role == Qt::ToolTipRole )
+      {
+        return fieldToolTip( mFields.at( index.row() - fieldOffset ) );
       }
       else if ( mLayer )
       {
@@ -427,4 +458,35 @@ QVariant QgsFieldModel::data( const QModelIndex &index, int role ) const
     default:
       return QVariant();
   }
+}
+
+QString QgsFieldModel::fieldToolTip( const QgsField &field )
+{
+  QString toolTip;
+  if ( !field.alias().isEmpty() )
+  {
+    toolTip = QStringLiteral( "<b>%1</b> (%2)" ).arg( field.alias(), field.name() );
+  }
+  else
+  {
+    toolTip = QStringLiteral( "<b>%1</b>" ).arg( field.name() );
+  }
+  QString typeString;
+  if ( field.length() > 0 )
+  {
+    if ( field.precision() > 0 )
+    {
+      typeString = QStringLiteral( "%1 (%2, %3)" ).arg( field.typeName() ).arg( field.length() ).arg( field.precision() );
+    }
+    else
+    {
+      typeString = QStringLiteral( "%1 (%2)" ).arg( field.typeName() ).arg( field.length() );
+    }
+  }
+  else
+  {
+    typeString = field.typeName();
+  }
+  toolTip += QStringLiteral( "<p>%1</p>" ).arg( typeString );
+  return toolTip;
 }

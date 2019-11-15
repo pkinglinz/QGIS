@@ -16,597 +16,665 @@
  ***************************************************************************/
 
 #include "qgswmsparameters.h"
+#include "qgsdatasourceuri.h"
+#include "qgsvectorlayerserverproperties.h"
 #include "qgsmessagelog.h"
-#include <iostream>
+#include "qgswmsserviceexception.h"
+
+const QString EXTERNAL_LAYER_PREFIX = QStringLiteral( "EXTERNAL_WMS:" );
 
 namespace QgsWms
 {
+  //
+  // QgsWmsParameter
+  //
+  QgsWmsParameter::QgsWmsParameter( const QgsWmsParameter::Name name,
+                                    const QVariant::Type type,
+                                    const QVariant defaultValue )
+    : QgsServerParameterDefinition( type, defaultValue )
+    , mName( name )
+  {
+  }
+
+  bool QgsWmsParameter::isValid() const
+  {
+    return ( mName != QgsWmsParameter::UNKNOWN ) && QgsServerParameterDefinition::isValid();
+  }
+
+  void QgsWmsParameter::raiseError() const
+  {
+    const QString msg = QString( "%1 ('%2') cannot be converted into %3" ).arg( name( mName ), toString(), typeName() );
+    QgsServerParameterDefinition::raiseError( msg );
+  }
+
+  QStringList QgsWmsParameter::toStyleList( const char delimiter ) const
+  {
+    return QgsServerParameterDefinition::toStringList( delimiter, false );
+  }
+
+  QList<QgsGeometry> QgsWmsParameter::toGeomList( const char delimiter ) const
+  {
+    bool ok = true;
+    const QList<QgsGeometry> geoms = QgsServerParameterDefinition::toGeomList( ok, delimiter );
+
+    if ( !ok )
+    {
+      const QString msg = QString( "%1 ('%2') cannot be converted into a list of geometries" ).arg( name( mName ), toString(), typeName() );
+      QgsServerParameterDefinition::raiseError( msg );
+    }
+
+    return geoms;
+  }
+
+  QgsRectangle QgsWmsParameter::toRectangle() const
+  {
+    bool ok = true;
+    const QgsRectangle rect = QgsServerParameterDefinition::toRectangle( ok );
+
+    if ( !ok )
+    {
+      const QString msg = QString( "%1 ('%2') cannot be converted into a rectangle" ).arg( name( mName ), toString(), typeName() );
+      QgsServerParameterDefinition::raiseError( msg );
+    }
+
+    return rect;
+  }
+
+  int QgsWmsParameter::toInt() const
+  {
+    bool ok = false;
+    const int val = QgsServerParameterDefinition::toInt( ok );
+
+    if ( !ok )
+    {
+      raiseError();
+    }
+
+    return val;
+  }
+
+  QString QgsWmsParameter::loadUrl() const
+  {
+    // Check URL -- it will be used in error messages
+    const QUrl url = toUrl();
+
+    bool ok = false;
+    const QString content = QgsServerParameterDefinition::loadUrl( ok );
+
+    if ( !ok )
+    {
+      const QString msg = QString( "%1 request error for %2" ).arg( name( mName ), url.toString() );
+      QgsServerParameterDefinition::raiseError( msg );
+    }
+
+    return content;
+  }
+
+  QUrl QgsWmsParameter::toUrl() const
+  {
+    bool ok = false;
+    const QUrl url = QgsServerParameterDefinition::toUrl( ok );
+
+    if ( !ok )
+    {
+      raiseError();
+    }
+
+    return url;
+  }
+
+  QColor QgsWmsParameter::toColor() const
+  {
+    bool ok = false;
+    const QColor col = QgsServerParameterDefinition::toColor( ok );
+
+    if ( !ok )
+    {
+      raiseError();
+    }
+
+    return col;
+  }
+
+  QList<QColor> QgsWmsParameter::toColorList( const char delimiter ) const
+  {
+    bool ok = false;
+    const QList<QColor> vals = QgsServerParameterDefinition::toColorList( ok, delimiter );
+
+    if ( !ok )
+    {
+      const QString msg = QString( "%1 ('%2') cannot be converted into a list of colors" ).arg( name( mName ), toString(), typeName() );
+      QgsServerParameterDefinition::raiseError( msg );
+    }
+
+    return vals;
+  }
+
+  QList<int> QgsWmsParameter::toIntList( const char delimiter ) const
+  {
+    bool ok = false;
+    const QList<int> vals = QgsServerParameterDefinition::toIntList( ok, delimiter );
+
+    if ( !ok )
+    {
+      const QString msg = QString( "%1 ('%2') cannot be converted into a list of int" ).arg( name( mName ), toString(), typeName() );
+      QgsServerParameterDefinition::raiseError( msg );
+    }
+
+    return vals;
+  }
+
+  QList<double> QgsWmsParameter::toDoubleList( const char delimiter ) const
+  {
+    bool ok = false;
+    const QList<double> vals = QgsServerParameterDefinition::toDoubleList( ok, delimiter );
+
+    if ( !ok )
+    {
+      const QString msg = QString( "%1 ('%2') cannot be converted into a list of float" ).arg( name( mName ), toString(), typeName() );
+      QgsServerParameterDefinition::raiseError( msg );
+    }
+
+    return vals;
+  }
+
+  double QgsWmsParameter::toDouble() const
+  {
+    bool ok = false;
+    const double val = QgsServerParameterDefinition::toDouble( ok );
+
+    if ( !ok )
+    {
+      raiseError();
+    }
+
+    return val;
+  }
+
+  QString QgsWmsParameter::name() const
+  {
+    return QgsWmsParameter::name( mName );
+  }
+
+  QString QgsWmsParameter::name( const QgsWmsParameter::Name name )
+  {
+    const QMetaEnum metaEnum( QMetaEnum::fromType<QgsWmsParameter::Name>() );
+    return metaEnum.valueToKey( name );
+  }
+
+  QgsWmsParameter::Name QgsWmsParameter::name( const QString &name )
+  {
+    const QMetaEnum metaEnum( QMetaEnum::fromType<QgsWmsParameter::Name>() );
+    return ( QgsWmsParameter::Name ) metaEnum.keyToValue( name.toUpper().toStdString().c_str() );
+  }
+
+  //
+  // QgsWmsParameters
+  //
   QgsWmsParameters::QgsWmsParameters()
+    : QgsServerParameters()
   {
     // Available version number
     mVersions.append( QgsProjectVersion( 1, 1, 1 ) );
     mVersions.append( QgsProjectVersion( 1, 3, 0 ) );
 
     // WMS parameters definition
-    const Parameter pBoxSpace = { ParameterName::BOXSPACE,
-                                  QVariant::Double,
-                                  QVariant( 2.0 ),
-                                  QVariant()
-                                };
+    const QgsWmsParameter pQuality( QgsWmsParameter::IMAGE_QUALITY,
+                                    QVariant::Int,
+                                    QVariant( 0 ) );
+    save( pQuality );
+
+    const QgsWmsParameter pTiled( QgsWmsParameter::TILED,
+                                  QVariant::Bool,
+                                  QVariant( false ) );
+    save( pTiled );
+
+    const QgsWmsParameter pBoxSpace( QgsWmsParameter::BOXSPACE,
+                                     QVariant::Double,
+                                     QVariant( 2.0 ) );
     save( pBoxSpace );
 
-    const Parameter pSymbSpace = { ParameterName::SYMBOLSPACE,
-                                   QVariant::Double,
-                                   QVariant( 2.0 ),
-                                   QVariant()
-                                 };
+    const QgsWmsParameter pSymbSpace( QgsWmsParameter::SYMBOLSPACE,
+                                      QVariant::Double,
+                                      QVariant( 2.0 ) );
     save( pSymbSpace );
 
-    const Parameter pLayerSpace = { ParameterName::LAYERSPACE,
-                                    QVariant::Double,
-                                    QVariant( 3.0 ),
-                                    QVariant()
-                                  };
+    const QgsWmsParameter pLayerSpace( QgsWmsParameter::LAYERSPACE,
+                                       QVariant::Double,
+                                       QVariant( 3.0 ) );
     save( pLayerSpace );
 
-    const Parameter pTitleSpace = { ParameterName::LAYERTITLESPACE,
-                                    QVariant::Double,
-                                    QVariant( 3.0 ),
-                                    QVariant()
-                                  };
+    const QgsWmsParameter pTitleSpace( QgsWmsParameter::LAYERTITLESPACE,
+                                       QVariant::Double,
+                                       QVariant( 3.0 ) );
     save( pTitleSpace );
 
-    const Parameter pSymbHeight = { ParameterName::SYMBOLHEIGHT,
-                                    QVariant::Double,
-                                    QVariant( 4.0 ),
-                                    QVariant()
-                                  };
+    const QgsWmsParameter pSymbHeight( QgsWmsParameter::SYMBOLHEIGHT,
+                                       QVariant::Double,
+                                       QVariant( 4.0 ) );
     save( pSymbHeight );
 
-    const Parameter pSymbWidth = { ParameterName::SYMBOLWIDTH,
-                                   QVariant::Double,
-                                   QVariant( 7.0 ),
-                                   QVariant()
-                                 };
+    const QgsWmsParameter pSymbWidth( QgsWmsParameter::SYMBOLWIDTH,
+                                      QVariant::Double,
+                                      QVariant( 7.0 ) );
     save( pSymbWidth );
 
-    const Parameter pIcLabelSpace = { ParameterName::ICONLABELSPACE,
-                                      QVariant::Double,
-                                      QVariant( 2.0 ),
-                                      QVariant()
-                                    };
+    const QgsWmsParameter pIcLabelSpace( QgsWmsParameter::ICONLABELSPACE,
+                                         QVariant::Double,
+                                         QVariant( 2.0 ) );
     save( pIcLabelSpace );
 
-    const Parameter pItFontFamily = { ParameterName::ITEMFONTFAMILY,
-                                      QVariant::String,
-                                      QVariant( "" ),
-                                      QVariant()
-                                    };
+    const QgsWmsParameter pItFontFamily( QgsWmsParameter::ITEMFONTFAMILY );
     save( pItFontFamily );
 
-    const Parameter pItFontBold = { ParameterName::ITEMFONTBOLD,
-                                    QVariant::Bool,
-                                    QVariant( false ),
-                                    QVariant()
-                                  };
+    const QgsWmsParameter pItFontBold( QgsWmsParameter::ITEMFONTBOLD,
+                                       QVariant::Bool,
+                                       QVariant( false ) );
     save( pItFontBold );
 
-    const Parameter pItFontItalic = { ParameterName::ITEMFONTITALIC,
-                                      QVariant::Bool,
-                                      QVariant( false ),
-                                      QVariant()
-                                    };
+    const QgsWmsParameter pItFontItalic( QgsWmsParameter::ITEMFONTITALIC,
+                                         QVariant::Bool,
+                                         QVariant( false ) );
     save( pItFontItalic );
 
-    const Parameter pItFontSize = { ParameterName::ITEMFONTSIZE,
-                                    QVariant::Double,
-                                    QVariant( -1 ),
-                                    QVariant()
-                                  };
+    const QgsWmsParameter pItFontSize( QgsWmsParameter::ITEMFONTSIZE,
+                                       QVariant::Double,
+                                       QVariant( -1 ) );
     save( pItFontSize );
 
-    const Parameter pItFontColor = { ParameterName::ITEMFONTCOLOR,
-                                     QVariant::String,
-                                     QVariant( "black" ),
-                                     QVariant()
-                                   };
+    const QgsWmsParameter pItFontColor( QgsWmsParameter::ITEMFONTCOLOR,
+                                        QVariant::String,
+                                        QVariant( "black" ) );
     save( pItFontColor );
 
-    const Parameter pHighlightGeom = { ParameterName::HIGHLIGHT_GEOM,
-                                       QVariant::String,
-                                       QVariant( "" ),
-                                       QVariant()
-                                     };
+    const QgsWmsParameter pHighlightGeom( QgsWmsParameter::HIGHLIGHT_GEOM );
     save( pHighlightGeom );
 
-    const Parameter pShowFeatureCount = { ParameterName::SHOWFEATURECOUNT,
-                                          QVariant::Bool,
-                                          QVariant( false ),
-                                          QVariant()
-                                        };
+    const QgsWmsParameter pShowFeatureCount( QgsWmsParameter::SHOWFEATURECOUNT,
+        QVariant::Bool,
+        QVariant( false ) );
     save( pShowFeatureCount );
 
-    const Parameter pHighlightSymbol = { ParameterName::HIGHLIGHT_SYMBOL,
-                                         QVariant::String,
-                                         QVariant( "" ),
-                                         QVariant()
-                                       };
+    const QgsWmsParameter pHighlightSymbol( QgsWmsParameter::HIGHLIGHT_SYMBOL );
     save( pHighlightSymbol );
 
-    const Parameter pHighlightLabel = { ParameterName::HIGHLIGHT_LABELSTRING,
-                                        QVariant::String,
-                                        QVariant( "" ),
-                                        QVariant()
-                                      };
+    const QgsWmsParameter pHighlightLabel( QgsWmsParameter::HIGHLIGHT_LABELSTRING );
     save( pHighlightLabel );
 
-    const Parameter pHighlightColor = { ParameterName::HIGHLIGHT_LABELCOLOR,
-                                        QVariant::String,
-                                        QVariant( "black" ),
-                                        QVariant()
-                                      };
+    const QgsWmsParameter pHighlightColor( QgsWmsParameter::HIGHLIGHT_LABELCOLOR,
+                                           QVariant::String,
+                                           QVariant( "black" ) );
     save( pHighlightColor );
 
-    const Parameter pHighlightFontSize = { ParameterName::HIGHLIGHT_LABELSIZE,
-                                           QVariant::String,
-                                           QVariant( "" ),
-                                           QVariant()
-                                         };
+    const QgsWmsParameter pHighlightFontSize( QgsWmsParameter::HIGHLIGHT_LABELSIZE );
     save( pHighlightFontSize );
 
-    const Parameter pHighlightFontWeight = { ParameterName::HIGHLIGHT_LABELWEIGHT,
-                                             QVariant::String,
-                                             QVariant( "" ),
-                                             QVariant()
-                                           };
+    const QgsWmsParameter pHighlightFontWeight( QgsWmsParameter::HIGHLIGHT_LABELWEIGHT );
     save( pHighlightFontWeight );
 
-    const Parameter pHighlightFont = { ParameterName::HIGHLIGHT_LABELFONT,
-                                       QVariant::String,
-                                       QVariant( "" ),
-                                       QVariant()
-                                     };
+    const QgsWmsParameter pHighlightFont( QgsWmsParameter::HIGHLIGHT_LABELFONT );
     save( pHighlightFont );
 
-    const Parameter pHighlightBufferColor = { ParameterName::HIGHLIGHT_LABELBUFFERCOLOR,
-                                              QVariant::String,
-                                              QVariant( "black" ),
-                                              QVariant()
-                                            };
+    const QgsWmsParameter pHighlightBufferColor( QgsWmsParameter::HIGHLIGHT_LABELBUFFERCOLOR,
+        QVariant::String,
+        QVariant( "black" ) );
     save( pHighlightBufferColor );
 
-    const Parameter pHighlightBufferSize = { ParameterName::HIGHLIGHT_LABELBUFFERSIZE,
-                                             QVariant::String,
-                                             QVariant( "" ),
-                                             QVariant()
-                                           };
+    const QgsWmsParameter pHighlightBufferSize( QgsWmsParameter::HIGHLIGHT_LABELBUFFERSIZE );
     save( pHighlightBufferSize );
 
-    const Parameter pCRS = { ParameterName::CRS,
-                             QVariant::String,
-                             QVariant( "" ),
-                             QVariant()
-                           };
+    const QgsWmsParameter pCRS( QgsWmsParameter::CRS );
     save( pCRS );
 
-    const Parameter pSRS = { ParameterName::SRS,
-                             QVariant::String,
-                             QVariant( "" ),
-                             QVariant()
-                           };
+    const QgsWmsParameter pSRS( QgsWmsParameter::SRS );
     save( pSRS );
 
-    const Parameter pFormat = { ParameterName::FORMAT,
-                                QVariant::String,
-                                QVariant( "" ),
-                                QVariant()
-                              };
+    const QgsWmsParameter pFormat( QgsWmsParameter::FORMAT,
+                                   QVariant::String,
+                                   QVariant( "png" ) );
     save( pFormat );
 
-    const Parameter pInfoFormat = { ParameterName::INFO_FORMAT,
-                                    QVariant::String,
-                                    QVariant( "" ),
-                                    QVariant()
-                                  };
+    const QgsWmsParameter pInfoFormat( QgsWmsParameter::INFO_FORMAT );
     save( pInfoFormat );
 
-    const Parameter pI = { ParameterName::I,
-                           QVariant::Int,
-                           QVariant( -1 ),
-                           QVariant()
-                         };
+    const QgsWmsParameter pI( QgsWmsParameter::I,
+                              QVariant::Int,
+                              QVariant( -1 ) );
     save( pI );
 
-    const Parameter pJ = { ParameterName::J,
-                           QVariant::Int,
-                           QVariant( -1 ),
-                           QVariant()
-                         };
+    const QgsWmsParameter pJ( QgsWmsParameter::J,
+                              QVariant::Int,
+                              QVariant( -1 ) );
     save( pJ );
 
-    const Parameter pX = { ParameterName::X,
-                           QVariant::Int,
-                           QVariant( -1 ),
-                           QVariant()
-                         };
+    const QgsWmsParameter pX( QgsWmsParameter::X,
+                              QVariant::Int,
+                              QVariant( -1 ) );
     save( pX );
 
-    const Parameter pY = { ParameterName::Y,
-                           QVariant::Int,
-                           QVariant( -1 ),
-                           QVariant()
-                         };
+    const QgsWmsParameter pY( QgsWmsParameter::Y,
+                              QVariant::Int,
+                              QVariant( -1 ) );
     save( pY );
 
-    const Parameter pRule = { ParameterName::RULE,
-                              QVariant::String,
-                              QVariant( "" ),
-                              QVariant()
-                            };
+    const QgsWmsParameter pRule( QgsWmsParameter::RULE );
     save( pRule );
 
-    const Parameter pRuleLabel = { ParameterName::RULELABEL,
-                                   QVariant::Bool,
-                                   QVariant( true ),
-                                   QVariant()
-                                 };
+    const QgsWmsParameter pRuleLabel( QgsWmsParameter::RULELABEL,
+                                      QVariant::Bool,
+                                      QVariant( true ) );
     save( pRuleLabel );
 
-    const Parameter pScale = { ParameterName::SCALE,
-                               QVariant::Double,
-                               QVariant( -1 ),
-                               QVariant()
-                             };
+    const QgsWmsParameter pScale( QgsWmsParameter::SCALE,
+                                  QVariant::Double,
+                                  QVariant( -1 ) );
     save( pScale );
 
-    const Parameter pHeight = { ParameterName::HEIGHT,
-                                QVariant::Int,
-                                QVariant( 0 ),
-                                QVariant()
-                              };
+    const QgsWmsParameter pHeight( QgsWmsParameter::HEIGHT,
+                                   QVariant::Int,
+                                   QVariant( 0 ) );
     save( pHeight );
 
-    const Parameter pWidth = { ParameterName::WIDTH,
-                               QVariant::Int,
-                               QVariant( 0 ),
-                               QVariant()
-                             };
+    const QgsWmsParameter pWidth( QgsWmsParameter::WIDTH,
+                                  QVariant::Int,
+                                  QVariant( 0 ) );
     save( pWidth );
 
-    const Parameter pBbox = { ParameterName::BBOX,
-                              QVariant::String,
-                              QVariant( "" ),
-                              QVariant()
-                            };
+    const QgsWmsParameter pSrcHeight( QgsWmsParameter::SRCHEIGHT,
+                                      QVariant::Int,
+                                      QVariant( 0 ) );
+    save( pSrcHeight );
+
+    const QgsWmsParameter pSrcWidth( QgsWmsParameter::SRCWIDTH,
+                                     QVariant::Int,
+                                     QVariant( 0 ) );
+    save( pSrcWidth );
+
+    const QgsWmsParameter pBbox( QgsWmsParameter::BBOX );
     save( pBbox );
 
-    const Parameter pSld = { ParameterName::SLD,
-                             QVariant::String,
-                             QVariant( "" ),
-                             QVariant()
-                           };
+    const QgsWmsParameter pSld( QgsWmsParameter::SLD );
     save( pSld );
 
-    const Parameter pLayer = { ParameterName::LAYER,
-                               QVariant::String,
-                               QVariant( "" ),
-                               QVariant()
-                             };
+    const QgsWmsParameter pSldBody( QgsWmsParameter::SLD_BODY );
+    save( pSldBody );
+
+    const QgsWmsParameter pLayer( QgsWmsParameter::LAYER );
     save( pLayer );
 
-    const Parameter pLayers = { ParameterName::LAYERS,
-                                QVariant::String,
-                                QVariant( "" ),
-                                QVariant()
-                              };
+    const QgsWmsParameter pLayers( QgsWmsParameter::LAYERS );
     save( pLayers );
 
-    const Parameter pQueryLayers = { ParameterName::QUERY_LAYERS,
-                                     QVariant::String,
-                                     QVariant( "" ),
-                                     QVariant()
-                                   };
+    const QgsWmsParameter pQueryLayers( QgsWmsParameter::QUERY_LAYERS );
     save( pQueryLayers );
 
-    const Parameter pFeatureCount = { ParameterName::FEATURE_COUNT,
-                                      QVariant::Int,
-                                      QVariant( 1 ),
-                                      QVariant()
-                                    };
+    const QgsWmsParameter pFeatureCount( QgsWmsParameter::FEATURE_COUNT,
+                                         QVariant::Int,
+                                         QVariant( 1 ) );
     save( pFeatureCount );
 
-    const Parameter pLayerTitle = { ParameterName::LAYERTITLE,
-                                    QVariant::Bool,
-                                    QVariant( true ),
-                                    QVariant()
-                                  };
+    const QgsWmsParameter pLayerTitle( QgsWmsParameter::LAYERTITLE,
+                                       QVariant::Bool,
+                                       QVariant( true ) );
     save( pLayerTitle );
 
-    const Parameter pLayerFtFamily = { ParameterName::LAYERFONTFAMILY,
-                                       QVariant::String,
-                                       QVariant( "" ),
-                                       QVariant()
-                                     };
+    const QgsWmsParameter pLayerFtFamily( QgsWmsParameter::LAYERFONTFAMILY );
     save( pLayerFtFamily );
 
-    const Parameter pLayerFtBold = { ParameterName::LAYERFONTBOLD,
-                                     QVariant::Bool,
-                                     QVariant( false ),
-                                     QVariant()
-                                   };
+    const QgsWmsParameter pLayerFtBold( QgsWmsParameter::LAYERFONTBOLD,
+                                        QVariant::Bool,
+                                        QVariant( false ) );
     save( pLayerFtBold );
 
-    const Parameter pLayerFtItalic = { ParameterName::LAYERFONTITALIC,
-                                       QVariant::Bool,
-                                       QVariant( false ),
-                                       QVariant()
-                                     };
+    const QgsWmsParameter pLayerFtItalic( QgsWmsParameter::LAYERFONTITALIC,
+                                          QVariant::Bool,
+                                          QVariant( false ) );
     save( pLayerFtItalic );
 
-    const Parameter pLayerFtSize = { ParameterName::LAYERFONTSIZE,
-                                     QVariant::Double,
-                                     QVariant( -1 ),
-                                     QVariant()
-                                   };
+    const QgsWmsParameter pLayerFtSize( QgsWmsParameter::LAYERFONTSIZE,
+                                        QVariant::Double,
+                                        QVariant( -1 ) );
     save( pLayerFtSize );
 
-    const Parameter pLayerFtColor = { ParameterName::LAYERFONTCOLOR,
-                                      QVariant::String,
-                                      QVariant( "black" ),
-                                      QVariant()
-                                    };
+    const QgsWmsParameter pLayerFtColor( QgsWmsParameter::LAYERFONTCOLOR,
+                                         QVariant::String,
+                                         QVariant( "black" ) );
     save( pLayerFtColor );
 
-    const Parameter pStyle = { ParameterName::STYLE,
-                               QVariant::String,
-                               QVariant( "" ),
-                               QVariant()
-                             };
+    const QgsWmsParameter pStyle( QgsWmsParameter::STYLE );
     save( pStyle );
 
-    const Parameter pStyles = { ParameterName::STYLES,
-                                QVariant::String,
-                                QVariant( "" ),
-                                QVariant()
-                              };
+    const QgsWmsParameter pStyles( QgsWmsParameter::STYLES );
     save( pStyles );
 
-    const Parameter pOpacities = { ParameterName::OPACITIES,
-                                   QVariant::String,
-                                   QVariant( "" ),
-                                   QVariant()
-                                 };
+    const QgsWmsParameter pOpacities( QgsWmsParameter::OPACITIES );
     save( pOpacities );
 
-    const Parameter pFilter = { ParameterName::FILTER,
-                                QVariant::String,
-                                QVariant( "" ),
-                                QVariant()
-                              };
+    const QgsWmsParameter pFilter( QgsWmsParameter::FILTER );
     save( pFilter );
 
-    const Parameter pFilterGeom = { ParameterName::FILTER_GEOM,
-                                    QVariant::String,
-                                    QVariant( "" ),
-                                    QVariant()
-                                  };
+    const QgsWmsParameter pFilterGeom( QgsWmsParameter::FILTER_GEOM );
     save( pFilterGeom );
 
-    const Parameter pSelection = { ParameterName::SELECTION,
-                                   QVariant::String,
-                                   QVariant( "" ),
-                                   QVariant()
-                                 };
+    const QgsWmsParameter pPolygTol( QgsWmsParameter::FI_POLYGON_TOLERANCE,
+                                     QVariant::Double,
+                                     QVariant( 0.0 ) );
+    save( pPolygTol );
+
+    const QgsWmsParameter pLineTol( QgsWmsParameter::FI_LINE_TOLERANCE,
+                                    QVariant::Double,
+                                    QVariant( 0.0 ) );
+    save( pLineTol );
+
+    const QgsWmsParameter pPointTol( QgsWmsParameter::FI_POINT_TOLERANCE,
+                                     QVariant::Double,
+                                     QVariant( 0.0 ) );
+    save( pPointTol );
+
+    const QgsWmsParameter pSelection( QgsWmsParameter::SELECTION );
     save( pSelection );
 
-    const Parameter pWmsPrecision = { ParameterName::WMS_PRECISION,
-                                      QVariant::Int,
-                                      QVariant( -1 ),
-                                      QVariant()
-                                    };
+    const QgsWmsParameter pWmsPrecision( QgsWmsParameter::WMS_PRECISION,
+                                         QVariant::Int,
+                                         QVariant( -1 ) );
     save( pWmsPrecision );
 
-    const Parameter pTransparent = { ParameterName::TRANSPARENT,
-                                     QVariant::Bool,
-                                     QVariant( false ),
-                                     QVariant()
-                                   };
+    const QgsWmsParameter pTransparent( QgsWmsParameter::TRANSPARENT,
+                                        QVariant::Bool,
+                                        QVariant( false ) );
     save( pTransparent );
 
-    const Parameter pBgColor = { ParameterName::BGCOLOR,
-                                 QVariant::String,
-                                 QVariant( "white" ),
-                                 QVariant()
-                               };
+    const QgsWmsParameter pBgColor( QgsWmsParameter::BGCOLOR,
+                                    QVariant::String,
+                                    QVariant( "white" ) );
     save( pBgColor );
 
-    const Parameter pDpi = { ParameterName::DPI,
-                             QVariant::Int,
-                             QVariant( -1 ),
-                             QVariant()
-                           };
+    const QgsWmsParameter pDpi( QgsWmsParameter::DPI,
+                                QVariant::Int,
+                                QVariant( -1 ) );
     save( pDpi );
 
-    const Parameter pTemplate = { ParameterName::TEMPLATE,
-                                  QVariant::String,
-                                  QVariant(),
-                                  QVariant()
-                                };
+    const QgsWmsParameter pTemplate( QgsWmsParameter::TEMPLATE );
     save( pTemplate );
 
-    const Parameter pExtent = { ParameterName::EXTENT,
-                                QVariant::String,
-                                QVariant( "" ),
-                                QVariant()
-                              };
+    const QgsWmsParameter pExtent( QgsWmsParameter::EXTENT );
     save( pExtent );
 
-    const Parameter pRotation = { ParameterName::ROTATION,
-                                  QVariant::Double,
-                                  QVariant( 0.0 ),
-                                  QVariant()
-                                };
+    const QgsWmsParameter pRotation( QgsWmsParameter::ROTATION,
+                                     QVariant::Double,
+                                     QVariant( 0.0 ) );
     save( pRotation );
 
-    const Parameter pGridX = { ParameterName::GRID_INTERVAL_X,
-                               QVariant::Double,
-                               QVariant( 0.0 ),
-                               QVariant()
-                             };
+    const QgsWmsParameter pGridX( QgsWmsParameter::GRID_INTERVAL_X,
+                                  QVariant::Double,
+                                  QVariant( 0.0 ) );
     save( pGridX );
 
-    const Parameter pGridY = { ParameterName::GRID_INTERVAL_Y,
-                               QVariant::Double,
-                               QVariant( 0.0 ),
-                               QVariant()
-                             };
+    const QgsWmsParameter pGridY( QgsWmsParameter::GRID_INTERVAL_Y,
+                                  QVariant::Double,
+                                  QVariant( 0.0 ) );
     save( pGridY );
+
+    const QgsWmsParameter pWithGeometry( QgsWmsParameter::WITH_GEOMETRY,
+                                         QVariant::Bool,
+                                         QVariant( false ) );
+    save( pWithGeometry );
+
+    const QgsWmsParameter pWithMapTip( QgsWmsParameter::WITH_MAPTIP,
+                                       QVariant::Bool,
+                                       QVariant( false ) );
+    save( pWithMapTip );
+
+    const QgsWmsParameter pWmtver( QgsWmsParameter::WMTVER );
+    save( pWmtver );
+
+    const QgsWmsParameter pAtlasPk( QgsWmsParameter::ATLAS_PK,
+                                    QVariant::StringList );
+    save( pAtlasPk );
+
+    const QgsWmsParameter pFormatOpts( QgsWmsParameter::FORMAT_OPTIONS,
+                                       QVariant::String );
+    save( pFormatOpts );
   }
 
-  QgsWmsParameters::QgsWmsParameters( const QgsServerRequest::Parameters &parameters )
+  QgsWmsParameters::QgsWmsParameters( const QgsServerParameters &parameters )
+    : QgsWmsParameters()
   {
-    load( parameters );
-  }
+    load( parameters.urlQuery() );
 
-  void QgsWmsParameters::load( const QgsServerRequest::Parameters &parameters )
-  {
-    mRequestParameters = parameters;
-
-    const QMetaEnum metaEnum( QMetaEnum::fromType<ParameterName>() );
-    static QRegExp composerParamRegExp( "^MAP\\d+:" );
-
-    foreach ( QString key, parameters.keys() )
+    const QString sld = mWmsParameters[ QgsWmsParameter::SLD ].toString();
+    if ( !sld.isEmpty() )
     {
-      if ( key.contains( composerParamRegExp ) )
+      const QString sldBody = mWmsParameters[ QgsWmsParameter::SLD ].loadUrl();
+      if ( !sldBody.isEmpty() )
       {
-        const int mapId = key.mid( 3, key.indexOf( ':' ) - 3 ).toInt();
-        const QString theKey = key.mid( key.indexOf( ':' ) + 1 );
-        const ParameterName name = ( ParameterName ) metaEnum.keyToValue( theKey.toStdString().c_str() );
-        if ( name >= 0 )
-        {
-          QVariant value( parameters[key] );
-          Parameter param = mParameters[name];
-          Parameter nParam =
-          {
-            param.mName,
-            param.mType,
-            param.mDefaultValue,
-            value
-          };
-          save( nParam, mapId );
-          if ( !value.canConvert( nParam.mType ) )
-          {
-            raiseError( name, mapId );
-          }
-        }
+        loadParameter( QgsWmsParameter::name( QgsWmsParameter::SLD_BODY ), sldBody );
       }
-      else
+    }
+  }
+
+  QgsWmsParameter QgsWmsParameters::operator[]( QgsWmsParameter::Name name ) const
+  {
+    return mWmsParameters[name];
+  }
+
+  void QgsWmsParameters::set( QgsWmsParameter::Name name, const QVariant &value )
+  {
+    mWmsParameters[name].mValue = value;
+  }
+
+  bool QgsWmsParameters::loadParameter( const QString &key, const QString &value )
+  {
+    bool loaded = false;
+
+    const QRegExp composerParamRegExp( QStringLiteral( "^MAP\\d+:" ), Qt::CaseInsensitive );
+    if ( key.contains( composerParamRegExp ) )
+    {
+      const int mapId = key.midRef( 3, key.indexOf( ':' ) - 3 ).toInt();
+      const QString theKey = key.mid( key.indexOf( ':' ) + 1 );
+      const QgsWmsParameter::Name name = QgsWmsParameter::name( theKey );
+
+      if ( name >= 0 )
       {
-        const ParameterName name = ( ParameterName ) metaEnum.keyToValue( key.toStdString().c_str() );
-        if ( name >= 0 )
+        QgsWmsParameter param = mWmsParameters[name];
+        param.mValue = value;
+        param.mId = mapId;
+
+        if ( ! param.isValid() )
         {
-          QVariant value( parameters[key] );
-          mParameters[name].mValue = value;
-          if ( !value.canConvert( mParameters[name].mType ) )
-          {
-            raiseError( name );
-          }
+          param.raiseError();
+        }
+
+        save( param, true ); // multi MAP parameters for composer
+        loaded = true;
+      }
+    }
+    else
+    {
+      const QgsWmsParameter::Name name = QgsWmsParameter::name( key );
+      if ( name >= 0 )
+      {
+        mWmsParameters[name].mValue = value;
+        if ( ! mWmsParameters[name].isValid() )
+        {
+          mWmsParameters[name].raiseError();
+        }
+
+        loaded = true;
+      }
+      else //maybe an external wms parameter?
+      {
+        int separator = key.indexOf( QStringLiteral( ":" ) );
+        if ( separator >= 1 )
+        {
+          QString id = key.left( separator );
+          QString param = key.right( key.length() - separator - 1 );
+          mExternalWMSParameters[id].insert( param, value );
+
+          loaded = true;
         }
       }
     }
+
+    return loaded;
   }
 
   void QgsWmsParameters::dump() const
   {
-    const QMetaEnum metaEnum( QMetaEnum::fromType<ParameterName>() );
-
-    log( "WMS Request parameters:" );
-    for ( auto parameter : mParameters.toStdMap() )
+    log( QStringLiteral( "WMS Request parameters:" ) );
+    for ( auto parameter : mWmsParameters.toStdMap() )
     {
-      const QString value = parameter.second.mValue.toString();
+      const QString value = parameter.second.toString();
 
       if ( ! value.isEmpty() )
       {
-        const QString name = metaEnum.valueToKey( parameter.first );
-        log( " - " + name + " : " + value );
-      }
-    }
-    for ( auto map : mComposerParameters.toStdMap() )
-    {
-      const int mapId = map.first;
-      log( " - MAP" + QString::number( mapId ) );
-      for ( auto param : mComposerParameters[map.first].toStdMap() )
-      {
-        const QString value = param.second.mValue.toString();
+        QString name = QgsWmsParameter::name( parameter.first );
 
-        if ( ! value.isEmpty() )
+        if ( parameter.second.mId >= 0 )
         {
-          const QString name = metaEnum.valueToKey( param.first );
-          log( " - MAP" + QString::number( mapId ) + ":" + name + " : " + value );
+          name = QStringLiteral( "%1:%2" ).arg( QString::number( parameter.second.mId ), name );
         }
+
+        log( QStringLiteral( " - %1 : %2" ).arg( name, value ) );
       }
     }
 
     if ( !version().isEmpty() )
-      log( " - VERSION : " + version() );
+      log( QStringLiteral( " - VERSION : %1" ).arg( version() ) );
   }
 
-  void QgsWmsParameters::save( const Parameter &parameter )
+  void QgsWmsParameters::save( const QgsWmsParameter &parameter, bool multi )
   {
-    mParameters[ parameter.mName ] = parameter;
-  }
-
-  QVariant QgsWmsParameters::value( ParameterName name ) const
-  {
-    return mParameters[name].mValue;
-  }
-
-  QVariant QgsWmsParameters::defaultValue( ParameterName name ) const
-  {
-    return mParameters[name].mDefaultValue;
-  }
-
-  void QgsWmsParameters::save( const Parameter &parameter, int mapId )
-  {
-    mComposerParameters[ mapId ][ parameter.mName ] = parameter;
-  }
-
-  QVariant QgsWmsParameters::value( ParameterName name, int mapId ) const
-  {
-    if ( mComposerParameters.contains( mapId ) && mComposerParameters[ mapId ].contains( name ) )
-      return mComposerParameters[ mapId ][ name ].mValue;
+    if ( multi )
+    {
+      mWmsParameters.insertMulti( parameter.mName, parameter );
+    }
     else
-      return value( name );
-  }
-
-  QVariant QgsWmsParameters::defaultValue( ParameterName name, int mapId ) const
-  {
-    if ( mComposerParameters.contains( mapId ) && mComposerParameters[ mapId ].contains( name ) )
-      return mComposerParameters[ mapId ][ name ].mDefaultValue;
-    else
-      return defaultValue( name );
+    {
+      mWmsParameters[ parameter.mName ] = parameter;
+    }
   }
 
   QStringList QgsWmsParameters::highlightGeom() const
   {
-    return toStringList( ParameterName::HIGHLIGHT_GEOM, ';' );
+    return mWmsParameters[ QgsWmsParameter::HIGHLIGHT_GEOM ].toStringList( ';' );
   }
 
   QList<QgsGeometry> QgsWmsParameters::highlightGeomAsGeom() const
   {
-    return toGeomList( highlightGeom(), ParameterName::HIGHLIGHT_GEOM );
+    return mWmsParameters[QgsWmsParameter::HIGHLIGHT_GEOM].toGeomList( ';' );
   }
 
   QStringList QgsWmsParameters::highlightSymbol() const
   {
-    return toStringList( ParameterName::HIGHLIGHT_SYMBOL, ';' );
+    return mWmsParameters[ QgsWmsParameter::HIGHLIGHT_SYMBOL ].toStringList( ';' );
   }
 
   QString QgsWmsParameters::crs() const
   {
     QString rs;
-    QString srs = value( ParameterName::SRS ).toString();
-    QString crs = value( ParameterName::CRS ).toString();
+    const QString srs = mWmsParameters[ QgsWmsParameter::SRS ].toString();
+    const QString crs = mWmsParameters[ QgsWmsParameter::CRS ].toString();
 
     // both SRS/CRS are supported but there's a priority according to the
     // specified version when both are defined in the request
@@ -627,544 +695,141 @@ namespace QgsWms
 
   QString QgsWmsParameters::bbox() const
   {
-    return value( ParameterName::BBOX ).toString();
+    return mWmsParameters[ QgsWmsParameter::BBOX ].toString();
   }
 
   QgsRectangle QgsWmsParameters::bboxAsRectangle() const
   {
-    return toRectangle( ParameterName::BBOX );
+    return mWmsParameters[ QgsWmsParameter::BBOX ].toRectangle();
   }
 
   QString QgsWmsParameters::height() const
   {
-    return value( ParameterName::HEIGHT ).toString();
+    return mWmsParameters[ QgsWmsParameter::HEIGHT ].toString();
   }
 
   QString QgsWmsParameters::width() const
   {
-    return value( ParameterName::WIDTH ).toString();
+    return mWmsParameters[ QgsWmsParameter::WIDTH ].toString();
   }
 
   int QgsWmsParameters::heightAsInt() const
   {
-    return toInt( ParameterName::HEIGHT );
+    return mWmsParameters[ QgsWmsParameter::HEIGHT ].toInt();
   }
 
   int QgsWmsParameters::widthAsInt() const
   {
-    return toInt( ParameterName::WIDTH );
+    return mWmsParameters[ QgsWmsParameter::WIDTH ].toInt();
+  }
+
+  QString QgsWmsParameters::srcHeight() const
+  {
+    return mWmsParameters[ QgsWmsParameter::SRCHEIGHT ].toString();
+  }
+
+  QString QgsWmsParameters::srcWidth() const
+  {
+    return mWmsParameters[ QgsWmsParameter::SRCWIDTH ].toString();
+  }
+
+  int QgsWmsParameters::srcHeightAsInt() const
+  {
+    return mWmsParameters[ QgsWmsParameter::SRCHEIGHT ].toInt();
+  }
+
+  int QgsWmsParameters::srcWidthAsInt() const
+  {
+    return mWmsParameters[ QgsWmsParameter::SRCWIDTH ].toInt();
   }
 
   QString QgsWmsParameters::dpi() const
   {
-    return value( ParameterName::DPI ).toString();
+    return mWmsParameters[ QgsWmsParameter::DPI ].toString();
   }
 
-  int QgsWmsParameters::dpiAsInt() const
+  double QgsWmsParameters::dpiAsDouble() const
   {
-    return toInt( ParameterName::DPI );
-  }
-
-  QString QgsWmsParameters::version() const
-  {
-    // VERSION parameter is not managed with other parameters because
-    // there's a conflict with qgis VERSION defined in qgsconfig.h
-    if ( mRequestParameters.contains( "VERSION" ) )
-      return mRequestParameters["VERSION"];
-    else
-      return QString();
+    return mWmsParameters[ QgsWmsParameter::DPI ].toDouble();
   }
 
   QgsProjectVersion QgsWmsParameters::versionAsNumber() const
   {
-    QString vStr = version();
+    const QString vStr = version();
+
     QgsProjectVersion version;
 
     if ( vStr.isEmpty() )
+    {
       version = QgsProjectVersion( 1, 3, 0 ); // default value
+    }
     else if ( mVersions.contains( QgsProjectVersion( vStr ) ) )
+    {
       version = QgsProjectVersion( vStr );
+    }
 
     return version;
   }
 
-  double QgsWmsParameters::toDouble( const QVariant &value, const QVariant &defaultValue, bool *error ) const
+  bool QgsWmsParameters::versionIsValid( const QString version ) const
   {
-    double val = defaultValue.toDouble();
-    QString valStr = value.toString();
-    bool ok = true;
-
-    if ( !valStr.isEmpty() )
-    {
-      val = value.toDouble( &ok );
-    }
-    *error = !ok;
-
-    return val;
-  }
-
-  double QgsWmsParameters::toDouble( ParameterName p ) const
-  {
-    bool error;
-    double val = toDouble( value( p ), defaultValue( p ), &error );
-    if ( error )
-    {
-      QString n = name( p );
-      QString valStr = value( p ).toString();
-      QString msg = n + " ('" + valStr + "') cannot be converted into a double";
-      raiseError( msg );
-    }
-
-    return val;
-  }
-
-  double QgsWmsParameters::toDouble( ParameterName p, int mapId ) const
-  {
-    bool error;
-    double val = toDouble( value( p, mapId ), defaultValue( p, mapId ), &error );
-    if ( error )
-    {
-      QString n = name( p );
-      QString valStr = value( p, mapId ).toString();
-      QString msg = "MAP" + QString::number( mapId ) + ":" + n + " ('" + valStr + "') cannot be converted into a double";
-      raiseError( msg );
-    }
-
-    return val;
-  }
-
-  bool QgsWmsParameters::toBool( const QVariant &value, const QVariant &defaultValue ) const
-  {
-    bool val = defaultValue.toBool();
-    QString valStr = value.toString();
-
-    if ( ! valStr.isEmpty() )
-      val = value.toBool();
-
-    return val;
-  }
-
-  bool QgsWmsParameters::toBool( ParameterName p ) const
-  {
-    return toBool( value( p ), defaultValue( p ) );
-  }
-
-  bool QgsWmsParameters::toBool( ParameterName p, int mapId ) const
-  {
-    return toBool( value( p, mapId ), defaultValue( p, mapId ) );
-  }
-
-  int QgsWmsParameters::toInt( const QVariant &value, const QVariant &defaultValue, bool *error ) const
-  {
-    int val = defaultValue.toInt();
-    QString valStr = value.toString();
-    bool ok = true;
-
-    if ( !valStr.isEmpty() )
-    {
-      val = value.toInt( &ok );
-    }
-    *error = !ok;
-
-    return val;
-  }
-
-  int QgsWmsParameters::toInt( ParameterName p ) const
-  {
-    bool error;
-    int val = toInt( value( p ), defaultValue( p ), &error );
-    if ( error )
-    {
-      QString n = name( p );
-      QString valStr = value( p ).toString();
-      QString msg = n + " ('" + valStr + "') cannot be converted into int";
-      raiseError( msg );
-    }
-
-    return val;
-  }
-
-  int QgsWmsParameters::toInt( ParameterName p, int mapId ) const
-  {
-    bool error;
-    int val = toInt( value( p, mapId ), defaultValue( p, mapId ), &error );
-    if ( error )
-    {
-      QString n = name( p );
-      QString valStr = value( p, mapId ).toString();
-      QString msg = "MAP" + QString::number( mapId ) + ":" + n + " ('" + valStr + "') cannot be converted into int";
-      raiseError( msg );
-    }
-
-    return val;
-  }
-
-  QColor QgsWmsParameters::toColor( const QVariant &value, const QVariant &defaultValue, bool *error ) const
-  {
-    *error = false;
-    QColor c = defaultValue.value<QColor>();
-    QString cStr = value.toString();
-
-    if ( !cStr.isEmpty() )
-    {
-      // support hexadecimal notation to define colors
-      if ( cStr.startsWith( "0x", Qt::CaseInsensitive ) )
-        cStr.replace( 0, 2, "#" );
-
-      c = QColor( cStr );
-
-      *error = !c.isValid();
-    }
-
-    return c;
-  }
-
-  QColor QgsWmsParameters::toColor( ParameterName p ) const
-  {
-    bool error;
-    QColor c = toColor( value( p ), defaultValue( p ), &error );
-    if ( error )
-    {
-      QString n = name( p );
-      QString valStr = value( p ).toString();
-      QString msg = n + " ('" + valStr + "') cannot be converted into a color";
-      raiseError( msg );
-    }
-
-    return c;
-  }
-
-  QColor QgsWmsParameters::toColor( ParameterName p, int mapId ) const
-  {
-    bool error;
-    QColor c = toColor( value( p, mapId ), defaultValue( p, mapId ), &error );
-    if ( error )
-    {
-      QString n = name( p );
-      QString valStr = value( p, mapId ).toString();
-      QString msg = "MAP" + QString::number( mapId ) + ":" + n + " ('" + valStr + "') cannot be converted into a color";
-      raiseError( msg );
-    }
-
-    return c;
-  }
-
-  QgsRectangle QgsWmsParameters::toRectangle( const QVariant &value, bool *error ) const
-  {
-    *error = false;
-    QString bbox = value.toString();
-    QgsRectangle extent;
-
-    if ( !bbox.isEmpty() )
-    {
-      QStringList corners = bbox.split( "," );
-
-      if ( corners.size() == 4 )
-      {
-        double d[4];
-        bool ok;
-
-        for ( int i = 0; i < 4; i++ )
-        {
-          corners[i].replace( QLatin1String( " " ), QLatin1String( "+" ) );
-          d[i] = corners[i].toDouble( &ok );
-          if ( !ok )
-          {
-            *error = !ok;
-            return extent;
-          }
-        }
-
-        extent = QgsRectangle( d[0], d[1], d[2], d[3] );
-      }
-      else
-      {
-        *error = true;
-        return extent;
-      }
-    }
-
-    return extent;
-  }
-
-  QgsRectangle QgsWmsParameters::toRectangle( ParameterName p ) const
-  {
-    bool error;
-    QgsRectangle extent = toRectangle( value( p ), &error );
-    if ( error )
-    {
-      QString n = name( p );
-      QString valStr = value( p ).toString();
-      QString msg = n + " ('" + valStr + "') cannot be converted into a rectangle";
-      raiseError( msg );
-    }
-
-    return extent;
-  }
-
-  QgsRectangle QgsWmsParameters::toRectangle( ParameterName p, int mapId ) const
-  {
-    bool error;
-    QgsRectangle extent = toRectangle( value( p, mapId ), &error );
-    if ( error )
-    {
-      QString n = name( p );
-      QString valStr = value( p, mapId ).toString();
-      QString msg = "MAP" + QString::number( mapId ) + ":" + n + " ('" + valStr + "') cannot be converted into a rectangle";
-      raiseError( msg );
-    }
-
-    return extent;
-  }
-
-  QStringList QgsWmsParameters::toStringList( ParameterName name, char delimiter ) const
-  {
-    return value( name ).toString().split( delimiter, QString::SkipEmptyParts );
-  }
-
-  QStringList QgsWmsParameters::toStringList( ParameterName name, int mapId, char delimiter ) const
-  {
-    return value( name, mapId ).toString().split( delimiter, QString::SkipEmptyParts );
-  }
-
-  QList<int> QgsWmsParameters::toIntList( const QStringList &l, bool *error ) const
-  {
-    *error = false;
-    QList<int> elements;
-
-    for ( const QString &element : l )
-    {
-      bool ok;
-      int e = element.toInt( &ok );
-
-      if ( ok )
-      {
-        elements.append( e );
-      }
-      else
-      {
-        *error = !ok;
-        return elements;
-      }
-    }
-
-    return elements;
-  }
-
-  QList<int> QgsWmsParameters::toIntList( const QStringList &l, ParameterName p ) const
-  {
-    bool error;
-    QList<int> elements = toIntList( l, &error );
-    if ( error )
-    {
-      QString n = name( p );
-      QString valStr = value( p ).toString();
-      QString msg = n + " ('" + valStr + "') cannot be converted into a list of int";
-      raiseError( msg );
-    }
-
-    return elements;
-  }
-
-  QList<int> QgsWmsParameters::toIntList( const QStringList &l, ParameterName p, int mapId ) const
-  {
-    bool error;
-    QList<int> elements = toIntList( l, &error );
-    if ( error )
-    {
-      QString n = name( p );
-      QString valStr = value( p, mapId ).toString();
-      QString msg = "MAP" + QString::number( mapId ) + ":" + n + " ('" + valStr + "') cannot be converted into a list of int";
-      raiseError( msg );
-    }
-
-    return elements;
-  }
-
-  QList<float> QgsWmsParameters::toFloatList( const QStringList &l, bool *error ) const
-  {
-    *error = false;
-    QList<float> elements;
-
-    for ( const QString &element : l )
-    {
-      bool ok;
-      float e = element.toFloat( &ok );
-
-      if ( ok )
-      {
-        elements.append( e );
-      }
-      else
-      {
-        *error = !ok;
-        return elements;
-      }
-    }
-
-    return elements;
-  }
-
-  QList<float> QgsWmsParameters::toFloatList( const QStringList &l, ParameterName p ) const
-  {
-    bool error;
-    QList<float> elements = toFloatList( l, &error );
-    if ( error )
-    {
-      QString n = name( p );
-      QString valStr = value( p ).toString();
-      QString msg = n + " ('" + valStr + "') cannot be converted into a list of float";
-      raiseError( msg );
-    }
-
-    return elements;
-  }
-
-  QList<float> QgsWmsParameters::toFloatList( const QStringList &l, ParameterName p, int mapId ) const
-  {
-    bool error;
-    QList<float> elements = toFloatList( l, &error );
-    if ( error )
-    {
-      QString n = name( p );
-      QString valStr = value( p ).toString();
-      QString msg = "MAP" + QString::number( mapId ) + ":" + n + " ('" + valStr + "') cannot be converted into a list of float";
-      raiseError( msg );
-    }
-
-    return elements;
-  }
-
-  QList<QColor> QgsWmsParameters::toColorList( const QStringList &l, bool *error ) const
-  {
-    *error = false;
-    QList<QColor> elements;
-
-    for ( const QString &element : l )
-    {
-      QColor c = QColor( element );
-
-      if ( c.isValid() )
-      {
-        elements.append( c );
-      }
-      else
-      {
-        *error = !c.isValid();
-        return elements;
-      }
-    }
-
-    return elements;
-  }
-
-  QList<QColor> QgsWmsParameters::toColorList( const QStringList &l, ParameterName p ) const
-  {
-    bool error;
-    QList<QColor> elements = toColorList( l, &error );
-    if ( error )
-    {
-      QString n = name( p );
-      QString valStr = value( p ).toString();
-      QString msg = n + " ('" + valStr + "') cannot be converted into a list of colors";
-      raiseError( msg );
-    }
-
-    return elements;
-  }
-
-  QList<QColor> QgsWmsParameters::toColorList( const QStringList &l, ParameterName p, int mapId ) const
-  {
-    bool error;
-    QList<QColor> elements = toColorList( l, &error );
-    if ( error )
-    {
-      QString n = name( p );
-      QString valStr = value( p ).toString();
-      QString msg = "MAP" + QString::number( mapId ) + ":" + n + " ('" + valStr + "') cannot be converted into a list of colors";
-      raiseError( msg );
-    }
-
-    return elements;
-  }
-
-  QList<QgsGeometry> QgsWmsParameters::toGeomList( const QStringList &l, bool *error ) const
-  {
-    *error = false;
-    QList<QgsGeometry> geometries;
-
-    for ( const QString &wkt : l )
-    {
-      QgsGeometry g( QgsGeometry::fromWkt( wkt ) );
-
-      if ( g.isGeosValid() )
-      {
-        geometries.append( g );
-      }
-      else
-      {
-        *error = true;
-        return geometries;
-      }
-    }
-
-    return geometries;
-  }
-
-  QList<QgsGeometry> QgsWmsParameters::toGeomList( const QStringList &l, ParameterName p ) const
-  {
-    bool error;
-    QList<QgsGeometry> elements = toGeomList( l, &error );
-    if ( error )
-    {
-      QString n = name( p );
-      QString valStr = value( p ).toString();
-      QString msg = n + " ('" + valStr + "') cannot be converted into a list of geometries";
-      raiseError( msg );
-    }
-
-    return elements;
-  }
-
-  QList<QgsGeometry> QgsWmsParameters::toGeomList( const QStringList &l, ParameterName p, int mapId ) const
-  {
-    bool error;
-    QList<QgsGeometry> elements = toGeomList( l, &error );
-    if ( error )
-    {
-      QString n = name( p );
-      QString valStr = value( p, mapId ).toString();
-      QString msg = "MAP" + QString::number( mapId ) + ":" + n + " ('" + valStr + "') cannot be converted into a list of geometries";
-      raiseError( msg );
-    }
-
-    return elements;
+    return mVersions.contains( QgsProjectVersion( version ) );
   }
 
   QString QgsWmsParameters::formatAsString() const
   {
-    return value( ParameterName::FORMAT ).toString();
+    return mWmsParameters[ QgsWmsParameter::FORMAT ].toString( true );
+  }
+
+  QString QgsWmsParameters::formatAsString( const QgsWmsParameters::Format format )
+  {
+    const QMetaEnum metaEnum( QMetaEnum::fromType<QgsWmsParameters::Format>() );
+    return metaEnum.valueToKey( format );
   }
 
   QgsWmsParameters::Format QgsWmsParameters::format() const
   {
-    QString fStr = formatAsString();
+    const QString fStr = formatAsString();
 
-    if ( fStr.isEmpty() )
-      return Format::NONE;
-
-    Format f = Format::PNG;
-    if ( fStr.compare( QLatin1String( "jpg" ), Qt::CaseInsensitive ) == 0
-         || fStr.compare( QLatin1String( "jpeg" ), Qt::CaseInsensitive ) == 0
-         || fStr.compare( QLatin1String( "image/jpeg" ), Qt::CaseInsensitive ) == 0 )
+    Format f = Format::NONE;
+    if ( fStr.compare( QLatin1String( "image/png" ), Qt::CaseInsensitive ) == 0 ||
+         fStr.compare( QLatin1String( "png" ), Qt::CaseInsensitive ) == 0 )
+    {
+      f = Format::PNG;
+    }
+    else if ( fStr.compare( QLatin1String( "jpg" ), Qt::CaseInsensitive ) == 0
+              || fStr.compare( QLatin1String( "jpeg" ), Qt::CaseInsensitive ) == 0
+              || fStr.compare( QLatin1String( "image/jpeg" ), Qt::CaseInsensitive ) == 0 )
+    {
       f = Format::JPG;
-
+    }
+    else if ( fStr.compare( QLatin1String( "image/svg" ), Qt::CaseInsensitive ) == 0 ||
+              fStr.compare( QLatin1String( "image/svg+xml" ), Qt::CaseInsensitive ) == 0 ||
+              fStr.compare( QLatin1String( "svg" ), Qt::CaseInsensitive ) == 0 )
+    {
+      f = Format::SVG;
+    }
+    else if ( fStr.compare( QLatin1String( "application/pdf" ), Qt::CaseInsensitive ) == 0 ||
+              fStr.compare( QLatin1String( "pdf" ), Qt::CaseInsensitive ) == 0 )
+    {
+      f = Format::PDF;
+    }
+    else if ( fStr.compare( QLatin1String( "application/json" ), Qt::CaseInsensitive ) == 0 ||
+              fStr.compare( QLatin1String( "json" ), Qt::CaseInsensitive ) == 0 )
+    {
+      f = Format::JSON;
+    }
     return f;
   }
 
   QString QgsWmsParameters::infoFormatAsString() const
   {
-    return value( ParameterName::INFO_FORMAT ).toString();
+    return mWmsParameters[ QgsWmsParameter::INFO_FORMAT ].toString();
+  }
+
+  bool QgsWmsParameters::infoFormatIsImage() const
+  {
+    return infoFormat() == Format::PNG || infoFormat() == Format::JPG;
   }
 
   QgsWmsParameters::Format QgsWmsParameters::infoFormat() const
@@ -1179,8 +844,15 @@ namespace QgsWms
       f = Format::XML;
     else if ( fStr.startsWith( QLatin1String( "text/html" ), Qt::CaseInsensitive ) )
       f = Format::HTML;
+    else if ( fStr.startsWith( QLatin1String( "text/plain" ), Qt::CaseInsensitive ) )
+      f = Format::TEXT;
     else if ( fStr.startsWith( QLatin1String( "application/vnd.ogc.gml" ), Qt::CaseInsensitive ) )
       f = Format::GML;
+    else if ( fStr.startsWith( QLatin1String( "application/json" ), Qt::CaseInsensitive )
+              || fStr.startsWith( QLatin1String( "application/geo+json" ), Qt::CaseInsensitive ) )
+      f = Format::JSON;
+    else
+      f = Format::NONE;
 
     return f;
   }
@@ -1199,247 +871,307 @@ namespace QgsWms
 
   QString QgsWmsParameters::i() const
   {
-    return value( ParameterName::I ).toString();
+    return mWmsParameters[ QgsWmsParameter::I ].toString();
   }
 
   QString QgsWmsParameters::j() const
   {
-    return value( ParameterName::J ).toString();
+    return mWmsParameters[ QgsWmsParameter::J ].toString();
   }
 
   int QgsWmsParameters::iAsInt() const
   {
-    return toInt( ParameterName::I );
+    return mWmsParameters[ QgsWmsParameter::I ].toInt();
   }
 
   int QgsWmsParameters::jAsInt() const
   {
-    return toInt( ParameterName::J );
+    return mWmsParameters[ QgsWmsParameter::J ].toInt();
   }
 
   QString QgsWmsParameters::x() const
   {
-    return value( ParameterName::X ).toString();
+    return mWmsParameters[ QgsWmsParameter::X ].toString();
   }
 
   QString QgsWmsParameters::y() const
   {
-    return value( ParameterName::Y ).toString();
+    return mWmsParameters[ QgsWmsParameter::Y ].toString();
   }
 
   int QgsWmsParameters::xAsInt() const
   {
-    return toInt( ParameterName::X );
+    return mWmsParameters[ QgsWmsParameter::X ].toInt();
   }
 
   int QgsWmsParameters::yAsInt() const
   {
-    return toInt( ParameterName::Y );
+    return mWmsParameters[ QgsWmsParameter::Y ].toInt();
   }
 
   QString QgsWmsParameters::rule() const
   {
-    return value( ParameterName::RULE ).toString();
+    return mWmsParameters[ QgsWmsParameter::RULE ].toString();
   }
 
   QString QgsWmsParameters::ruleLabel() const
   {
-    return value( ParameterName::RULELABEL ).toString();
+    return mWmsParameters[ QgsWmsParameter::RULELABEL ].toString();
   }
 
   bool QgsWmsParameters::ruleLabelAsBool() const
   {
-    return toBool( ParameterName::RULELABEL );
+    return mWmsParameters[ QgsWmsParameter::RULELABEL ].toBool();
   }
 
   QString QgsWmsParameters::transparent() const
   {
-    return value( ParameterName::TRANSPARENT ).toString();
+    return mWmsParameters[ QgsWmsParameter::TRANSPARENT ].toString();
   }
 
   bool QgsWmsParameters::transparentAsBool() const
   {
-    return toBool( ParameterName::TRANSPARENT );
+    return mWmsParameters[ QgsWmsParameter::TRANSPARENT ].toBool();
   }
 
   QString QgsWmsParameters::scale() const
   {
-    return value( ParameterName::SCALE ).toString();
+    return mWmsParameters[ QgsWmsParameter::SCALE ].toString();
   }
 
   double QgsWmsParameters::scaleAsDouble() const
   {
-    return toDouble( ParameterName::SCALE );
+    return mWmsParameters[ QgsWmsParameter::SCALE ].toDouble();
+  }
+
+  QString QgsWmsParameters::imageQuality() const
+  {
+    return mWmsParameters[ QgsWmsParameter::IMAGE_QUALITY ].toString();
+  }
+
+  int QgsWmsParameters::imageQualityAsInt() const
+  {
+    return mWmsParameters[ QgsWmsParameter::IMAGE_QUALITY ].toInt();
+  }
+
+  QString QgsWmsParameters::tiled() const
+  {
+    return mWmsParameters[ QgsWmsParameter::TILED ].toString();
+  }
+
+  bool QgsWmsParameters::tiledAsBool() const
+  {
+    return mWmsParameters[ QgsWmsParameter::TILED ].toBool();
   }
 
   QString QgsWmsParameters::showFeatureCount() const
   {
-    return value( ParameterName::SHOWFEATURECOUNT ).toString();
+    return mWmsParameters[ QgsWmsParameter::SHOWFEATURECOUNT ].toString();
   }
 
   bool QgsWmsParameters::showFeatureCountAsBool() const
   {
-    return toBool( ParameterName::SHOWFEATURECOUNT );
+    return mWmsParameters[ QgsWmsParameter::SHOWFEATURECOUNT ].toBool();
   }
 
   QString QgsWmsParameters::featureCount() const
   {
-    return value( ParameterName::FEATURE_COUNT ).toString();
+    return mWmsParameters[ QgsWmsParameter::FEATURE_COUNT ].toString();
   }
 
   int QgsWmsParameters::featureCountAsInt() const
   {
-    return toInt( ParameterName::FEATURE_COUNT );
+    return mWmsParameters[ QgsWmsParameter::FEATURE_COUNT ].toInt();
   }
 
   QString QgsWmsParameters::boxSpace() const
   {
-    return value( ParameterName::BOXSPACE ).toString();
+    return mWmsParameters[ QgsWmsParameter::BOXSPACE ].toString();
   }
 
   double QgsWmsParameters::boxSpaceAsDouble() const
   {
-    return toDouble( ParameterName::BOXSPACE );
+    return mWmsParameters[ QgsWmsParameter::BOXSPACE ].toDouble();
   }
 
   QString QgsWmsParameters::layerSpace() const
   {
-    return value( ParameterName::LAYERSPACE ).toString();
+    return mWmsParameters[ QgsWmsParameter::LAYERSPACE ].toString();
   }
 
   double QgsWmsParameters::layerSpaceAsDouble() const
   {
-    return toDouble( ParameterName::LAYERSPACE );
+    return mWmsParameters[ QgsWmsParameter::LAYERSPACE ].toDouble();
   }
 
   QString QgsWmsParameters::layerTitleSpace() const
   {
-    return value( ParameterName::LAYERTITLESPACE ).toString();
+    return mWmsParameters[ QgsWmsParameter::LAYERTITLESPACE ].toString();
   }
 
   double QgsWmsParameters::layerTitleSpaceAsDouble() const
   {
-    return toDouble( ParameterName::LAYERTITLESPACE );
+    return mWmsParameters[ QgsWmsParameter::LAYERTITLESPACE ].toDouble();
   }
 
   QString QgsWmsParameters::symbolSpace() const
   {
-    return value( ParameterName::SYMBOLSPACE ).toString();
+    return mWmsParameters[ QgsWmsParameter::SYMBOLSPACE ].toString();
   }
 
   double QgsWmsParameters::symbolSpaceAsDouble() const
   {
-    return toDouble( ParameterName::SYMBOLSPACE );
+    return mWmsParameters[ QgsWmsParameter::SYMBOLSPACE ].toDouble();
   }
 
   QString QgsWmsParameters::symbolHeight() const
   {
-    return value( ParameterName::SYMBOLHEIGHT ).toString();
+    return mWmsParameters[ QgsWmsParameter::SYMBOLHEIGHT ].toString();
   }
 
   double QgsWmsParameters::symbolHeightAsDouble() const
   {
-    return toDouble( SYMBOLHEIGHT );
+    return mWmsParameters[ QgsWmsParameter::SYMBOLHEIGHT ].toDouble();
   }
 
   QString QgsWmsParameters::symbolWidth() const
   {
-    return value( ParameterName::SYMBOLWIDTH ).toString();
+    return mWmsParameters[ QgsWmsParameter::SYMBOLWIDTH ].toString();
   }
 
   double QgsWmsParameters::symbolWidthAsDouble() const
   {
-    return toDouble( SYMBOLWIDTH );
+    return mWmsParameters[ QgsWmsParameter::SYMBOLWIDTH ].toDouble();
   }
 
   QString QgsWmsParameters::iconLabelSpace() const
   {
-    return value( ParameterName::ICONLABELSPACE ).toString();
+    return mWmsParameters[ QgsWmsParameter::ICONLABELSPACE ].toString();
   }
 
   double QgsWmsParameters::iconLabelSpaceAsDouble() const
   {
-    return toDouble( ICONLABELSPACE );
+    return mWmsParameters[ QgsWmsParameter::ICONLABELSPACE ].toDouble();
   }
 
   QString QgsWmsParameters::layerFontFamily() const
   {
-    return value( ParameterName::LAYERFONTFAMILY ).toString();
+    return mWmsParameters[ QgsWmsParameter::LAYERFONTFAMILY ].toString();
   }
 
   QString QgsWmsParameters::itemFontFamily() const
   {
-    return value( ParameterName::ITEMFONTFAMILY ).toString();
+    return mWmsParameters[ QgsWmsParameter::ITEMFONTFAMILY ].toString();
   }
 
   QString QgsWmsParameters::layerFontBold() const
   {
-    return value( ParameterName::LAYERFONTBOLD ).toString();
+    return mWmsParameters[ QgsWmsParameter::LAYERFONTBOLD ].toString();
   }
 
   bool QgsWmsParameters::layerFontBoldAsBool() const
   {
-    return toBool( ParameterName::LAYERFONTBOLD );
+    return mWmsParameters[ QgsWmsParameter::LAYERFONTBOLD ].toBool();
   }
 
   QString QgsWmsParameters::itemFontBold() const
   {
-    return value( ParameterName::ITEMFONTBOLD ).toString();
+    return mWmsParameters[ QgsWmsParameter::ITEMFONTBOLD ].toString();
+  }
+
+  QString QgsWmsParameters::polygonTolerance() const
+  {
+    return mWmsParameters[ QgsWmsParameter::FI_POLYGON_TOLERANCE ].toString();
+  }
+
+  QString QgsWmsParameters::lineTolerance() const
+  {
+    return mWmsParameters[ QgsWmsParameter::FI_LINE_TOLERANCE ].toString();
+  }
+
+  QString QgsWmsParameters::pointTolerance() const
+  {
+    return mWmsParameters[ QgsWmsParameter::FI_POINT_TOLERANCE ].toString();
+  }
+
+  int QgsWmsParameters::polygonToleranceAsInt() const
+  {
+    return mWmsParameters[ QgsWmsParameter::FI_POLYGON_TOLERANCE ].toInt();
+  }
+
+  int QgsWmsParameters::lineToleranceAsInt() const
+  {
+    return mWmsParameters[ QgsWmsParameter::FI_LINE_TOLERANCE ].toInt();
+  }
+
+  int QgsWmsParameters::pointToleranceAsInt() const
+  {
+    return mWmsParameters[ QgsWmsParameter::FI_POINT_TOLERANCE ].toInt();
   }
 
   bool QgsWmsParameters::itemFontBoldAsBool() const
   {
-    return toBool( ParameterName::ITEMFONTBOLD );
+    return mWmsParameters[ QgsWmsParameter::ITEMFONTBOLD ].toBool();
   }
 
   QString QgsWmsParameters::layerFontItalic() const
   {
-    return value( ParameterName::LAYERFONTITALIC ).toString();
+    return mWmsParameters[ QgsWmsParameter::LAYERFONTITALIC ].toString();
   }
 
   bool QgsWmsParameters::layerFontItalicAsBool() const
   {
-    return toBool( ParameterName::LAYERFONTITALIC );
+    return mWmsParameters[ QgsWmsParameter::LAYERFONTITALIC ].toBool();
   }
 
   QString QgsWmsParameters::itemFontItalic() const
   {
-    return value( ParameterName::ITEMFONTITALIC ).toString();
+    return mWmsParameters[ QgsWmsParameter::ITEMFONTITALIC ].toString();
   }
 
   bool QgsWmsParameters::itemFontItalicAsBool() const
   {
-    return toBool( ParameterName::ITEMFONTITALIC );
+    return mWmsParameters[ QgsWmsParameter::ITEMFONTITALIC ].toBool();
   }
 
   QString QgsWmsParameters::layerFontSize() const
   {
-    return value( ParameterName::LAYERFONTSIZE ).toString();
+    return mWmsParameters[ QgsWmsParameter::LAYERFONTSIZE ].toString();
   }
 
   double QgsWmsParameters::layerFontSizeAsDouble() const
   {
-    return toDouble( LAYERFONTSIZE );
+    return mWmsParameters[ QgsWmsParameter::LAYERFONTSIZE ].toDouble();
   }
 
   QString QgsWmsParameters::layerFontColor() const
   {
-    return value( ParameterName::LAYERFONTCOLOR ).toString();
+    return mWmsParameters[ QgsWmsParameter::LAYERFONTCOLOR ].toString();
   }
 
   QColor QgsWmsParameters::layerFontColorAsColor() const
   {
-    return toColor( ParameterName::LAYERFONTCOLOR );
+    return mWmsParameters[ QgsWmsParameter::LAYERFONTCOLOR ].toColor();
   }
 
   QString QgsWmsParameters::itemFontSize() const
   {
-    return value( ParameterName::ITEMFONTSIZE ).toString();
+    return mWmsParameters[ QgsWmsParameter::ITEMFONTSIZE ].toString();
   }
 
   double QgsWmsParameters::itemFontSizeAsDouble() const
   {
-    return toDouble( ITEMFONTSIZE );
+    return mWmsParameters[ QgsWmsParameter::ITEMFONTSIZE ].toDouble();
+  }
+
+  QString QgsWmsParameters::itemFontColor() const
+  {
+    return mWmsParameters[ QgsWmsParameter::ITEMFONTCOLOR ].toString();
+  }
+
+  QColor QgsWmsParameters::itemFontColorAsColor() const
+  {
+    return mWmsParameters[ QgsWmsParameter::ITEMFONTCOLOR ].toColor();
   }
 
   QFont QgsWmsParameters::layerFont() const
@@ -1477,12 +1209,12 @@ namespace QgsWms
 
   QString QgsWmsParameters::layerTitle() const
   {
-    return value( ParameterName::LAYERTITLE ).toString();
+    return mWmsParameters[ QgsWmsParameter::LAYERTITLE ].toString();
   }
 
   bool QgsWmsParameters::layerTitleAsBool() const
   {
-    return toBool( ParameterName::LAYERTITLE );
+    return mWmsParameters[ QgsWmsParameter::LAYERTITLE ].toBool();
   }
 
   QgsLegendSettings QgsWmsParameters::legendSettings() const
@@ -1492,181 +1224,295 @@ namespace QgsWms
     settings.setBoxSpace( boxSpaceAsDouble() );
     settings.setSymbolSize( QSizeF( symbolWidthAsDouble(), symbolHeightAsDouble() ) );
 
-    settings.rstyle( QgsLegendStyle::Subgroup ).setMargin( QgsLegendStyle::Top, layerSpaceAsDouble() );
-    settings.rstyle( QgsLegendStyle::Subgroup ).setFont( layerFont() );
+    settings.rstyle( QgsLegendStyle::Style::Subgroup ).setMargin( QgsLegendStyle::Side::Top, layerSpaceAsDouble() );
+    settings.rstyle( QgsLegendStyle::Style::Subgroup ).setMargin( QgsLegendStyle::Side::Bottom, layerTitleSpaceAsDouble() );
+    settings.rstyle( QgsLegendStyle::Style::Subgroup ).setFont( layerFont() );
 
-    settings.rstyle( QgsLegendStyle::SymbolLabel ).setFont( itemFont() );
-    settings.rstyle( QgsLegendStyle::Symbol ).setMargin( QgsLegendStyle::Top, symbolSpaceAsDouble() );
-    settings.rstyle( QgsLegendStyle::SymbolLabel ).setMargin( QgsLegendStyle::Left, iconLabelSpaceAsDouble() );
+    if ( !itemFontColor().isEmpty() )
+    {
+      settings.setFontColor( itemFontColorAsColor() );
+    }
+
+    // Ok, this is tricky: because QgsLegendSettings's layerFontColor was added to the API after
+    // fontColor, to fix regressions #21871 and #21870 and the previous behavior was to use fontColor
+    // for the whole legend we need to preserve that behavior.
+    // But, the 2.18 server parameters ITEMFONTCOLOR did not have effect on the layer titles too, so
+    // we set explicitly layerFontColor to black if it's not overridden by LAYERFONTCOLOR argument.
+    settings.setLayerFontColor( layerFontColor().isEmpty() ? QColor( Qt::black ) : layerFontColorAsColor() );
+
+    settings.rstyle( QgsLegendStyle::Style::SymbolLabel ).setFont( itemFont() );
+    settings.rstyle( QgsLegendStyle::Style::Symbol ).setMargin( QgsLegendStyle::Side::Top, symbolSpaceAsDouble() );
+    settings.rstyle( QgsLegendStyle::Style::SymbolLabel ).setMargin( QgsLegendStyle::Side::Left, iconLabelSpaceAsDouble() );
 
     return settings;
   }
 
+  QString QgsWmsParameters::layoutParameter( const QString &id, bool &ok ) const
+  {
+    QString label;
+    ok = false;
+
+    if ( mUnmanagedParameters.contains( id.toUpper() ) )
+    {
+      label = mUnmanagedParameters[id.toUpper()];
+      ok = true;
+    }
+
+    return label;
+  }
+
+  QStringList QgsWmsParameters::atlasPk() const
+  {
+    return mWmsParameters[ QgsWmsParameter::ATLAS_PK ].toStringList();
+  }
+
   QStringList QgsWmsParameters::highlightLabelString() const
   {
-    return toStringList( ParameterName::HIGHLIGHT_LABELSTRING, ';' );
+    return mWmsParameters[ QgsWmsParameter::HIGHLIGHT_LABELSTRING ].toStringList( ';' );
   }
 
   QStringList QgsWmsParameters::highlightLabelSize() const
   {
-    return toStringList( ParameterName::HIGHLIGHT_LABELSIZE, ';' );
+    return mWmsParameters[ QgsWmsParameter::HIGHLIGHT_LABELSIZE ].toStringList( ';' );
   }
 
   QList<int> QgsWmsParameters::highlightLabelSizeAsInt() const
   {
-    return toIntList( highlightLabelSize(), ParameterName::HIGHLIGHT_LABELSIZE );
+    return mWmsParameters[ QgsWmsParameter::HIGHLIGHT_LABELSIZE ].toIntList( ';' );
   }
 
   QStringList QgsWmsParameters::highlightLabelColor() const
   {
-    return toStringList( ParameterName::HIGHLIGHT_LABELCOLOR, ';' );
+    return mWmsParameters[ QgsWmsParameter::HIGHLIGHT_LABELCOLOR ].toStringList( ';' );
   }
 
   QList<QColor> QgsWmsParameters::highlightLabelColorAsColor() const
   {
-    return toColorList( highlightLabelColor(), ParameterName::HIGHLIGHT_LABELCOLOR );
+    return mWmsParameters[ QgsWmsParameter::HIGHLIGHT_LABELCOLOR ].toColorList( ';' );
   }
 
   QStringList QgsWmsParameters::highlightLabelWeight() const
   {
-    return toStringList( ParameterName::HIGHLIGHT_LABELWEIGHT, ';' );
+    return mWmsParameters[ QgsWmsParameter::HIGHLIGHT_LABELWEIGHT ].toStringList( ';' );
   }
 
   QList<int> QgsWmsParameters::highlightLabelWeightAsInt() const
   {
-    return toIntList( highlightLabelWeight(), ParameterName::HIGHLIGHT_LABELWEIGHT );
+    return mWmsParameters[ QgsWmsParameter::HIGHLIGHT_LABELWEIGHT ].toIntList( ';' );
   }
 
   QStringList QgsWmsParameters::highlightLabelFont() const
   {
-    return toStringList( ParameterName::HIGHLIGHT_LABELFONT, ';' );
+    return mWmsParameters[ QgsWmsParameter::HIGHLIGHT_LABELFONT ].toStringList( ';' );
   }
 
   QStringList QgsWmsParameters::highlightLabelBufferColor() const
   {
-    return toStringList( ParameterName::HIGHLIGHT_LABELBUFFERCOLOR, ';' );
+    return mWmsParameters[ QgsWmsParameter::HIGHLIGHT_LABELBUFFERCOLOR ].toStringList( ';' );
   }
 
   QList<QColor> QgsWmsParameters::highlightLabelBufferColorAsColor() const
   {
-    return toColorList( highlightLabelBufferColor(), ParameterName::HIGHLIGHT_LABELBUFFERCOLOR );
+    return mWmsParameters[ QgsWmsParameter::HIGHLIGHT_LABELBUFFERCOLOR ].toColorList( ';' );
   }
 
   QStringList QgsWmsParameters::highlightLabelBufferSize() const
   {
-    return toStringList( ParameterName::HIGHLIGHT_LABELBUFFERSIZE, ';' );
+    return mWmsParameters[ QgsWmsParameter::HIGHLIGHT_LABELBUFFERSIZE ].toStringList( ';' );
   }
 
-  QList<float> QgsWmsParameters::highlightLabelBufferSizeAsFloat() const
+  QList<double> QgsWmsParameters::highlightLabelBufferSizeAsFloat() const
   {
-    return toFloatList( highlightLabelBufferSize(), ParameterName::HIGHLIGHT_LABELBUFFERSIZE );
+    return mWmsParameters[ QgsWmsParameter::HIGHLIGHT_LABELBUFFERSIZE ].toDoubleList( ';' );
   }
 
   QString QgsWmsParameters::wmsPrecision() const
   {
-    return value( ParameterName::WMS_PRECISION ).toString();
+    return mWmsParameters[ QgsWmsParameter::WMS_PRECISION ].toString();
   }
 
   int QgsWmsParameters::wmsPrecisionAsInt() const
   {
-    return toInt( ParameterName::WMS_PRECISION );
+    return mWmsParameters[ QgsWmsParameter::WMS_PRECISION ].toInt();
   }
 
-  QString QgsWmsParameters::sld() const
+  QString QgsWmsParameters::sldBody() const
   {
-    return value( ParameterName::SLD ).toString();
+    return mWmsParameters[ QgsWmsParameter::SLD_BODY ].toString();
   }
 
   QStringList QgsWmsParameters::filters() const
   {
-    return toStringList( ParameterName::FILTER, ';' );
+    const QString filter = mWmsParameters[ QgsWmsParameter::FILTER ].toString();
+    QStringList results;
+    int pos = 0;
+    while ( pos < filter.size() )
+    {
+      if ( pos + 1 < filter.size() && filter[pos] == '(' && filter[pos + 1] == '<' )
+      {
+        // OGC filter on multiple layers
+        int posEnd = filter.indexOf( "Filter>)", pos );
+        if ( posEnd < 0 )
+        {
+          posEnd = filter.size();
+        }
+        results.append( filter.mid( pos + 1, posEnd - pos + 6 ) );
+        pos = posEnd + 8;
+      }
+      else if ( pos + 1 < filter.size() && filter[pos] == '(' && filter[pos + 1] == ')' )
+      {
+        // empty OGC filter
+        results.append( "" );
+        pos += 2;
+      }
+      else if ( filter[pos] == '<' )
+      {
+        // Single OGC filter
+        results.append( filter.mid( pos ) );
+        break;
+      }
+      else
+      {
+        // QGIS specific filter
+        int posEnd = filter.indexOf( ';', pos + 1 );
+        if ( posEnd < 0 )
+        {
+          posEnd = filter.size();
+        }
+        results.append( filter.mid( pos, posEnd - pos ) );
+        pos = posEnd + 1;
+      }
+    }
+    return results;
   }
 
   QString QgsWmsParameters::filterGeom() const
   {
-    return value( ParameterName::FILTER_GEOM ).toString();
+    return mWmsParameters[ QgsWmsParameter::FILTER_GEOM ].toString();
   }
 
   QStringList QgsWmsParameters::selections() const
   {
-    return toStringList( ParameterName::SELECTION );
+    return mWmsParameters[ QgsWmsParameter::SELECTION ].toStringList( ';' );
   }
 
   QStringList QgsWmsParameters::opacities() const
   {
-    return toStringList( ParameterName::OPACITIES );
+    return mWmsParameters[ QgsWmsParameter::OPACITIES ].toStringList();
   }
 
   QList<int> QgsWmsParameters::opacitiesAsInt() const
   {
-    return toIntList( opacities(), ParameterName::OPACITIES );
+    return mWmsParameters[ QgsWmsParameter::OPACITIES ].toIntList();
   }
 
   QStringList QgsWmsParameters::allLayersNickname() const
   {
-    QStringList layer = toStringList( ParameterName::LAYER );
-    QStringList layers = toStringList( ParameterName::LAYERS );
+    QStringList layer = mWmsParameters[ QgsWmsParameter::LAYER ].toStringList();
+    const QStringList layers = mWmsParameters[ QgsWmsParameter::LAYERS ].toStringList();
     return layer << layers;
   }
 
   QStringList QgsWmsParameters::queryLayersNickname() const
   {
-    return toStringList( ParameterName::QUERY_LAYERS );
+    return mWmsParameters[ QgsWmsParameter::QUERY_LAYERS ].toStringList();
   }
 
   QStringList QgsWmsParameters::allStyles() const
   {
-    QStringList style = toStringList( ParameterName::STYLE );
-    QStringList styles = toStringList( ParameterName::STYLES );
+    QStringList style = mWmsParameters[ QgsWmsParameter::STYLE ].toStyleList();
+    const QStringList styles = mWmsParameters[ QgsWmsParameter::STYLES ].toStyleList();
     return style << styles;
+  }
+
+  QMultiMap<QString, QgsWmsParametersFilter> QgsWmsParameters::layerFilters( const QStringList &layers ) const
+  {
+    const QString nsWfs2 = QStringLiteral( "http://www.opengis.net/fes/2.0" );
+    const QString prefixWfs2 = QStringLiteral( "<fes:" );
+
+    const QStringList rawFilters = filters();
+    QMultiMap<QString, QgsWmsParametersFilter> filters;
+    for ( int i = 0; i < rawFilters.size(); i++ )
+    {
+      const QString f = rawFilters[i];
+      if ( f.startsWith( QLatin1String( "<" ) ) \
+           && f.endsWith( QLatin1String( "Filter>" ) ) \
+           &&  i < layers.size() )
+      {
+        QgsWmsParametersFilter filter;
+        filter.mFilter = f;
+        filter.mType = QgsWmsParametersFilter::OGC_FE;
+        filter.mVersion = QgsOgcUtils::FILTER_OGC_1_0;
+
+        if ( filter.mFilter.contains( nsWfs2 ) \
+             || filter.mFilter.contains( prefixWfs2 ) )
+        {
+          filter.mVersion = QgsOgcUtils::FILTER_FES_2_0;
+        }
+
+        filters.insert( layers[i], filter );
+      }
+      else if ( !f.isEmpty() )
+      {
+        // filter format: "LayerName,LayerName2:filterString;LayerName3:filterString2;..."
+        // several filters can be defined for one layer
+        const int colonIndex = f.indexOf( ':' );
+        if ( colonIndex != -1 )
+        {
+          const QString layers = f.section( ':', 0, 0 );
+          const QString filter = f.section( ':', 1 );
+          const QStringList layersList = layers.split( ',' );
+          for ( const QString &layer : layersList )
+          {
+            QgsWmsParametersFilter parametersFilter;
+            parametersFilter.mFilter = filter;
+            parametersFilter.mType = QgsWmsParametersFilter::SQL;
+            filters.insert( layer, parametersFilter );
+          }
+        }
+        else
+        {
+          QString filterStr = mWmsParameters[ QgsWmsParameter::FILTER ].toString();
+          raiseError( QStringLiteral( "FILTER ('" ) + filterStr + QStringLiteral( "') is not properly formatted" ) );
+        }
+      }
+    }
+    return filters;
   }
 
   QList<QgsWmsParametersLayer> QgsWmsParameters::layersParameters() const
   {
-    QList<QgsWmsParametersLayer> parameters;
-    QStringList layers = allLayersNickname();
-    QStringList styles = allStyles();
-    QStringList filter = filters();
-    QStringList selection = selections();
-    QList<int> opacities = opacitiesAsInt();
-
-    // filter format: "LayerName:filterString;LayerName2:filterString2;..."
-    // several filters can be defined for one layer
-    QMultiMap<QString, QString> layerFilters;
-    Q_FOREACH ( QString f, filter )
-    {
-      QStringList splits = f.split( ":" );
-      if ( splits.size() == 2 )
-      {
-        layerFilters.insert( splits[0], splits[1] );
-      }
-      else
-      {
-        QString filterStr = value( ParameterName::FILTER ).toString();
-        raiseError( "FILTER ('" + filterStr + "') is not properly formatted" );
-      }
-    }
+    const QStringList layers = allLayersNickname();
+    const QStringList styles = allStyles();
+    const QStringList selection = selections();
+    const QList<int> opacities = opacitiesAsInt();
+    const QMultiMap<QString, QgsWmsParametersFilter> filters = layerFilters( layers );
 
     // selection format: "LayerName:id0,id1;LayerName2:id0,id1;..."
     // several filters can be defined for one layer
     QMultiMap<QString, QString> layerSelections;
-    Q_FOREACH ( QString s, selection )
+    for ( const QString &s : selection )
     {
-      QStringList splits = s.split( ":" );
+      const QStringList splits = s.split( ':' );
       if ( splits.size() == 2 )
       {
         layerSelections.insert( splits[0], splits[1] );
       }
       else
       {
-        QString selStr = value( ParameterName::SELECTION ).toString();
-        raiseError( "SELECTION ('" + selStr + "') is not properly formatted" );
+        QString selStr = mWmsParameters[ QgsWmsParameter::SELECTION ].toString();
+        raiseError( QStringLiteral( "SELECTION ('" ) + selStr + QStringLiteral( "') is not properly formatted" ) );
       }
     }
 
+    QList<QgsWmsParametersLayer> parameters;
     for ( int i = 0; i < layers.size(); i++ )
     {
       QString layer = layers[i];
+
+      if ( isExternalLayer( layer ) )
+        continue;
+
       QgsWmsParametersLayer param;
       param.mNickname = layer;
 
@@ -1676,11 +1522,10 @@ namespace QgsWms
       if ( i < opacities.count() )
         param.mOpacity = opacities[i];
 
-      if ( layerFilters.contains( layer ) )
+      if ( filters.contains( layer ) )
       {
-        QMultiMap<QString, QString>::const_iterator it;
-        it = layerFilters.find( layer );
-        while ( it != layerFilters.end() && it.key() == layer )
+        auto it = filters.find( layer );
+        while ( it != filters.end() && it.key() == layer )
         {
           param.mFilter.append( it.value() );
           ++it;
@@ -1690,10 +1535,10 @@ namespace QgsWms
       if ( layerSelections.contains( layer ) )
       {
         QMultiMap<QString, QString>::const_iterator it;
-        it = layerSelections.find( layer );
-        while ( it != layerSelections.end() && it.key() == layer )
+        it = layerSelections.constFind( layer );
+        while ( it != layerSelections.constEnd() && it.key() == layer )
         {
-          param.mSelection << it.value().split( "," );
+          param.mSelection << it.value().split( ',' );
           ++it;
         }
       }
@@ -1715,13 +1560,13 @@ namespace QgsWms
     QList<int> weights = highlightLabelWeightAsInt();
     QStringList fonts = highlightLabelFont();
     QList<QColor> bufferColors = highlightLabelBufferColorAsColor();
-    QList<float> bufferSizes = highlightLabelBufferSizeAsFloat();
+    QList<double> bufferSizes = highlightLabelBufferSizeAsFloat();
 
     int nLayers = std::min( geoms.size(), slds.size() );
     for ( int i = 0; i < nLayers; i++ )
     {
       QgsWmsParametersHighlightLayer param;
-      param.mName = "highlight_" + QString::number( i );
+      param.mName = QStringLiteral( "highlight_" ) + QString::number( i );
       param.mGeom = geoms[i];
       param.mSld = slds[i];
 
@@ -1752,34 +1597,66 @@ namespace QgsWms
     return params;
   }
 
+  QList<QgsWmsParametersExternalLayer> QgsWmsParameters::externalLayersParameters() const
+  {
+    auto notExternalLayer = []( const QString & name ) { return ! QgsWmsParameters::isExternalLayer( name ); };
+
+    QList<QgsWmsParametersExternalLayer> externalLayers;
+
+    QStringList layers = allLayersNickname();
+    QStringList::iterator rit = std::remove_if( layers.begin(), layers.end(), notExternalLayer );
+
+    for ( QStringList::iterator it = layers.begin(); it != rit; ++it )
+    {
+      externalLayers << externalLayerParameter( *it );
+    }
+
+    return externalLayers;
+  }
+
   QString QgsWmsParameters::backgroundColor() const
   {
-    return value( ParameterName::BGCOLOR ).toString();
+    return mWmsParameters[ QgsWmsParameter::BGCOLOR ].toString();
   }
 
   QColor QgsWmsParameters::backgroundColorAsColor() const
   {
-    return toColor( ParameterName::BGCOLOR );
+    return mWmsParameters[ QgsWmsParameter::BGCOLOR ].toColor();
   }
 
   QString QgsWmsParameters::composerTemplate() const
   {
-    return value( ParameterName::TEMPLATE ).toString();
+    return mWmsParameters[ QgsWmsParameter::TEMPLATE ].toString();
   }
 
-  QgsWmsParametersComposerMap QgsWmsParameters::composerMapParameters( int mapId ) const
+  QgsWmsParametersComposerMap QgsWmsParameters::composerMapParameters( const int mapId ) const
   {
+    QgsWmsParameter wmsParam;
     QgsWmsParametersComposerMap param;
     param.mId = mapId;
 
     //map extent is mandatory
-    QString extentStr = value( ParameterName::EXTENT, mapId ).toString();
+    QString extentStr;
+    wmsParam = idParameter( QgsWmsParameter::EXTENT, mapId );
+    if ( wmsParam.isValid() )
+    {
+      extentStr = wmsParam.toString();
+    }
+
     if ( extentStr.isEmpty() )
+    {
       return param;
+    }
 
-    QString pMapId = "MAP" + QString::number( mapId );
+    QString pMapId = QStringLiteral( "MAP" ) + QString::number( mapId );
 
-    QgsRectangle extent = toRectangle( ParameterName::EXTENT, mapId );
+    wmsParam = idParameter( QgsWmsParameter::EXTENT, mapId );
+    QgsRectangle extent;
+    if ( wmsParam.isValid() )
+    {
+      extent = wmsParam.toRectangle();
+    }
+
     if ( extent.isEmpty() )
       return param;
 
@@ -1787,28 +1664,73 @@ namespace QgsWms
     param.mExtent = extent;
 
     // scale
-    if ( !value( ParameterName::SCALE, mapId ).toString().isEmpty() )
+    wmsParam = idParameter( QgsWmsParameter::SCALE, mapId );
+    if ( wmsParam.isValid() && !wmsParam.toString().isEmpty() )
     {
-      param.mScale = toDouble( ParameterName::SCALE, mapId );
+      param.mScale = wmsParam.toDouble();
     }
 
     // rotation
-    if ( !value( ParameterName::ROTATION, mapId ).toString().isEmpty() )
+    wmsParam = idParameter( QgsWmsParameter::ROTATION, mapId );
+    if ( wmsParam.isValid() && !wmsParam.toString().isEmpty() )
     {
-      param.mRotation = toDouble( ParameterName::ROTATION, mapId );
+      param.mRotation = wmsParam.toDouble();
     }
 
     //grid space x / y
-    if ( !value( ParameterName::GRID_INTERVAL_X, mapId ).toString().isEmpty() && !value( ParameterName::GRID_INTERVAL_Y, mapId ).toString().isEmpty() )
+    double gridx( -1 ), gridy( -1 );
+
+    wmsParam = idParameter( QgsWmsParameter::GRID_INTERVAL_X, mapId );
+    if ( wmsParam.isValid() && !wmsParam.toString().isEmpty() )
     {
-      param.mGridX = toDouble( ParameterName::GRID_INTERVAL_X, mapId );
-      param.mGridY = toDouble( ParameterName::GRID_INTERVAL_Y, mapId );
+      gridx = wmsParam.toDouble();
+    }
+
+    wmsParam = idParameter( QgsWmsParameter::GRID_INTERVAL_Y, mapId );
+    if ( wmsParam.isValid() && !wmsParam.toString().isEmpty() )
+    {
+      gridy = wmsParam.toDouble();
+    }
+
+    if ( gridx != -1 && gridy != -1 )
+    {
+      param.mGridX = gridx;
+      param.mGridY = gridy;
     }
 
     //layers
+    QStringList allLayers;
+    wmsParam = idParameter( QgsWmsParameter::LAYERS, mapId );
+    if ( wmsParam.isValid() )
+    {
+      allLayers = wmsParam.toStringList();
+    }
+
+    // external layers
+    QStringList layers;
+    QList<QgsWmsParametersExternalLayer> eParams;
+
+    for ( const auto &layer : qgis::as_const( allLayers ) )
+    {
+      if ( isExternalLayer( layer ) )
+      {
+        eParams << externalLayerParameter( layer );
+      }
+      else
+      {
+        layers << layer;
+      }
+    }
+    param.mExternalLayers = eParams;
+
+    QStringList styles;
+    wmsParam = idParameter( QgsWmsParameter::STYLES, mapId );
+    if ( wmsParam.isValid() )
+    {
+      styles = wmsParam.toStyleList();
+    }
+
     QList<QgsWmsParametersLayer> lParams;
-    QStringList layers = toStringList( ParameterName::LAYERS, mapId, ',' );
-    QStringList styles = toStringList( ParameterName::STYLES, mapId, ',' );
     for ( int i = 0; i < layers.size(); i++ )
     {
       QString layer = layers[i];
@@ -1824,21 +1746,75 @@ namespace QgsWms
 
     //highlight layers
     QList<QgsWmsParametersHighlightLayer> hParams;
-    QList<QgsGeometry> geoms = toGeomList( toStringList( ParameterName::HIGHLIGHT_GEOM, mapId, ';' ), ParameterName::HIGHLIGHT_GEOM, mapId );
-    QStringList slds = toStringList( ParameterName::HIGHLIGHT_SYMBOL, mapId, ';' );
-    QStringList labels = toStringList( ParameterName::HIGHLIGHT_LABELSTRING, mapId, ';' );
-    QList<QColor> colors = toColorList( toStringList( ParameterName::HIGHLIGHT_LABELCOLOR, mapId, ';' ), ParameterName::HIGHLIGHT_LABELCOLOR, mapId );
-    QList<int> sizes = toIntList( toStringList( ParameterName::HIGHLIGHT_LABELSIZE, mapId, ';' ), ParameterName::HIGHLIGHT_LABELSIZE, mapId );
-    QList<int> weights = toIntList( toStringList( ParameterName::HIGHLIGHT_LABELWEIGHT, mapId, ';' ), ParameterName::HIGHLIGHT_LABELWEIGHT, mapId );
-    QStringList fonts = toStringList( ParameterName::HIGHLIGHT_LABELFONT, mapId, ';' );
-    QList<QColor> bufferColors = toColorList( toStringList( ParameterName::HIGHLIGHT_LABELBUFFERCOLOR, mapId, ';' ), ParameterName::HIGHLIGHT_LABELBUFFERCOLOR, mapId );
-    QList<float> bufferSizes = toFloatList( toStringList( ParameterName::HIGHLIGHT_LABELBUFFERSIZE, mapId, ';' ), ParameterName::HIGHLIGHT_LABELBUFFERSIZE, mapId );
 
-    int nHLayers = qMin( geoms.size(), slds.size() );
+    QList<QgsGeometry> geoms;
+    wmsParam = idParameter( QgsWmsParameter::HIGHLIGHT_GEOM, mapId );
+    if ( wmsParam.isValid() )
+    {
+      geoms = wmsParam.toGeomList( ';' );
+    }
+
+    QStringList slds;
+    wmsParam = idParameter( QgsWmsParameter::HIGHLIGHT_SYMBOL, mapId );
+    if ( wmsParam.isValid() )
+    {
+      slds = wmsParam.toStringList( ';' );
+    }
+
+    QStringList labels;
+    wmsParam = idParameter( QgsWmsParameter::HIGHLIGHT_LABELSTRING, mapId );
+    if ( wmsParam.isValid() )
+    {
+      labels = wmsParam.toStringList( ';' );
+    }
+
+    QStringList fonts;
+    wmsParam = idParameter( QgsWmsParameter::HIGHLIGHT_LABELFONT, mapId );
+    if ( wmsParam.isValid() )
+    {
+      fonts = wmsParam.toStringList( ';' );
+    }
+
+    QList<QColor> colors;
+    wmsParam = idParameter( QgsWmsParameter::HIGHLIGHT_LABELCOLOR, mapId );
+    if ( wmsParam.isValid() )
+    {
+      colors = wmsParam.toColorList( ';' );
+    }
+
+    QList<int> sizes;
+    wmsParam = idParameter( QgsWmsParameter::HIGHLIGHT_LABELSIZE, mapId );
+    if ( wmsParam.isValid() )
+    {
+      sizes = wmsParam.toIntList( ';' );
+    }
+
+    QList<int> weights;
+    wmsParam = idParameter( QgsWmsParameter::HIGHLIGHT_LABELWEIGHT, mapId );
+    if ( wmsParam.isValid() )
+    {
+      weights = wmsParam.toIntList( ';' );
+    }
+
+    QList<QColor> bufferColors;
+    wmsParam = idParameter( QgsWmsParameter::HIGHLIGHT_LABELBUFFERCOLOR, mapId );
+    if ( wmsParam.isValid() )
+    {
+      bufferColors = wmsParam.toColorList( ';' );
+    }
+
+    QList<double> bufferSizes;
+    wmsParam = idParameter( QgsWmsParameter::HIGHLIGHT_LABELBUFFERSIZE, mapId );
+    if ( wmsParam.isValid() )
+    {
+      bufferSizes = wmsParam.toDoubleList( ';' );
+    }
+
+    int nHLayers = std::min( geoms.size(), slds.size() );
     for ( int i = 0; i < nHLayers; i++ )
     {
       QgsWmsParametersHighlightLayer hParam;
-      hParam.mName = pMapId + "_highlight_" + QString::number( i );
+      hParam.mName = pMapId + QStringLiteral( "_highlight_" ) + QString::number( i );
       hParam.mGeom = geoms[i];
       hParam.mSld = slds[i];
 
@@ -1870,35 +1846,193 @@ namespace QgsWms
     return param;
   }
 
-  QString QgsWmsParameters::name( ParameterName name ) const
+  QString QgsWmsParameters::externalWMSUri( const QString &id ) const
   {
-    const QMetaEnum metaEnum( QMetaEnum::fromType<ParameterName>() );
-    return metaEnum.valueToKey( name );
+    if ( !mExternalWMSParameters.contains( id ) )
+    {
+      return QString();
+    }
+
+    QgsDataSourceUri wmsUri;
+    const QMap<QString, QString> &paramMap = mExternalWMSParameters[ id ];
+    QMap<QString, QString>::const_iterator paramIt = paramMap.constBegin();
+    for ( ; paramIt != paramMap.constEnd(); ++paramIt )
+    {
+      wmsUri.setParam( paramIt.key().toLower(), paramIt.value() );
+    }
+    return wmsUri.encodedUri();
+  }
+
+  bool QgsWmsParameters::withGeometry() const
+  {
+    return mWmsParameters[ QgsWmsParameter::WITH_GEOMETRY ].toBool();
+  }
+
+  bool QgsWmsParameters::withMapTip() const
+  {
+    return mWmsParameters[ QgsWmsParameter::WITH_MAPTIP ].toBool();
+  }
+
+  QString QgsWmsParameters::wmtver() const
+  {
+    return mWmsParameters[ QgsWmsParameter::WMTVER ].toString();
   }
 
   void QgsWmsParameters::log( const QString &msg ) const
   {
-    QgsMessageLog::logMessage( msg, "Server", QgsMessageLog::INFO );
-  }
-
-  void QgsWmsParameters::raiseError( ParameterName paramName ) const
-  {
-    const QString value = mParameters[paramName].mValue.toString();
-    const QString param = name( paramName );
-    const QString type = QVariant::typeToName( mParameters[paramName].mType );
-    raiseError( param + " ('" + value + "') cannot be converted into " + type );
-  }
-
-  void QgsWmsParameters::raiseError( ParameterName paramName, int mapId ) const
-  {
-    const QString value = mComposerParameters[mapId][paramName].mValue.toString();
-    const QString param = name( paramName );
-    const QString type = QVariant::typeToName( mComposerParameters[mapId][paramName].mType );
-    raiseError( "MAP" + QString::number( mapId ) + ":" + param + " ('" + value + "') cannot be converted into " + type );
+    QgsMessageLog::logMessage( msg, QStringLiteral( "Server" ), Qgis::Info );
   }
 
   void QgsWmsParameters::raiseError( const QString &msg ) const
   {
-    throw QgsBadRequestException( QStringLiteral( "Invalid WMS Parameter" ), msg );
+    throw QgsBadRequestException( QgsServiceException::QGIS_InvalidParameterValue, msg );
+  }
+
+  QgsWmsParameter QgsWmsParameters::idParameter( const QgsWmsParameter::Name name, const int id ) const
+  {
+    QgsWmsParameter p;
+
+    for ( const auto &param : mWmsParameters.values( name ) )
+    {
+      if ( param.mId == id )
+      {
+        p = param;
+      }
+    }
+
+    return p;
+  }
+
+  QgsWmsParametersExternalLayer QgsWmsParameters::externalLayerParameter( const QString &name ) const
+  {
+    QgsWmsParametersExternalLayer param;
+
+    param.mName = name;
+    param.mName.remove( 0, EXTERNAL_LAYER_PREFIX.size() );
+    param.mUri = externalWMSUri( param.mName );
+
+    return param;
+  }
+
+  bool QgsWmsParameters::isExternalLayer( const QString &name )
+  {
+    return name.startsWith( EXTERNAL_LAYER_PREFIX );
+  }
+
+  QStringList QgsWmsParameters::dxfLayerAttributes() const
+  {
+    QStringList attributes;
+    const QMap<DxfFormatOption, QString> options = dxfFormatOptions();
+
+    if ( options.contains( DxfFormatOption::LAYERATTRIBUTES ) )
+    {
+      attributes = options[ DxfFormatOption::LAYERATTRIBUTES ].split( ',' );
+    }
+
+    return attributes;
+  }
+
+  bool QgsWmsParameters::dxfUseLayerTitleAsName() const
+  {
+    bool use = false;
+    const QMap<DxfFormatOption, QString> options = dxfFormatOptions();
+
+    if ( options.contains( DxfFormatOption::USE_TITLE_AS_LAYERNAME ) )
+    {
+      use = QVariant( options[ DxfFormatOption::USE_TITLE_AS_LAYERNAME ] ).toBool();
+    }
+
+    return use;
+  }
+
+  double QgsWmsParameters::dxfScale() const
+  {
+    const QMap<DxfFormatOption, QString> options = dxfFormatOptions();
+
+    double scale = -1;
+    if ( options.contains( DxfFormatOption::SCALE ) )
+    {
+      scale = options[ DxfFormatOption::SCALE ].toDouble();
+    }
+
+    return scale;
+  }
+
+  QgsDxfExport::SymbologyExport QgsWmsParameters::dxfMode() const
+  {
+    const QMap<DxfFormatOption, QString> options = dxfFormatOptions();
+
+    QgsDxfExport::SymbologyExport symbol = QgsDxfExport::NoSymbology;
+
+    if ( ! options.contains( DxfFormatOption::MODE ) )
+    {
+      return symbol;
+    }
+
+    const QString mode = options[ DxfFormatOption::MODE ];
+    if ( mode.compare( QLatin1String( "SymbolLayerSymbology" ), Qt::CaseInsensitive ) == 0 )
+    {
+      symbol = QgsDxfExport::SymbolLayerSymbology;
+    }
+    else if ( mode.compare( QLatin1String( "FeatureSymbology" ), Qt::CaseInsensitive ) == 0 )
+    {
+      symbol = QgsDxfExport::FeatureSymbology;
+    }
+
+    return symbol;
+  }
+
+  QString QgsWmsParameters::dxfCodec() const
+  {
+    QString codec = QStringLiteral( "ISO-8859-1" );
+
+    if ( dxfFormatOptions().contains( DxfFormatOption::CODEC ) )
+    {
+      codec = dxfFormatOptions()[ DxfFormatOption::CODEC ];
+    }
+
+    return codec;
+  }
+
+  QMap<QgsWmsParameters::DxfFormatOption, QString> QgsWmsParameters::dxfFormatOptions() const
+  {
+    QMap<QgsWmsParameters::DxfFormatOption, QString> options;
+
+    const QMetaEnum metaEnum( QMetaEnum::fromType<QgsWmsParameters::DxfFormatOption>() );
+    const QStringList opts = mWmsParameters[ QgsWmsParameter::FORMAT_OPTIONS ].toStringList( ';' );
+
+    for ( auto it = opts.constBegin(); it != opts.constEnd(); ++it )
+    {
+      const int equalIdx = it->indexOf( ':' );
+      if ( equalIdx > 0 && equalIdx < ( it->length() - 1 ) )
+      {
+        const QString name = it->left( equalIdx ).toUpper();
+        const QgsWmsParameters::DxfFormatOption option =
+          ( QgsWmsParameters::DxfFormatOption ) metaEnum.keyToValue( name.toStdString().c_str() );
+        const QString value = it->right( it->length() - equalIdx - 1 );
+        options.insert( option, value );
+      }
+    }
+
+    return options;
+  }
+
+  QMap<QString, QString> QgsWmsParameters::dimensionValues() const
+  {
+    QMap<QString, QString> dimValues;
+    const QMetaEnum pnMetaEnum( QMetaEnum::fromType<QgsVectorLayerServerProperties::PredefinedWmsDimensionName>() );
+    const QStringList unmanagedNames = mUnmanagedParameters.keys();
+    for ( const QString &key : unmanagedNames )
+    {
+      if ( key.startsWith( QStringLiteral( "DIM_" ) ) )
+      {
+        dimValues[key.mid( 4 )] = mUnmanagedParameters[key];
+      }
+      else if ( pnMetaEnum.keyToValue( key.toUpper().toStdString().c_str() ) != -1 )
+      {
+        dimValues[key] = mUnmanagedParameters[key];
+      }
+    }
+    return dimValues;
   }
 }

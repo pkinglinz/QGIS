@@ -39,7 +39,8 @@
 #include "qgspallabeling.h"
 #include "qgsproject.h"
 
-/** \ingroup UnitTests
+/**
+ * \ingroup UnitTests
  * Unit tests for the diagram renderer
  */
 class TestQgsDiagram : public QObject
@@ -47,14 +48,10 @@ class TestQgsDiagram : public QObject
     Q_OBJECT
 
   public:
-    TestQgsDiagram()
-      : mTestHasError( false )
-      , mMapSettings( 0 )
-      , mPointsLayer( 0 )
-    {}
+    TestQgsDiagram() = default;
 
   private:
-    bool mTestHasError;
+    bool mTestHasError =  false ;
     QgsMapSettings *mMapSettings = nullptr;
     QgsVectorLayer *mPointsLayer = nullptr;
     QString mTestDataDir;
@@ -125,7 +122,7 @@ class TestQgsDiagram : public QObject
     // will be called before each testfunction is executed
     void init()
     {
-      mPointsLayer->setDiagramRenderer( 0 );
+      mPointsLayer->setDiagramRenderer( nullptr );
       QgsDiagramLayerSettings dls;
       mPointsLayer->setDiagramLayerSettings( dls );
     }
@@ -212,7 +209,7 @@ class TestQgsDiagram : public QObject
 
       QVERIFY( imageCheck( "piediagram_expression" ) );
 
-      mPointsLayer->setDiagramRenderer( 0 );
+      mPointsLayer->setDiagramRenderer( nullptr );
     }
 
     void testDataDefinedPosition()

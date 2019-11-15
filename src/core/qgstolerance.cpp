@@ -16,6 +16,7 @@
 #include "qgstolerance.h"
 #include "qgsmapsettings.h"
 #include "qgssettings.h"
+#include "qgspointxy.h"
 
 #include <QPoint>
 #include <cmath>
@@ -73,7 +74,7 @@ double QgsTolerance::vertexSearchRadius( const QgsMapSettings &mapSettings )
 {
   QgsSettings settings;
   double tolerance = settings.value( QStringLiteral( "qgis/digitizing/search_radius_vertex_edit" ), 10 ).toDouble();
-  UnitType units = static_cast< QgsTolerance::UnitType >( settings.value( QStringLiteral( "qgis/digitizing/search_radius_vertex_edit_unit" ), QgsTolerance::Pixels ).toInt() );
+  UnitType units = settings.enumValue( QStringLiteral( "qgis/digitizing/search_radius_vertex_edit_unit" ),  QgsTolerance::Pixels );
   if ( units == LayerUnits )
     units = ProjectUnits;
   return toleranceInProjectUnits( tolerance, nullptr, mapSettings, units );
@@ -83,15 +84,15 @@ double QgsTolerance::vertexSearchRadius( QgsMapLayer *layer, const QgsMapSetting
 {
   QgsSettings settings;
   double tolerance = settings.value( QStringLiteral( "qgis/digitizing/search_radius_vertex_edit" ), 10 ).toDouble();
-  UnitType units = static_cast< QgsTolerance::UnitType >( settings.value( QStringLiteral( "qgis/digitizing/search_radius_vertex_edit_unit" ), QgsTolerance::Pixels ).toInt() );
+  UnitType units = settings.enumValue( QStringLiteral( "qgis/digitizing/search_radius_vertex_edit_unit" ),  QgsTolerance::Pixels );
   return toleranceInMapUnits( tolerance, layer, mapSettings, units );
 }
 
 double QgsTolerance::defaultTolerance( QgsMapLayer *layer, const QgsMapSettings &mapSettings )
 {
   QgsSettings settings;
-  double tolerance = settings.value( QStringLiteral( "qgis/digitizing/default_snapping_tolerance" ), 0 ).toDouble();
-  UnitType units = static_cast< QgsTolerance::UnitType >( settings.value( QStringLiteral( "qgis/digitizing/default_snapping_tolerance_unit" ), ProjectUnits ).toInt() );
+  double tolerance = settings.value( QStringLiteral( "qgis/digitizing/default_snapping_tolerance" ), Qgis::DEFAULT_SNAP_TOLERANCE ).toDouble();
+  UnitType units = settings.enumValue( QStringLiteral( "qgis/digitizing/default_snapping_tolerance_unit" ),  Qgis::DEFAULT_SNAP_UNITS );
   return toleranceInMapUnits( tolerance, layer, mapSettings, units );
 }
 

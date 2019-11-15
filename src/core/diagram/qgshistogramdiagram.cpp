@@ -49,7 +49,7 @@ QSizeF QgsHistogramDiagram::diagramSize( const QgsFeature &feature, const QgsRen
   if ( !feature.fields().isEmpty() )
     expressionContext.setFields( feature.fields() );
 
-  for ( const QString &cat : qgsAsConst( s.categoryAttributes ) )
+  for ( const QString &cat : qgis::as_const( s.categoryAttributes ) )
   {
     QgsExpression *expression = getExpression( cat, expressionContext );
     maxValue = std::max( expression->evaluate( &expressionContext ).toDouble(), maxValue );
@@ -101,7 +101,7 @@ QString QgsHistogramDiagram::diagramName() const
 
 QSizeF QgsHistogramDiagram::diagramSize( const QgsAttributes &attributes, const QgsRenderContext &c, const QgsDiagramSettings &s )
 {
-  Q_UNUSED( c );
+  Q_UNUSED( c )
   QSizeF size;
 
   if ( attributes.isEmpty() )
@@ -151,7 +151,7 @@ void QgsHistogramDiagram::renderDiagram( const QgsFeature &feature, QgsRenderCon
   if ( !feature.fields().isEmpty() )
     expressionContext.setFields( feature.fields() );
 
-  for ( const QString &cat : qgsAsConst( s.categoryAttributes ) )
+  for ( const QString &cat : qgis::as_const( s.categoryAttributes ) )
   {
     QgsExpression *expression = getExpression( cat, expressionContext );
     double currentVal = expression->evaluate( &expressionContext ).toDouble();

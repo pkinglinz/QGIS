@@ -39,7 +39,7 @@ class CORE_EXPORT QgsLayoutMeasurement
      * \param length measurement length
      * \param units measurement units
     */
-    explicit QgsLayoutMeasurement( const double length, const QgsUnitTypes::LayoutUnit units = QgsUnitTypes::LayoutMillimeters );
+    explicit QgsLayoutMeasurement( double length, QgsUnitTypes::LayoutUnit units = QgsUnitTypes::LayoutMillimeters );
 
     /**
      * Returns the length of the measurement.
@@ -78,48 +78,56 @@ class CORE_EXPORT QgsLayoutMeasurement
     */
     static QgsLayoutMeasurement decodeMeasurement( const QString &string );
 
-    bool operator==( const QgsLayoutMeasurement &other ) const;
-    bool operator!=( const QgsLayoutMeasurement &other ) const;
+    bool operator==( QgsLayoutMeasurement other ) const;
+    bool operator!=( QgsLayoutMeasurement other ) const;
 
     /**
      * Adds a scalar value to the measurement.
      */
-    QgsLayoutMeasurement operator+( const double v ) const;
+    QgsLayoutMeasurement operator+( double v ) const;
 
     /**
      * Adds a scalar value to the measurement.
      */
-    QgsLayoutMeasurement operator+=( const double v );
+    QgsLayoutMeasurement operator+=( double v );
 
     /**
      * Subtracts a scalar value from the measurement.
      */
-    QgsLayoutMeasurement operator-( const double v ) const;
+    QgsLayoutMeasurement operator-( double v ) const;
 
     /**
      * Subtracts a scalar value from the measurement.
      */
-    QgsLayoutMeasurement operator-=( const double v );
+    QgsLayoutMeasurement operator-=( double v );
 
     /**
      * Multiplies the measurement by a scalar value.
      */
-    QgsLayoutMeasurement operator*( const double v ) const;
+    QgsLayoutMeasurement operator*( double v ) const;
 
     /**
      * Multiplies the measurement by a scalar value.
      */
-    QgsLayoutMeasurement operator*=( const double v );
+    QgsLayoutMeasurement operator*=( double v );
 
     /**
      * Divides the measurement by a scalar value.
      */
-    QgsLayoutMeasurement operator/( const double v ) const;
+    QgsLayoutMeasurement operator/( double v ) const;
 
     /**
      * Divides the measurement by a scalar value.
      */
-    QgsLayoutMeasurement operator/=( const double v );
+    QgsLayoutMeasurement operator/=( double v );
+
+#ifdef SIP_RUN
+    SIP_PYOBJECT __repr__();
+    % MethodCode
+    QString str = QStringLiteral( "<QgsLayoutMeasurement: %1 %2 >" ).arg( sipCpp->length() ).arg( QgsUnitTypes::toAbbreviatedString( sipCpp->units() ) );
+    sipRes = PyUnicode_FromString( str.toUtf8().constData() );
+    % End
+#endif
 
   private:
 

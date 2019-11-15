@@ -34,7 +34,8 @@ class QgsMapCanvas;
 class QgsGrassRegion;
 class QgsGrassToolsTreeFilterProxyModel;
 
-/** \class QgsGrassTools
+/**
+ * \class QgsGrassTools
  *  \brief Interface to GRASS modules.
  *
  */
@@ -45,10 +46,8 @@ class QgsGrassTools: public QgsDockWidget, public Ui::QgsGrassToolsBase
   public:
     //! Constructor
     QgsGrassTools( QgisInterface *iface,
-                   QWidget *parent = 0, const char *name = 0, Qt::WindowFlags f = 0 );
+                   QWidget *parent = nullptr, const char *name = nullptr, Qt::WindowFlags f = nullptr );
 
-
-    ~QgsGrassTools();
 
     //! Append item to model or parent
     void appendItem( QStandardItemModel *treeModel, QStandardItem *parent, QStandardItem *item );
@@ -76,12 +75,6 @@ class QgsGrassTools: public QgsDockWidget, public Ui::QgsGrassToolsBase
     //! Close event
     void closeEvent( QCloseEvent *e ) override;
 
-    //! Restore window position
-    void restorePosition();
-
-    //! Save window position
-    void saveWindowLocation();
-
     //! Close mapset and save it to project
     void closeMapset();
 
@@ -95,14 +88,14 @@ class QgsGrassTools: public QgsDockWidget, public Ui::QgsGrassToolsBase
     void closeTools();
 
     //! Update the regex used to filter the modules list (autoconnect to ui)
-    void on_mFilterInput_textChanged( QString text );
+    void mFilterInput_textChanged( QString text );
     //! Run a module when its entry is clicked in the list view
     void itemClicked( const QModelIndex &index );
     //! Run a module given its module name e.g. r.in.gdal
     void runModule( QString name, bool direct );
-    void on_mDebugButton_clicked();
-    void on_mCloseDebugButton_clicked();
-    void on_mViewModeButton_clicked();
+    void mDebugButton_clicked();
+    void mCloseDebugButton_clicked();
+    void mViewModeButton_clicked();
 
   signals:
     void regionChanged();
@@ -144,7 +137,7 @@ class QgsGrassTools: public QgsDockWidget, public Ui::QgsGrassToolsBase
 };
 
 
-// TODO: searching acros the tree is taken from QgsDockBrowserTreeView -> create common base class
+// TODO: searching across the tree is taken from QgsDockBrowserTreeView -> create common base class
 class QgsGrassToolsTreeFilterProxyModel : public QSortFilterProxyModel
 {
     Q_OBJECT

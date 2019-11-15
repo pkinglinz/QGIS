@@ -18,7 +18,6 @@
 
 #include <QDomNode>
 #include "qgis_sip.h"
-#include "qgis.h"
 #include <QMap>
 #include <QString>
 #include <QVariant>
@@ -30,7 +29,8 @@ class QgsVectorLayer;
 class QWidget;
 class QgsSearchWidgetWrapper;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * Every attribute editor widget needs a factory, which inherits this class
  *
  * It provides metadata for the widgets such as the name (human readable), it serializes
@@ -59,7 +59,7 @@ class GUI_EXPORT QgsEditorWidgetFactory
      *
      * \param vl       The vector layer on which this widget will act
      * \param fieldIdx The field index on which this widget will act
-     * \param editor   An editor widget if already existent. If NULL is provided, a new widget will be created.
+     * \param editor   An editor widget if already existent. If NULLPTR is provided, a new widget will be created.
      * \param parent   The parent for the wrapper class and any created widget.
      *
      * \returns         A new widget wrapper
@@ -69,7 +69,7 @@ class GUI_EXPORT QgsEditorWidgetFactory
     virtual QgsSearchWidgetWrapper *createSearchWidget( QgsVectorLayer *vl, int fieldIdx, QWidget *parent ) const SIP_FACTORY;
 
     /**
-     * Return The human readable identifier name of this widget type
+     * Returns The human readable identifier name of this widget type
      *
      * \returns a name
      */
@@ -92,9 +92,9 @@ class GUI_EXPORT QgsEditorWidgetFactory
      *
      * \param vl        The layer
      * \param fieldIdx  The field index
-     * \returns          True if the type is supported for this field
+     * \returns          TRUE if the type is supported for this field
      *
-     * \see fieldScore( const QgsVectorLayer* vl, ind fieldIdx )
+     * \see fieldScore()
      */
     inline bool supportsField( const QgsVectorLayer *vl, int fieldIdx ) { return fieldScore( vl, fieldIdx ) > 0; }
 
@@ -124,7 +124,7 @@ class GUI_EXPORT QgsEditorWidgetFactory
      * \returns 0 if the field is not supported or a bigger number if it can (the widget with the biggest number will be
      *      taken by default). The default implementation returns 5..
      *
-     * \see supportsField( QgsVectorLayer* vl, fieldIdx )
+     * \see supportsField()
      */
     virtual unsigned int fieldScore( const QgsVectorLayer *vl, int fieldIdx ) const;
 

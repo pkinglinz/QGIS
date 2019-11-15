@@ -21,12 +21,20 @@
 #include "qgspanelwidget.h"
 
 class QgsLayout;
+class QgsMasterLayoutInterface;
 
 class QgsLayoutPropertiesWidget: public QgsPanelWidget, private Ui::QgsLayoutWidgetBase
 {
     Q_OBJECT
   public:
     QgsLayoutPropertiesWidget( QWidget *parent, QgsLayout *layout );
+
+    void setMasterLayout( QgsMasterLayoutInterface *masterLayout );
+
+  public slots:
+
+    //! Refreshes the gui to reflect the current layout settings
+    void updateGui();
 
   private slots:
 
@@ -36,6 +44,15 @@ class QgsLayoutPropertiesWidget: public QgsPanelWidget, private Ui::QgsLayoutWid
     void gridOffsetYChanged( double d );
     void gridOffsetUnitsChanged( QgsUnitTypes::LayoutUnit unit );
     void snapToleranceChanged( int tolerance );
+    void resizeMarginsChanged();
+    void resizeToContents();
+    void referenceMapChanged( QgsLayoutItem *item );
+    void dpiChanged( int value );
+    void worldFileToggled();
+    void rasterizeToggled();
+    void forceVectorToggled();
+    void variablesChanged();
+    void updateVariables();
 
   private:
 
@@ -43,6 +60,7 @@ class QgsLayoutPropertiesWidget: public QgsPanelWidget, private Ui::QgsLayoutWid
 
     void updateSnappingElements();
     void blockSignals( bool block );
+    bool mBlockVariableUpdates = false;
 
 };
 

@@ -20,8 +20,11 @@
 #include "qgis_core.h"
 #include "qgis_sip.h"
 #include "qgssymbol.h"
+#include "qgslayout.h"
 #include "qgslayoutitempage.h"
+#include "qgslayoutitem.h"
 #include "qgslayoutserializableobject.h"
+#include "qgslayoutpoint.h"
 #include <QObject>
 #include <memory>
 
@@ -46,7 +49,7 @@ class CORE_EXPORT QgsLayoutPageCollection : public QObject, public QgsLayoutSeri
      */
     explicit QgsLayoutPageCollection( QgsLayout *layout SIP_TRANSFERTHIS );
 
-    ~QgsLayoutPageCollection();
+    ~QgsLayoutPageCollection() override;
 
     QString stringType() const override { return QStringLiteral( "LayoutPageCollection" ); }
     QgsLayout *layout() override;
@@ -68,10 +71,20 @@ class CORE_EXPORT QgsLayoutPageCollection : public QObject, public QgsLayoutSeri
      * Returns a specific page (by \a pageNumber) from the collection.
      * Internal page numbering starts at 0 - so a \a pageNumber of 0
      * corresponds to the first page in the collection.
-     * A nullptr is returned if an invalid page number is specified.
+     * A NULLPTR is returned if an invalid page number is specified.
      * \see pages()
      */
     QgsLayoutItemPage *page( int pageNumber );
+
+    /**
+     * Returns a specific page (by \a pageNumber) from the collection.
+     * Internal page numbering starts at 0 - so a \a pageNumber of 0
+     * corresponds to the first page in the collection.
+     * A NULLPTR is returned if an invalid page number is specified.
+     * \see pages()
+     * \note Not available in Python bindings.
+     */
+    const QgsLayoutItemPage *page( int pageNumber ) const SIP_SKIP;
 
     /**
      * Returns the page number for the specified \a page, or -1 if the page
@@ -84,14 +97,54 @@ class CORE_EXPORT QgsLayoutPageCollection : public QObject, public QgsLayoutSeri
      * \a region (in layout coordinates).
      * \see visiblePageNumbers()
      */
-    QList< QgsLayoutItemPage * > visiblePages( QRectF region ) const;
+    QList< QgsLayoutItemPage * > visiblePages( const QRectF &region ) const;
 
     /**
      * Returns a list of the page numbers which are visible within the specified
      * \a region (in layout coordinates).
      * \see visiblePages()
      */
-    QList< int > visiblePageNumbers( QRectF region ) const;
+    QList< int > visiblePageNumbers( const QRectF &region ) const;
+
+    /**
+     * Returns whether a given \a page index is empty, ie, it contains no items except for the background
+     * paper item.
+     * \see shouldExportPage()
+     */
+    bool pageIsEmpty( int page ) const;
+
+    /**
+     * Returns a list of layout items on the specified \a page index.
+     */
+    QList< QgsLayoutItem *> itemsOnPage( int page ) const;
+
+    /**
+     * Returns layout items of a specific type on a specified \a page.
+     * \note not available in Python bindings.
+     */
+    template<class T> void itemsOnPage( QList<T *> &itemList, int page ) const SIP_SKIP
+    {
+      itemList.clear();
+      const QList<QGraphicsItem *> graphicsItemList = mLayout->items();
+      for ( QGraphicsItem *graphicsItem : graphicsItemList )
+      {
+        T *item = dynamic_cast<T *>( graphicsItem );
+        if ( item && item->page() == page )
+        {
+          itemList.push_back( item );
+        }
+      }
+    }
+
+    /**
+     * Returns whether the specified \a page number should be included in exports of the layouts.
+     *
+     * \warning This will always return TRUE unless the layout is being currently exported -- it cannot
+     * be used in advance to determine whether a given page will be exported!
+     *
+     * \see pageIsEmpty()
+     */
+    bool shouldExportPage( int page ) const;
 
     /**
      * Adds a \a page to the collection. Ownership of the \a page is transferred
@@ -101,9 +154,21 @@ class CORE_EXPORT QgsLayoutPageCollection : public QObject, public QgsLayoutSeri
      *
      * Calling addPage() automatically triggers a reflow() of pages.
      *
+     * \see extendByNewPage()
      * \see insertPage()
      */
     void addPage( QgsLayoutItemPage *page SIP_TRANSFER );
+
+    /**
+     * Adds a new page to the end of the collection. This page will inherit the
+     * same size as the current final page in the collection.
+     *
+     * The newly created page will be returned.
+     *
+     * \see addPage()
+     * \see insertPage()
+     */
+    QgsLayoutItemPage *extendByNewPage();
 
     /**
      * Inserts a \a page into a specific position in the collection.
@@ -130,6 +195,8 @@ class CORE_EXPORT QgsLayoutPageCollection : public QObject, public QgsLayoutSeri
      * the first page in the collection.
      *
      * Calling deletePage() automatically triggers a reflow() of pages.
+     *
+     * \see clear()
      */
     void deletePage( int pageNumber );
 
@@ -138,8 +205,16 @@ class CORE_EXPORT QgsLayoutPageCollection : public QObject, public QgsLayoutSeri
      * from the collection's layout().
      *
      * Calling deletePage() automatically triggers a reflow() of pages.
+     *
+     * \see clear()
      */
     void deletePage( QgsLayoutItemPage *page );
+
+    /**
+     * Removes all pages from the collection.
+     * \see deletePage()
+     */
+    void clear();
 
     /**
      * Takes a \a page from the collection, returning ownership of the page to the caller.
@@ -157,8 +232,26 @@ class CORE_EXPORT QgsLayoutPageCollection : public QObject, public QgsLayoutSeri
     /**
      * Returns the symbol to use for drawing pages in the collection.
      * \see setPageStyleSymbol()
+     *
+     * \deprecated Use QgsLayoutItemPage::pageStyleSymbol() instead.
      */
-    const QgsFillSymbol *pageStyleSymbol() const { return mPageStyleSymbol.get(); }
+    Q_DECL_DEPRECATED const QgsFillSymbol *pageStyleSymbol() const SIP_DEPRECATED;
+
+    /**
+     * Should be called before changing any page item sizes, and followed by a call to
+     * endPageSizeChange(). If page size changes are wrapped in these calls, then items
+     * will maintain their same relative position on pages after the page sizes are updated.
+     * \see endPageSizeChange()
+     */
+    void beginPageSizeChange();
+
+    /**
+     * Should be called after changing any page item sizes, and preceded by a call to
+     * beginPageSizeChange(). If page size changes are wrapped in these calls, then items
+     * will maintain their same relative position on pages after the page sizes are updated.
+     * \see beginPageSizeChange()
+     */
+    void endPageSizeChange();
 
     /**
      * Forces the page collection to reflow the arrangement of pages, e.g. to account
@@ -169,8 +262,26 @@ class CORE_EXPORT QgsLayoutPageCollection : public QObject, public QgsLayoutSeri
     /**
      * Returns the maximum width of pages in the collection. The returned value is
      * in layout units.
+     *
+     * \see maximumPageSize()
      */
     double maximumPageWidth() const;
+
+    /**
+     * Returns the maximum size of any page in the collection, by area. The returned value
+     * is in layout units.
+     *
+     * \see maximumPageWidth()
+     */
+    QSizeF maximumPageSize() const;
+
+    /**
+     * Returns TRUE if the layout has uniform page sizes, e.g. all pages are the same size.
+     *
+     * This method does not consider differing units as non-uniform sizes, only the actual
+     * physical size of the pages.
+     */
+    bool hasUniformPageSizes() const;
 
     /**
      * Returns the page number corresponding to a \a point in the layout (in layout units).
@@ -182,15 +293,33 @@ class CORE_EXPORT QgsLayoutPageCollection : public QObject, public QgsLayoutSeri
      * it does not consider x coordinates and vertical coordinates before the first page or
      * after the last page will still return the nearest page.
      *
+     * \see predictPageNumberForPoint()
      * \see pageAtPoint()
      * \see positionOnPage()
      */
     int pageNumberForPoint( QPointF point ) const;
 
     /**
+     * Returns the theoretical page number corresponding to a \a point in the layout (in layout units),
+     * assuming that enough pages exist in the layout to cover that point.
+     *
+     * If there are insufficient pages currently in the layout, this method will assume that extra
+     * "imaginary" pages have been added at the end of the layout until that point is reached. These
+     * imaginary pages will inherit the size of the existing final page in the layout.
+     *
+     * Page numbers in collections begin at 0 - so a page number of 0 indicates the
+     * first page.
+     *
+     * \see pageNumberForPoint()
+     * \see pageAtPoint()
+     * \see positionOnPage()
+     */
+    int predictPageNumberForPoint( QPointF point ) const;
+
+    /**
      * Returns the page at a specified \a point (in layout coordinates).
      *
-     * If no page exists at \a point, nullptr will be returned.
+     * If no page exists at \a point, NULLPTR will be returned.
      *
      * \note Unlike pageNumberForPoint(), this method only returns pages which
      * directly intersect with the specified point.
@@ -198,6 +327,18 @@ class CORE_EXPORT QgsLayoutPageCollection : public QObject, public QgsLayoutSeri
      * \see pageNumberForPoint()
      */
     QgsLayoutItemPage *pageAtPoint( QPointF point ) const;
+
+    /**
+     * Converts a \a position on a \a page to an absolute position in layout coordinates.\
+     * \see pagePositionToAbsolute()
+     */
+    QPointF pagePositionToLayoutPosition( int page, const QgsLayoutPoint &position ) const;
+
+    /**
+     * Converts a \a position on a \a page to an absolute position in (maintaining the units from the input \a position).
+     * \see pagePositionToLayoutPosition()
+     */
+    QgsLayoutPoint pagePositionToAbsolute( int page, const QgsLayoutPoint &position ) const;
 
     /**
      * Returns the position within a page of a \a point in the layout (in layout units).
@@ -215,6 +356,16 @@ class CORE_EXPORT QgsLayoutPageCollection : public QObject, public QgsLayoutSeri
      * Returns the size of the page shadow, in layout units.
      */
     double pageShadowWidth() const;
+
+    /**
+     * Resizes the layout to a single page which fits the current contents of the layout.
+     *
+     * Calling this method resets the number of pages to 1, with the size set to the
+     * minimum size required to fit all existing layout items. Items will also be
+     * repositioned so that the new top-left bounds of the layout is at the point
+     * (marginLeft, marginTop). An optional margin can be specified.
+     */
+    void resizeToContents( const QgsMargins &margins, QgsUnitTypes::LayoutUnit marginUnits );
 
     /**
      * Stores the collection's state in a DOM element. The \a parentElement should refer to the parent layout's DOM element.
@@ -272,6 +423,8 @@ class CORE_EXPORT QgsLayoutPageCollection : public QObject, public QgsLayoutSeri
     QList< QgsLayoutItemPage * > mPages;
 
     bool mBlockUndoCommands = false;
+
+    QMap< QString, QPair< int, QgsLayoutPoint > > mPreviousItemPositions;
 
     void createDefaultPageStyleSymbol();
 

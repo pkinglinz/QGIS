@@ -16,14 +16,15 @@
 #define QGSINVERTEDPOLYGONRENDERERWIDGET_H
 
 #include "ui_qgsinvertedpolygonrendererwidgetbase.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsinvertedpolygonrenderer.h"
 #include "qgsrendererwidget.h"
 #include "qgis_gui.h"
 
 class QMenu;
 
-/** \ingroup gui
+/**
+ * \ingroup gui
  * A widget used represent options of a QgsInvertedPolygonRenderer
  *
  * \since QGIS 2.4
@@ -34,23 +35,27 @@ class GUI_EXPORT QgsInvertedPolygonRendererWidget : public QgsRendererWidget, pr
 
   public:
 
-    /** Static creation method
+    /**
+     * Static creation method
      * \param layer the layer where this renderer is applied
      * \param style
      * \param renderer the mask renderer (will not take ownership)
      */
     static QgsRendererWidget *create( QgsVectorLayer *layer, QgsStyle *style, QgsFeatureRenderer *renderer ) SIP_FACTORY;
 
-    /** Constructor
+    /**
+     * Constructor
      * \param layer the layer where this renderer is applied
      * \param style
      * \param renderer the mask renderer (will not take ownership)
      */
     QgsInvertedPolygonRendererWidget( QgsVectorLayer *layer, QgsStyle *style, QgsFeatureRenderer *renderer );
 
-    virtual QgsFeatureRenderer *renderer() override;
+    QgsFeatureRenderer *renderer() override;
 
     void setContext( const QgsSymbolWidgetContext &context ) override;
+
+    void setDockMode( bool dockMode ) override;
 
   protected:
     //! The mask renderer
@@ -59,9 +64,9 @@ class GUI_EXPORT QgsInvertedPolygonRendererWidget : public QgsRendererWidget, pr
     std::unique_ptr<QgsRendererWidget> mEmbeddedRendererWidget;
 
   private slots:
-    void on_mRendererComboBox_currentIndexChanged( int index );
-    void on_mMergePolygonsCheckBox_stateChanged( int state );
+    void mRendererComboBox_currentIndexChanged( int index );
+    void mMergePolygonsCheckBox_stateChanged( int state );
 };
 
 
-#endif // QGSMASKRENDERERV2WIDGET_H
+#endif // QGSINVERTEDPOLYGONRENDERERWIDGET_H
